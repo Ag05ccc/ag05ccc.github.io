@@ -252,29 +252,103 @@ function fetchJSON(url) {
   });
 }
 
-async function fetchRealPrices() {
+// ─── BINANCE WEBSOCKET (real-time crypto) ───
+const BINANCE_SYMBOLS = {
+  BTC: 'btcusdt', ETH: 'ethusdt', BNB: 'bnbusdt', SOL: 'solusdt',
+  XRP: 'xrpusdt', ADA: 'adausdt', AVAX: 'avaxusdt', DOGE: 'dogeusdt',
+  DOT: 'dotusdt', LINK: 'linkusdt',
+};
+
+let binanceWs = null;
+let binanceReconnectTimer = null;
+
+function connectBinance() {
+  const streams = Object.values(BINANCE_SYMBOLS).map(s => s + '@trade').join('/');
+  const url = 'wss://stream.binance.com:9443/ws/' + streams;
+
   try {
-    // Crypto from CoinGecko
-    const cgIds = Object.entries(COINS).filter(([,c]) => c.cgId).map(([,c]) => c.cgId).join(',');
-    const prices = await fetchJSON(`https://api.coingecko.com/api/v3/simple/price?ids=${cgIds}&vs_currencies=usd`);
-    Object.entries(COINS).forEach(([sym, c]) => {
-      if (c.cgId && (prices[c.cgId] || {}).usd) {
-        lastPrices[sym] = prices[c.cgId].usd;
+    binanceWs = new WebSocket(url);
+  } catch(e) {
+    console.log('Binance WS create failed:', e.message);
+    scheduleBinanceReconnect();
+    return;
+  }
+
+  binanceWs.on('open', () => {
+    console.log('[' + new Date().toLocaleTimeString() + '] Binance WebSocket connected - real-time crypto prices active');
+  });
+
+  binanceWs.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.e === 'trade' && msg.s && msg.p) {
+        const symbol = msg.s.toUpperCase(); // e.g. "BTCUSDT"
+        // Find our symbol key
+        for (var sym in BINANCE_SYMBOLS) {
+          if (BINANCE_SYMBOLS[sym] === symbol.toLowerCase()) {
+            lastPrices[sym] = parseFloat(msg.p);
+            break;
+          }
+        }
+      }
+    } catch(e) {}
+  });
+
+  binanceWs.on('close', () => {
+    console.log('Binance WS disconnected, reconnecting...');
+    scheduleBinanceReconnect();
+  });
+
+  binanceWs.on('error', (err) => {
+    console.log('Binance WS error:', err.message);
+    try { binanceWs.close(); } catch(e) {}
+  });
+}
+
+function scheduleBinanceReconnect() {
+  if (binanceReconnectTimer) clearTimeout(binanceReconnectTimer);
+  binanceReconnectTimer = setTimeout(connectBinance, 5000);
+}
+
+// ─── COINGECKO FALLBACK (if Binance fails) ───
+async function fetchCoinGeckoPrices() {
+  try {
+    var cgIds = Object.entries(COINS).filter(function(e) { return e[1].cgId; }).map(function(e) { return e[1].cgId; }).join(',');
+    var prices = await fetchJSON('https://api.coingecko.com/api/v3/simple/price?ids=' + cgIds + '&vs_currencies=usd');
+    var updated = 0;
+    Object.entries(COINS).forEach(function(entry) {
+      var sym = entry[0], c = entry[1];
+      if (c.cgId && prices[c.cgId] && prices[c.cgId].usd) {
+        // Only use CoinGecko if Binance hasn't updated this price recently
+        if (!lastPrices[sym] || lastPrices[sym] === c.price) {
+          lastPrices[sym] = prices[c.cgId].usd;
+          updated++;
+        }
       }
     });
-    console.log(`[${new Date().toLocaleTimeString()}] Fetched real crypto prices. BTC=$${lastPrices.BTC}`);
+    if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] CoinGecko fallback updated ' + updated + ' prices');
   } catch(e) {
     console.log('CoinGecko fetch failed:', e.message);
   }
+}
 
-  // Stocks from Yahoo Finance
-  for (const sym of Object.keys(COINS).filter(s => COINS[s].type === 'stock')) {
+// ─── STOCK PRICES (Yahoo Finance) ───
+async function fetchStockPrices() {
+  var stockSyms = Object.keys(COINS).filter(function(s) { return COINS[s].type === 'stock'; });
+  for (var i = 0; i < stockSyms.length; i++) {
+    var sym = stockSyms[i];
     try {
-      const d = await fetchJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`);
-      const price = d && d.chart && d.chart.result && d.chart.result[0] && d.chart.result[0].meta && d.chart.result[0].meta.regularMarketPrice;
+      var d = await fetchJSON('https://query1.finance.yahoo.com/v8/finance/chart/' + sym + '?interval=1d&range=1d');
+      var price = d && d.chart && d.chart.result && d.chart.result[0] && d.chart.result[0].meta && d.chart.result[0].meta.regularMarketPrice;
       if (price) lastPrices[sym] = price;
-    } catch(e) { /* ignore stock fetch errors */ }
+    } catch(e) { /* ignore */ }
   }
+}
+
+async function fetchRealPrices() {
+  await fetchCoinGeckoPrices();
+  await fetchStockPrices();
+  console.log('[' + new Date().toLocaleTimeString() + '] Prices: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH);
 }
 
 // ─── PRICE TICK ───
@@ -284,10 +358,9 @@ function priceTick() {
 
   Object.keys(COINS).forEach(sym => {
     const sd = marketData[sym];
-    // Use real price as base, add tiny noise for candle formation
+    // Use real price directly - Binance gives real-time updates for crypto
     const realPrice = lastPrices[sym] || sd.cur;
-    const noise = realPrice * 0.0005 * (Math.random() - 0.5); // ±0.05% noise
-    const np = Math.max(realPrice * 0.5, realPrice + noise);
+    const np = realPrice;
     sd.cur = np;
 
     const b = sd.building;
@@ -490,20 +563,26 @@ async function start() {
   }));
 
   server.listen(PORT, () => {
-    console.log(`\n  CryptoTA Server running at http://localhost:${PORT}`);
-    console.log(`  BTC: $${lastPrices.BTC || 'N/A'} | ETH: $${lastPrices.ETH || 'N/A'}`);
-    console.log(`  4 portfolios active with 30 strategies each`);
-    console.log(`\n  To expose to internet, run: ngrok http ${PORT}\n`);
+    console.log('\n  CryptoTA Server running at http://localhost:' + PORT);
+    console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
+    console.log('  4 portfolios | 0.1% commission | 5min cooldown');
+    console.log('\n  To expose to internet, run: ngrok http ' + PORT + '\n');
   });
 
-  // Price ticks
+  // Connect Binance WebSocket for real-time crypto
+  connectBinance();
+
+  // Price ticks (updates candles + runs strategies)
   setInterval(priceTick, TICK_MS);
 
   // Broadcast to WebSocket clients every 2 seconds
   setInterval(broadcast, TICK_MS);
 
-  // Fetch real prices periodically
-  setInterval(fetchRealPrices, PRICE_FETCH_INTERVAL);
+  // Fetch stock prices periodically (Yahoo Finance)
+  setInterval(fetchStockPrices, PRICE_FETCH_INTERVAL);
+
+  // CoinGecko as fallback every 60 seconds
+  setInterval(fetchCoinGeckoPrices, 60000);
 }
 
 start();

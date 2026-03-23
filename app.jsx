@@ -125,37 +125,37 @@ function initState() {
 // 30 TA STRATEGIES
 const STRATS = [
   // BUY (15)
-  { id: "rsi_ob", label: "RSI Aşırı Satım", icon: "📊", desc: "RSI < X olunca al (varsayılan 30)", side: "buy", param: "rsi", def: 30, ds: "BTC" },
-  { id: "macd_cross_b", label: "MACD Crossover Al", icon: "📈", desc: "MACD sinyal çizgisini yukarı kesince al", side: "buy", param: "trigger", def: 1, ds: "ETH" },
-  { id: "bb_lower", label: "Bollinger Alt Bant", icon: "📉", desc: "Fiyat alt bandın X% altına düşünce al", side: "buy", param: "pct", def: 0.1, ds: "BTC" },
-  { id: "ema_golden", label: "EMA 9/21 Golden Cross", icon: "✨", desc: "EMA9, EMA21'i yukarı kesince al", side: "buy", param: "trigger", def: 1, ds: "ETH" },
-  { id: "ema50_bounce", label: "EMA 50 Destek", icon: "🛡️", desc: "Fiyat EMA50'ye yaklaşıp sıçrayınca al", side: "buy", param: "pct", def: 0.3, ds: "BTC" },
-  { id: "stoch_ob", label: "Stochastic Oversold", icon: "🔄", desc: "Stochastic K < X olunca al", side: "buy", param: "rsi", def: 20, ds: "ETH" },
-  { id: "vol_spike_b", label: "Hacim Patlaması Al", icon: "🔊", desc: "Yeşil mumda hacim ortalamanın X katı", side: "buy", param: "mult", def: 1.5, ds: "BTC" },
-  { id: "hammer", label: "Çekiç Mum Al", icon: "🔨", desc: "Çekiç formasyonu tespit edilince al", side: "buy", param: "trigger", def: 1, ds: "ETH" },
-  { id: "engulf_b", label: "Yutan Boğa Mumu", icon: "🐂", desc: "Bullish engulfing formasyonu al", side: "buy", param: "trigger", def: 1, ds: "BTC" },
-  { id: "vwap_buy", label: "VWAP Altı Al", icon: "📐", desc: "Fiyat VWAP'ın X% altındayken al", side: "buy", param: "pct", def: 0.3, ds: "ETH" },
-  { id: "adx_trend_b", label: "ADX Güçlü Trend Al", icon: "💪", desc: "ADX > X ve fiyat yükseliyorsa al", side: "buy", param: "rsi", def: 25, ds: "BTC" },
-  { id: "fib_buy", label: "Fibonacci %61.8 Al", icon: "🌀", desc: "Fiyat %61.8 Fib seviyesine gelince al", side: "buy", param: "pct", def: 0.618, ds: "ETH" },
-  { id: "dip_rsi_macd", label: "RSI+MACD Combo Al", icon: "🎯", desc: "RSI<40 VE MACD histogram pozitife dönünce", side: "buy", param: "rsi", def: 40, ds: "BTC" },
-  { id: "breakout_high", label: "Direnç Kırılımı", icon: "💥", desc: "Fiyat son X mumun en yükseğini kırınca", side: "buy", param: "period", def: 10, ds: "ETH" },
-  { id: "ema200_trend", label: "EMA 200 Üstü Trend", icon: "🏔️", desc: "Fiyat EMA200 üstüne çıkınca al", side: "buy", param: "trigger", def: 1, ds: "BTC" },
+  { id: "rsi_ob", label: "RSI Oversold Buy", icon: "📊", desc: "Buy when RSI < X (default 30)", side: "buy", param: "rsi", def: 30, ds: "BTC" },
+  { id: "macd_cross_b", label: "MACD Crossover Buy", icon: "📈", desc: "Buy when MACD crosses signal line upward", side: "buy", param: "trigger", def: 1, ds: "ETH" },
+  { id: "bb_lower", label: "Bollinger Lower Band", icon: "📉", desc: "Buy when price drops X% below lower band", side: "buy", param: "pct", def: 0.1, ds: "BTC" },
+  { id: "ema_golden", label: "EMA 9/21 Golden Cross", icon: "✨", desc: "Buy when EMA9 crosses above EMA21", side: "buy", param: "trigger", def: 1, ds: "ETH" },
+  { id: "ema50_bounce", label: "EMA 50 Support", icon: "🛡️", desc: "Buy when price bounces off EMA50", side: "buy", param: "pct", def: 0.3, ds: "BTC" },
+  { id: "stoch_ob", label: "Stochastic Oversold", icon: "🔄", desc: "Buy when Stochastic K < X", side: "buy", param: "rsi", def: 20, ds: "ETH" },
+  { id: "vol_spike_b", label: "Volume Spike Buy", icon: "🔊", desc: "Buy on green candle with X times avg volume", side: "buy", param: "mult", def: 1.5, ds: "BTC" },
+  { id: "hammer", label: "Hammer Candle Buy", icon: "🔨", desc: "Buy when hammer pattern is detected", side: "buy", param: "trigger", def: 1, ds: "ETH" },
+  { id: "engulf_b", label: "Bullish Engulfing", icon: "🐂", desc: "Buy on bullish engulfing pattern", side: "buy", param: "trigger", def: 1, ds: "BTC" },
+  { id: "vwap_buy", label: "Below VWAP Buy", icon: "📐", desc: "Buy when price is X% below VWAP", side: "buy", param: "pct", def: 0.3, ds: "ETH" },
+  { id: "adx_trend_b", label: "ADX Strong Trend Buy", icon: "💪", desc: "Buy when ADX > X and price is rising", side: "buy", param: "rsi", def: 25, ds: "BTC" },
+  { id: "fib_buy", label: "Fibonacci 61.8% Buy", icon: "🌀", desc: "Buy at 61.8% Fibonacci retracement level", side: "buy", param: "pct", def: 0.618, ds: "ETH" },
+  { id: "dip_rsi_macd", label: "RSI+MACD Combo Buy", icon: "🎯", desc: "Buy when RSI<40 AND MACD histogram turns positive", side: "buy", param: "rsi", def: 40, ds: "BTC" },
+  { id: "breakout_high", label: "Resistance Breakout", icon: "💥", desc: "Buy when price breaks above last X candles high", side: "buy", param: "period", def: 10, ds: "ETH" },
+  { id: "ema200_trend", label: "Above EMA 200 Trend", icon: "🏔️", desc: "Buy when price crosses above EMA200", side: "buy", param: "trigger", def: 1, ds: "BTC" },
   // SELL (15)
-  { id: "rsi_os", label: "RSI Aşırı Alım Sat", icon: "📊", desc: "RSI > X olunca sat (varsayılan 70)", side: "sell", param: "rsi", def: 70, ds: "BTC" },
-  { id: "macd_cross_s", label: "MACD Crossover Sat", icon: "📉", desc: "MACD sinyal çizgisini aşağı kesince sat", side: "sell", param: "trigger", def: 1, ds: "ETH" },
-  { id: "bb_upper", label: "Bollinger Üst Bant", icon: "📈", desc: "Fiyat üst bandın X% üstüne çıkınca sat", side: "sell", param: "pct", def: 0.1, ds: "BTC" },
-  { id: "ema_death", label: "EMA 9/21 Death Cross", icon: "💀", desc: "EMA9, EMA21'i aşağı kesince sat", side: "sell", param: "trigger", def: 1, ds: "ETH" },
-  { id: "stoch_os", label: "Stochastic Overbought", icon: "🔄", desc: "Stochastic K > X olunca sat", side: "sell", param: "rsi", def: 80, ds: "BTC" },
-  { id: "vol_spike_s", label: "Hacim Patlaması Sat", icon: "🔊", desc: "Kırmızı mumda yüksek hacim sat", side: "sell", param: "mult", def: 1.5, ds: "ETH" },
-  { id: "shooting_star", label: "Kayan Yıldız Sat", icon: "⭐", desc: "Shooting star formasyonu sat", side: "sell", param: "trigger", def: 1, ds: "BTC" },
-  { id: "engulf_s", label: "Yutan Ayı Mumu", icon: "🐻", desc: "Bearish engulfing formasyonu sat", side: "sell", param: "trigger", def: 1, ds: "ETH" },
-  { id: "vwap_sell", label: "VWAP Üstü Sat", icon: "📐", desc: "Fiyat VWAP'ın X% üstündeyken sat", side: "sell", param: "pct", def: 0.3, ds: "BTC" },
-  { id: "tp_pct", label: "Kar Al (%)", icon: "💰", desc: "Pozisyon P&L +X% olunca sat", side: "sell", param: "pct", def: 1.5, ds: "ETH" },
-  { id: "sl_pct", label: "Zarar Kes (%)", icon: "🛑", desc: "Pozisyon P&L -X% olunca sat", side: "sell", param: "pct", def: 1, ds: "BTC" },
-  { id: "trailing", label: "Trailing Stop", icon: "📏", desc: "Fiyat zirveden X% düşünce sat", side: "sell", param: "pct", def: 0.8, ds: "ETH" },
-  { id: "breakdown", label: "Destek Kırılımı Sat", icon: "⬇️", desc: "Fiyat son X mumun en düşüğünü kırınca", side: "sell", param: "period", def: 10, ds: "BTC" },
-  { id: "dip_rsi_macd_s", label: "RSI+MACD Combo Sat", icon: "🎯", desc: "RSI>60 VE MACD histogram negatife dönünce", side: "sell", param: "rsi", def: 60, ds: "ETH" },
-  { id: "ema200_break", label: "EMA 200 Altı Sat", icon: "🏔️", desc: "Fiyat EMA200 altına düşünce sat", side: "sell", param: "trigger", def: 1, ds: "BTC" },
+  { id: "rsi_os", label: "RSI Overbought Sell", icon: "📊", desc: "Sell when RSI > X (default 70)", side: "sell", param: "rsi", def: 70, ds: "BTC" },
+  { id: "macd_cross_s", label: "MACD Crossover Sell", icon: "📉", desc: "Sell when MACD crosses signal line downward", side: "sell", param: "trigger", def: 1, ds: "ETH" },
+  { id: "bb_upper", label: "Bollinger Upper Band", icon: "📈", desc: "Sell when price rises X% above upper band", side: "sell", param: "pct", def: 0.1, ds: "BTC" },
+  { id: "ema_death", label: "EMA 9/21 Death Cross", icon: "💀", desc: "Sell when EMA9 crosses below EMA21", side: "sell", param: "trigger", def: 1, ds: "ETH" },
+  { id: "stoch_os", label: "Stochastic Overbought", icon: "🔄", desc: "Sell when Stochastic K > X", side: "sell", param: "rsi", def: 80, ds: "BTC" },
+  { id: "vol_spike_s", label: "Volume Spike Sell", icon: "🔊", desc: "Sell on red candle with high volume", side: "sell", param: "mult", def: 1.5, ds: "ETH" },
+  { id: "shooting_star", label: "Shooting Star Sell", icon: "⭐", desc: "Sell on shooting star pattern", side: "sell", param: "trigger", def: 1, ds: "BTC" },
+  { id: "engulf_s", label: "Bearish Engulfing", icon: "🐻", desc: "Sell on bearish engulfing pattern", side: "sell", param: "trigger", def: 1, ds: "ETH" },
+  { id: "vwap_sell", label: "Above VWAP Sell", icon: "📐", desc: "Sell when price is X% above VWAP", side: "sell", param: "pct", def: 0.3, ds: "BTC" },
+  { id: "tp_pct", label: "Take Profit (%)", icon: "💰", desc: "Sell when position P&L reaches +X%", side: "sell", param: "pct", def: 1.5, ds: "ETH" },
+  { id: "sl_pct", label: "Stop Loss (%)", icon: "🛑", desc: "Sell when position P&L reaches -X%", side: "sell", param: "pct", def: 1, ds: "BTC" },
+  { id: "trailing", label: "Trailing Stop", icon: "📏", desc: "Sell when price drops X% from peak", side: "sell", param: "pct", def: 0.8, ds: "ETH" },
+  { id: "breakdown", label: "Support Breakdown Sell", icon: "⬇️", desc: "Sell when price breaks below last X candles low", side: "sell", param: "period", def: 10, ds: "BTC" },
+  { id: "dip_rsi_macd_s", label: "RSI+MACD Combo Sell", icon: "🎯", desc: "Sell when RSI>60 AND MACD histogram turns negative", side: "sell", param: "rsi", def: 60, ds: "ETH" },
+  { id: "ema200_break", label: "Below EMA 200 Sell", icon: "🏔️", desc: "Sell when price drops below EMA200", side: "sell", param: "trigger", def: 1, ds: "BTC" },
 ];
 
 function App() {
@@ -191,6 +191,45 @@ function App() {
     if (ntRef.current) clearTimeout(ntRef.current);
     setNotif({ msg, type });
     ntRef.current = setTimeout(() => setNotif(null), 2500);
+  }, []);
+
+  // Fetch real prices on mount
+  useEffect(() => {
+    const CRYPTO_IDS = { BTC: "bitcoin", ETH: "ethereum", BNB: "binancecoin", SOL: "solana", XRP: "ripple", ADA: "cardano", AVAX: "avalanche-2", DOGE: "dogecoin", DOT: "polkadot", LINK: "chainlink" };
+    const STOCK_SYMS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "WMT"];
+
+    // Fetch crypto prices from CoinGecko
+    fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${Object.values(CRYPTO_IDS).join(",")}&vs_currencies=usd`)
+      .then(r => r.json())
+      .then(prices => {
+        setData(prev => {
+          const next = { ...prev };
+          Object.entries(CRYPTO_IDS).forEach(([sym, id]) => {
+            if (prices[id]?.usd) {
+              const p = prices[id].usd;
+              COINS[sym].price = p;
+              next[sym] = { ...next[sym], cur: p, building: { o: p, h: p, l: p, c: p, v: 0, tickCount: 0 }, vwap: p };
+            }
+          });
+          return next;
+        });
+        notify("Live crypto prices loaded", "buy");
+      })
+      .catch(() => {});
+
+    // Fetch stock prices from Yahoo Finance via public chart endpoint
+    STOCK_SYMS.forEach(sym => {
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`)
+        .then(r => r.json())
+        .then(d => {
+          const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (price) {
+            COINS[sym].price = price;
+            setData(prev => ({ ...prev, [sym]: { ...prev[sym], cur: price, building: { o: price, h: price, l: price, c: price, v: 0, tickCount: 0 }, vwap: price } }));
+          }
+        })
+        .catch(() => {});
+    });
   }, []);
 
   // ─── PRICE + CANDLE ENGINE ───
@@ -262,32 +301,32 @@ function App() {
           case "rsi_os": { if (pos?.qty > 0 && sd.rsi >= st.value) { go = true; why = `RSI ${sd.rsi.toFixed(0)}`; } break; }
           case "macd_cross_b": { if (sd.macd.hist > 0 && sd.prevMacdHist <= 0) { go = true; why = `MACD↑ ${sd.macd.hist.toFixed(1)}`; } break; }
           case "macd_cross_s": { if (pos?.qty > 0 && sd.macd.hist < 0 && sd.prevMacdHist >= 0) { go = true; why = `MACD↓ ${sd.macd.hist.toFixed(1)}`; } break; }
-          case "bb_lower": { if (sd.bb.lower > 0 && sd.cur <= sd.bb.lower * (1 - st.value / 100)) { go = true; why = `BB alt $${fmt(sd.bb.lower)}`; } break; }
-          case "bb_upper": { if (pos?.qty > 0 && sd.bb.upper > 0 && sd.cur >= sd.bb.upper * (1 + st.value / 100)) { go = true; why = `BB üst $${fmt(sd.bb.upper)}`; } break; }
+          case "bb_lower": { if (sd.bb.lower > 0 && sd.cur <= sd.bb.lower * (1 - st.value / 100)) { go = true; why = `BB lower $${fmt(sd.bb.lower)}`; } break; }
+          case "bb_upper": { if (pos?.qty > 0 && sd.bb.upper > 0 && sd.cur >= sd.bb.upper * (1 + st.value / 100)) { go = true; why = `BB upper $${fmt(sd.bb.upper)}`; } break; }
           case "ema_golden": { if (sd.ema9 > sd.ema21 && candles.length > 21) { const prevE9 = ema(candles.slice(0, -1).map(c => c.c), 9); if (prevE9 && prevE9 <= sd.ema21) { go = true; why = `EMA9>21 Golden`; } } break; }
           case "ema_death": { if (pos?.qty > 0 && sd.ema9 < sd.ema21 && candles.length > 21) { const prevE9 = ema(candles.slice(0, -1).map(c => c.c), 9); if (prevE9 && prevE9 >= sd.ema21) { go = true; why = `EMA9<21 Death`; } } break; }
-          case "ema50_bounce": { if (sd.ema50 > 0) { const dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= st.value && lastCandle.c > lastCandle.o) { go = true; why = `EMA50 sıçrama`; } } break; }
+          case "ema50_bounce": { if (sd.ema50 > 0) { const dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= st.value && lastCandle.c > lastCandle.o) { go = true; why = `EMA50 bounce`; } } break; }
           case "stoch_ob": { if (sd.stoch.k <= st.value) { go = true; why = `Stoch K=${sd.stoch.k.toFixed(0)}`; } break; }
           case "stoch_os": { if (pos?.qty > 0 && sd.stoch.k >= st.value) { go = true; why = `Stoch K=${sd.stoch.k.toFixed(0)}`; } break; }
-          case "vol_spike_b": { if (candles.length >= 10) { const avgVol = candles.slice(-10).reduce((a, c2) => a + c2.v, 0) / 10; if (lastCandle.v > avgVol * st.value && lastCandle.c > lastCandle.o) { go = true; why = `Hacim ${(lastCandle.v / avgVol).toFixed(1)}x`; } } break; }
-          case "vol_spike_s": { if (pos?.qty > 0 && candles.length >= 10) { const avgVol = candles.slice(-10).reduce((a, c2) => a + c2.v, 0) / 10; if (lastCandle.v > avgVol * st.value && lastCandle.c < lastCandle.o) { go = true; why = `Hacim sat ${(lastCandle.v / avgVol).toFixed(1)}x`; } } break; }
-          case "hammer": { if (prevCandle && lastCandle) { const body = Math.abs(lastCandle.c - lastCandle.o); const lowerWick = Math.min(lastCandle.o, lastCandle.c) - lastCandle.l; if (lowerWick > body * 2 && lastCandle.c > lastCandle.o) { go = true; why = `Çekiç mum`; } } break; }
-          case "shooting_star": { if (pos?.qty > 0 && lastCandle) { const body = Math.abs(lastCandle.c - lastCandle.o); const upperWick = lastCandle.h - Math.max(lastCandle.o, lastCandle.c); if (upperWick > body * 2 && lastCandle.c < lastCandle.o) { go = true; why = `Kayan yıldız`; } } break; }
-          case "engulf_b": { if (prevCandle && lastCandle && prevCandle.c < prevCandle.o && lastCandle.c > lastCandle.o && lastCandle.c > prevCandle.o && lastCandle.o < prevCandle.c) { go = true; why = `Boğa yutuş`; } break; }
-          case "engulf_s": { if (pos?.qty > 0 && prevCandle && lastCandle && prevCandle.c > prevCandle.o && lastCandle.c < lastCandle.o && lastCandle.c < prevCandle.o && lastCandle.o > prevCandle.c) { go = true; why = `Ayı yutuş`; } break; }
-          case "vwap_buy": { if (sd.vwap > 0) { const dist = ((sd.vwap - sd.cur) / sd.vwap) * 100; if (dist >= st.value) { go = true; why = `VWAP altı ${dist.toFixed(1)}%`; } } break; }
-          case "vwap_sell": { if (pos?.qty > 0 && sd.vwap > 0) { const dist = ((sd.cur - sd.vwap) / sd.vwap) * 100; if (dist >= st.value) { go = true; why = `VWAP üstü ${dist.toFixed(1)}%`; } } break; }
+          case "vol_spike_b": { if (candles.length >= 10) { const avgVol = candles.slice(-10).reduce((a, c2) => a + c2.v, 0) / 10; if (lastCandle.v > avgVol * st.value && lastCandle.c > lastCandle.o) { go = true; why = `Vol ${(lastCandle.v / avgVol).toFixed(1)}x`; } } break; }
+          case "vol_spike_s": { if (pos?.qty > 0 && candles.length >= 10) { const avgVol = candles.slice(-10).reduce((a, c2) => a + c2.v, 0) / 10; if (lastCandle.v > avgVol * st.value && lastCandle.c < lastCandle.o) { go = true; why = `Vol sell ${(lastCandle.v / avgVol).toFixed(1)}x`; } } break; }
+          case "hammer": { if (prevCandle && lastCandle) { const body = Math.abs(lastCandle.c - lastCandle.o); const lowerWick = Math.min(lastCandle.o, lastCandle.c) - lastCandle.l; if (lowerWick > body * 2 && lastCandle.c > lastCandle.o) { go = true; why = `Hammer`; } } break; }
+          case "shooting_star": { if (pos?.qty > 0 && lastCandle) { const body = Math.abs(lastCandle.c - lastCandle.o); const upperWick = lastCandle.h - Math.max(lastCandle.o, lastCandle.c); if (upperWick > body * 2 && lastCandle.c < lastCandle.o) { go = true; why = `Shooting star`; } } break; }
+          case "engulf_b": { if (prevCandle && lastCandle && prevCandle.c < prevCandle.o && lastCandle.c > lastCandle.o && lastCandle.c > prevCandle.o && lastCandle.o < prevCandle.c) { go = true; why = `Bull engulf`; } break; }
+          case "engulf_s": { if (pos?.qty > 0 && prevCandle && lastCandle && prevCandle.c > prevCandle.o && lastCandle.c < lastCandle.o && lastCandle.c < prevCandle.o && lastCandle.o > prevCandle.c) { go = true; why = `Bear engulf`; } break; }
+          case "vwap_buy": { if (sd.vwap > 0) { const dist = ((sd.vwap - sd.cur) / sd.vwap) * 100; if (dist >= st.value) { go = true; why = `Below VWAP ${dist.toFixed(1)}%`; } } break; }
+          case "vwap_sell": { if (pos?.qty > 0 && sd.vwap > 0) { const dist = ((sd.cur - sd.vwap) / sd.vwap) * 100; if (dist >= st.value) { go = true; why = `Above VWAP ${dist.toFixed(1)}%`; } } break; }
           case "adx_trend_b": { if (sd.adx >= st.value && sd.cur > sd.ema21) { go = true; why = `ADX ${sd.adx.toFixed(0)} trend`; } break; }
           case "fib_buy": { if (candles.length >= 20) { const hi = Math.max(...candles.slice(-20).map(c2 => c2.h)); const lo = Math.min(...candles.slice(-20).map(c2 => c2.l)); const fib = hi - (hi - lo) * st.value; if (sd.cur <= fib && sd.cur > lo) { go = true; why = `Fib ${(st.value * 100).toFixed(1)}%`; } } break; }
           case "dip_rsi_macd": { if (sd.rsi < st.value && sd.macd.hist > 0 && sd.prevMacdHist <= 0) { go = true; why = `RSI${sd.rsi.toFixed(0)}+MACD↑`; } break; }
           case "dip_rsi_macd_s": { if (pos?.qty > 0 && sd.rsi > st.value && sd.macd.hist < 0 && sd.prevMacdHist >= 0) { go = true; why = `RSI${sd.rsi.toFixed(0)}+MACD↓`; } break; }
-          case "breakout_high": { const n = Math.floor(st.value); if (candles.length >= n) { const hi = Math.max(...candles.slice(-n - 1, -1).map(c2 => c2.h)); if (sd.cur > hi) { go = true; why = `Kırılım > $${fmt(hi)}`; } } break; }
-          case "breakdown": { if (pos?.qty > 0 && candles.length >= Math.floor(st.value)) { const lo = Math.min(...candles.slice(-Math.floor(st.value) - 1, -1).map(c2 => c2.l)); if (sd.cur < lo) { go = true; why = `Kırılım < $${fmt(lo)}`; } } break; }
+          case "breakout_high": { const n = Math.floor(st.value); if (candles.length >= n) { const hi = Math.max(...candles.slice(-n - 1, -1).map(c2 => c2.h)); if (sd.cur > hi) { go = true; why = `Breakout > $${fmt(hi)}`; } } break; }
+          case "breakdown": { if (pos?.qty > 0 && candles.length >= Math.floor(st.value)) { const lo = Math.min(...candles.slice(-Math.floor(st.value) - 1, -1).map(c2 => c2.l)); if (sd.cur < lo) { go = true; why = `Breakdown < $${fmt(lo)}`; } } break; }
           case "tp_pct": { if (pos?.qty > 0) { const pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl >= st.value) { go = true; why = `TP +${pl.toFixed(1)}%`; } } break; }
           case "sl_pct": { if (pos?.qty > 0) { const pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl <= -st.value) { go = true; why = `SL ${pl.toFixed(1)}%`; } } break; }
           case "trailing": { if (pos?.qty > 0) { const pk = peakRef.current[st.symbol] || sd.cur; const dr = ((pk - sd.cur) / pk) * 100; if (dr >= st.value) { go = true; why = `Trail -${dr.toFixed(1)}%`; } } break; }
-          case "ema200_trend": { if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC <= sd.ema200) { go = true; why = `EMA200 üstü`; } } break; }
-          case "ema200_break": { if (pos?.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC >= sd.ema200) { go = true; why = `EMA200 altı`; } } break; }
+          case "ema200_trend": { if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC <= sd.ema200) { go = true; why = `Above EMA200`; } } break; }
+          case "ema200_break": { if (pos?.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC >= sd.ema200) { go = true; why = `Below EMA200`; } } break; }
         }
 
         if (go) {
@@ -322,13 +361,13 @@ function App() {
   const hVal = Object.entries(holdings).reduce((s, [sym, h]) => s + h.qty * data[sym].cur, 0);
   const tv = cash + hVal; const pnl = tv - startCash;
 
-  const applyCap = () => { const v = parseFloat(capIn); if (!v || v < 100) return; const old = startCash; setStartCash(v); setCash(c => c + (v - old)); setShowCap(false); notify(`Sermaye → $${fK(v)}`); };
-  const resetAll = () => { const v = parseFloat(rstIn) || DEFAULT_CASH; setStartCash(v); setCash(v); setHoldings({}); setOrders([]); setData(initState()); setActives([]); logRef.current = []; setAutoLog([]); peakRef.current = {}; setCardCfg(initCard()); setShowReset(false); notify("Sıfırlandı — $" + fK(v)); };
+  const applyCap = () => { const v = parseFloat(capIn); if (!v || v < 100) return; const old = startCash; setStartCash(v); setCash(c => c + (v - old)); setShowCap(false); notify(`Capital set to $${fK(v)}`); };
+  const resetAll = () => { const v = parseFloat(rstIn) || DEFAULT_CASH; setStartCash(v); setCash(v); setHoldings({}); setOrders([]); setData(initState()); setActives([]); logRef.current = []; setAutoLog([]); peakRef.current = {}; setCardCfg(initCard()); setShowReset(false); notify("Reset — $" + fK(v)); };
   const activate = (id) => { const st = STRATS.find(s => s.id === id); const cc = cardCfg[id]; setActives(v => [...v, { id: Date.now() + Math.random(), type: id, symbol: cc.symbol, value: parseFloat(cc.value) || st.def, qty: parseFloat(cc.qty) || defaultQty(cc.symbol), active: true }]); };
   const activateAll = () => {
     const na = STRATS.map(st => { const cc = cardCfg[st.id]; return { id: Date.now() + Math.random() + Math.random(), type: st.id, symbol: cc.symbol, value: parseFloat(cc.value) || st.def, qty: parseFloat(cc.qty) || defaultQty(cc.symbol), active: true }; });
     setActives(v => [...v, ...na]);
-    notify(`🔥 30 TEKNİK ANALİZ STRATEJİSİ AKTİF!`, "buy");
+    notify(`All 30 TA strategies activated!`, "buy");
   };
   const upCard = (id, k, v) => setCardCfg(o => ({ ...o, [id]: { ...o[id], [k]: v } }));
   const ac = actives.filter(s => s.active).length;
@@ -360,24 +399,24 @@ function App() {
   );
 
   return (
-    <div style={{ "--m": "'JetBrains Mono',monospace", "--h": "'Space Grotesk',sans-serif", minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'Söhne',sans-serif" }}>
+    <div style={{ "--m": "'JetBrains Mono',monospace", "--h": "'Space Grotesk',sans-serif", minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'Space Grotesk',sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}@keyframes fsi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.sr:hover{background:rgba(255,255,255,0.03)!important}.bt{transition:all .12s;cursor:pointer}.bt:hover{transform:translateY(-1px);filter:brightness(1.15)}.bt:active{transform:translateY(0)}.bg{transition:all .12s;cursor:pointer}.bg:hover{background:rgba(255,255,255,0.06)!important}.sc{transition:border-color .2s}.sc:hover{border-color:rgba(99,102,241,0.4)!important}input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center}`}</style>
 
       {notif && <div style={{ position: "fixed", top: 16, right: 16, zIndex: 1000, padding: "10px 20px", borderRadius: 8, background: notif.type === "buy" ? "#14532d" : "#1e293b", border: `1px solid ${notif.type === "buy" ? "#22c55e" : "#334155"}`, color: "#f1f5f9", fontSize: 13, fontWeight: 500, animation: "fsi .2s", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", fontFamily: "var(--m)" }}>{notif.msg}</div>}
 
       {showCap && <Modal onClose={() => setShowCap(false)}>
-        <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc", marginBottom: 12 }}>Sermaye Ayarla (USDT)</div>
+        <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc", marginBottom: 12 }}>Set Capital (USD)</div>
         <input type="number" value={capIn} onChange={e => setCapIn(e.target.value)} style={{ ...iS, fontSize: 20, fontWeight: 600, marginBottom: 12, padding: "14px 16px" }} onKeyDown={e => e.key === "Enter" && applyCap()} />
         <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
           {[5000, 10000, 25000, 50000, 100000].map(v => (<button key={v} onClick={() => setCapIn(v.toString())} className="bg" style={{ padding: "4px 10px", borderRadius: 4, fontSize: 11, border: "1px solid #1e293b", background: capIn == v ? "rgba(99,102,241,0.15)" : "#0f172a", color: capIn == v ? "#a5b4fc" : "#6b7280", fontFamily: "var(--m)" }}>${fK(v)}</button>))}
         </div>
-        <div style={{ display: "flex", gap: 10 }}><button onClick={() => setShowCap(false)} className="bg" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, fontFamily: "var(--h)" }}>İptal</button><button onClick={applyCap} className="bt" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#6366f1,#4f46e5)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "var(--h)" }}>Uygula</button></div>
+        <div style={{ display: "flex", gap: 10 }}><button onClick={() => setShowCap(false)} className="bg" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, fontFamily: "var(--h)" }}>Cancel</button><button onClick={applyCap} className="bt" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#6366f1,#4f46e5)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "var(--h)" }}>Apply</button></div>
       </Modal>}
 
       {showReset && <Modal onClose={() => setShowReset(false)}>
-        <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc", marginBottom: 12 }}>Sıfırla</div>
+        <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc", marginBottom: 12 }}>Reset</div>
         <input type="number" value={rstIn} onChange={e => setRstIn(e.target.value)} style={{ ...iS, fontSize: 18, fontWeight: 600, marginBottom: 16, padding: "12px 16px" }} />
-        <div style={{ display: "flex", gap: 10 }}><button onClick={() => setShowReset(false)} className="bg" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, fontFamily: "var(--h)" }}>İptal</button><button onClick={resetAll} className="bt" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "var(--h)" }}>Sıfırla</button></div>
+        <div style={{ display: "flex", gap: 10 }}><button onClick={() => setShowReset(false)} className="bg" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600, fontFamily: "var(--h)" }}>Cancel</button><button onClick={resetAll} className="bt" style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#dc2626,#b91c1c)", color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "var(--h)" }}>Reset</button></div>
       </Modal>}
 
       {/* HEADER */}
@@ -385,22 +424,22 @@ function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: autoOn ? "#f59e0b" : "#ef4444", boxShadow: `0 0 8px ${autoOn ? "rgba(245,158,11,0.5)" : "rgba(239,68,68,0.5)"}`, animation: "pulse 2s infinite" }} />
           <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>CRYPTO<span style={{ color: "#f59e0b" }}>TA</span></span>
-          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>5DK TEKNİK ANALİZ · {ac} AKTİF</span>
+          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>5M TECHNICAL ANALYSIS · {ac} ACTIVE</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ display: "flex", gap: 14, fontFamily: "var(--m)", fontSize: 11 }}>
-            <span><span style={{ color: "#6b7280" }}>PORTFÖY </span><span style={{ color: "#f8fafc", fontWeight: 600 }}>${fK(tv)}</span></span>
-            <span><span style={{ color: "#6b7280" }}>K/Z </span><span style={{ color: pnl >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{pnl >= 0 ? "+" : ""}${fK(pnl)} ({pc(pnl / startCash)})</span></span>
+            <span><span style={{ color: "#6b7280" }}>PORTFOLIO </span><span style={{ color: "#f8fafc", fontWeight: 600 }}>${fK(tv)}</span></span>
+            <span><span style={{ color: "#6b7280" }}>P&L </span><span style={{ color: pnl >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{pnl >= 0 ? "+" : ""}${fK(pnl)} ({pc(pnl / startCash)})</span></span>
             <span><span style={{ color: "#6b7280" }}>USDT </span><span style={{ color: "#94a3b8" }}>${fK(cash)}</span></span>
           </div>
-          <button onClick={() => { setCapIn(startCash.toString()); setShowCap(true); }} className="bt" style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 10, fontWeight: 600, fontFamily: "var(--h)" }}>💰 SERMAYE</button>
-          <button onClick={() => { setRstIn(startCash.toString()); setShowReset(true); }} className="bg" style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid #374151", background: "transparent", color: "#ef4444", fontSize: 10, fontWeight: 600, fontFamily: "var(--h)" }}>SIFIRLA</button>
+          <button onClick={() => { setCapIn(startCash.toString()); setShowCap(true); }} className="bt" style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 10, fontWeight: 600, fontFamily: "var(--h)" }}>CAPITAL</button>
+          <button onClick={() => { setRstIn(startCash.toString()); setShowReset(true); }} className="bg" style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid #374151", background: "transparent", color: "#ef4444", fontSize: 10, fontWeight: 600, fontFamily: "var(--h)" }}>RESET</button>
         </div>
       </div>
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117" }}>
-        {[["auto", "Stratejiler (30)"], ["chart", "Grafik & TA"], ["portfolio", "Portföy"], ["orders", `İşlemler (${orders.length})`]].map(([k, l]) => (
+        {[["auto", "Strategies (30)"], ["chart", "Chart & TA"], ["portfolio", "Portfolio"], ["orders", `Orders (${orders.length})`]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: "9px 20px", fontSize: 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)" }}>{l}</button>
         ))}
       </div>
@@ -440,19 +479,19 @@ function App() {
           ))}
           {/* Live indicators panel */}
           <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <div style={{ fontSize: 10, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>CANLI İNDİKATÖRLER · {selected}</div>
+            <div style={{ fontSize: 10, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>LIVE INDICATORS · {selected}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <IndBadge label="RSI" value={sd.rsi?.toFixed(1) || "--"} color={sd.rsi < 30 ? "#22c55e" : sd.rsi > 70 ? "#ef4444" : "#f8fafc"} />
               <IndBadge label="MACD" value={sd.macd?.hist?.toFixed(2) || "--"} color={sd.macd?.hist > 0 ? "#22c55e" : "#ef4444"} />
-              <IndBadge label="BB Üst" value={`$${fmt(sd.bb?.upper || 0)}`} color="#a5b4fc" />
-              <IndBadge label="BB Alt" value={`$${fmt(sd.bb?.lower || 0)}`} color="#a5b4fc" />
+              <IndBadge label="BB Upper" value={`$${fmt(sd.bb?.upper || 0)}`} color="#a5b4fc" />
+              <IndBadge label="BB Lower" value={`$${fmt(sd.bb?.lower || 0)}`} color="#a5b4fc" />
               <IndBadge label="EMA9" value={`$${fmt(sd.ema9 || 0)}`} color="#22d3ee" />
               <IndBadge label="EMA21" value={`$${fmt(sd.ema21 || 0)}`} color="#f59e0b" />
               <IndBadge label="EMA50" value={`$${fmt(sd.ema50 || 0)}`} color="#a78bfa" />
               <IndBadge label="Stoch K" value={sd.stoch?.k?.toFixed(0) || "--"} color={sd.stoch?.k < 20 ? "#22c55e" : sd.stoch?.k > 80 ? "#ef4444" : "#f8fafc"} />
               <IndBadge label="ADX" value={sd.adx?.toFixed(0) || "--"} color={sd.adx > 25 ? "#f59e0b" : "#6b7280"} />
               <IndBadge label="VWAP" value={`$${fmt(sd.vwap || 0)}`} color="#94a3b8" />
-              <IndBadge label="Mum" value={`${sd.candles.length}`} color="#6b7280" />
+              <IndBadge label="Candles" value={`${sd.candles.length}`} color="#6b7280" />
             </div>
           </div>
         </div>
@@ -464,17 +503,17 @@ function App() {
             <div style={{ padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
-                  <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc" }}>30 Teknik Analiz Stratejisi</div>
-                  <div style={{ fontSize: 11, color: "#6b7280" }}>5 dakikalık mum grafiği · RSI, MACD, Bollinger, EMA, Stochastic, ADX, VWAP, Formasyonlar</div>
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, color: "#f8fafc" }}>30 Technical Analysis Strategies</div>
+                  <div style={{ fontSize: 11, color: "#6b7280" }}>5-min candle chart · RSI, MACD, Bollinger, EMA, Stochastic, ADX, VWAP, Patterns</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {["all", "buy", "sell"].map(f => (
-                    <button key={f} onClick={() => setStratFilter(f)} style={{ padding: "4px 12px", borderRadius: 5, border: stratFilter === f ? "1px solid #f59e0b" : "1px solid #1e293b", background: stratFilter === f ? "rgba(245,158,11,0.15)" : "transparent", color: stratFilter === f ? "#f59e0b" : "#6b7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--h)", textTransform: "uppercase" }}>{f === "all" ? "Hepsi" : f === "buy" ? "AL" : "SAT"}</button>
+                    <button key={f} onClick={() => setStratFilter(f)} style={{ padding: "4px 12px", borderRadius: 5, border: stratFilter === f ? "1px solid #f59e0b" : "1px solid #1e293b", background: stratFilter === f ? "rgba(245,158,11,0.15)" : "transparent", color: stratFilter === f ? "#f59e0b" : "#6b7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--h)", textTransform: "uppercase" }}>{f === "all" ? "All" : f === "buy" ? "BUY" : "SELL"}</button>
                   ))}
                   <button onClick={() => setAutoOn(!autoOn)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 14px", borderRadius: 5, cursor: "pointer", border: autoOn ? "1px solid #22c55e" : "1px solid #374151", background: autoOn ? "rgba(34,197,94,0.1)" : "transparent", color: autoOn ? "#22c55e" : "#6b7280", fontSize: 10, fontWeight: 600, fontFamily: "var(--h)" }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: autoOn ? "#22c55e" : "#6b7280" }} />{autoOn ? "AÇIK" : "KAPALI"}
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: autoOn ? "#22c55e" : "#6b7280" }} />{autoOn ? "ON" : "OFF"}
                   </button>
-                  <button onClick={activateAll} className="bt" style={{ padding: "4px 16px", borderRadius: 5, border: "none", background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", fontSize: 10, fontWeight: 800, fontFamily: "var(--h)" }}>🔥 HEPSİNİ AKTİF ET</button>
+                  <button onClick={activateAll} className="bt" style={{ padding: "4px 16px", borderRadius: 5, border: "none", background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", fontSize: 10, fontWeight: 800, fontFamily: "var(--h)" }}>🔥 ACTIVATE ALL</button>
                 </div>
               </div>
 
@@ -487,26 +526,26 @@ function App() {
                       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
                         <span style={{ fontSize: 14 }}>{st.icon}</span>
                         <span style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#f8fafc", flex: 1 }}>{st.label}</span>
-                        <span style={st.side === "buy" ? tB : tSl}>{st.side === "buy" ? "AL" : "SAT"}</span>
+                        <span style={st.side === "buy" ? tB : tSl}>{st.side === "buy" ? "BUY" : "SELL"}</span>
                       </div>
                       <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 6, lineHeight: 1.2 }}>{st.desc}</div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 52px", gap: 3, alignItems: "end" }}>
                         <div>
-                          <div style={{ fontSize: 8, color: "#4b5563" }}>Coin</div>
+                          <div style={{ fontSize: 8, color: "#4b5563" }}>Asset</div>
                           <select value={cc.symbol} onChange={e => upCard(st.id, "symbol", e.target.value)} style={{ ...iS, paddingRight: 16, fontSize: 10 }}>
                             {SYMS.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
                         <div>
-                          <div style={{ fontSize: 8, color: "#4b5563" }}>Değer</div>
+                          <div style={{ fontSize: 8, color: "#4b5563" }}>Value</div>
                           <input type="number" value={cc.value} onChange={e => upCard(st.id, "value", e.target.value)} style={{ ...iS, fontSize: 10 }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 8, color: "#4b5563" }}>Miktar</div>
+                          <div style={{ fontSize: 8, color: "#4b5563" }}>Qty</div>
                           <input type="number" value={cc.qty} step={COINS[cc.symbol]?.price > 100 ? 0.001 : COINS[cc.symbol]?.price > 1 ? 0.01 : 1} onChange={e => upCard(st.id, "qty", e.target.value)} style={{ ...iS, fontSize: 10 }} />
                         </div>
                         <button onClick={() => activate(st.id)} className="bt" style={{ padding: "5px 0", borderRadius: 4, border: "none", fontSize: 8, fontWeight: 700, fontFamily: "var(--h)", background: isA ? "rgba(245,158,11,0.2)" : st.side === "buy" ? "linear-gradient(135deg,#16a34a,#15803d)" : "linear-gradient(135deg,#dc2626,#b91c1c)", color: isA ? "#f59e0b" : "#fff" }}>
-                          {isA ? "✓" : "AKTİF"}
+                          {isA ? "✓" : "ACTIVE"}
                         </button>
                       </div>
                     </div>
@@ -515,11 +554,11 @@ function App() {
               </div>
 
               {actives.length > 0 && <>
-                <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 5, fontFamily: "var(--h)", fontWeight: 600 }}>ÇALIŞAN ({ac}) <button onClick={() => setActives([])} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 9, marginLeft: 8 }}>HEPSİNİ SİL</button></div>
+                <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 5, fontFamily: "var(--h)", fontWeight: 600 }}>RUNNING ({ac}) <button onClick={() => setActives([])} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 9, marginLeft: 8 }}>CLEAR ALL</button></div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 16 }}>
                   {actives.map(st => { const sT = STRATS.find(s => s.id === st.type); return (
                     <div key={st.id} style={{ background: "#0f172a", borderRadius: 4, padding: "3px 8px", border: "1px solid rgba(255,255,255,0.04)", opacity: st.active ? 1 : 0.3, display: "flex", alignItems: "center", gap: 4, fontSize: 9, fontFamily: "var(--m)" }}>
-                      <span style={sT?.side === "buy" ? tB : tSl}>{sT?.side === "buy" ? "A" : "S"}</span>
+                      <span style={sT?.side === "buy" ? tB : tSl}>{sT?.side === "buy" ? "B" : "S"}</span>
                       <span style={{ color: symColor(st.symbol), fontWeight: 600 }}>{st.symbol}</span>
                       <span style={{ color: "#4b5563" }}>{sT?.label?.split(" ")[0]}</span>
                       <button onClick={() => setActives(v => v.filter(s => s.id !== st.id))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 9, padding: 0 }}>✕</button>
@@ -528,13 +567,13 @@ function App() {
                 </div>
               </>}
 
-              <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 5, fontFamily: "var(--h)", fontWeight: 600 }}>İŞLEM GÜNLÜĞÜ</div>
-              {autoLog.length === 0 ? <div style={{ textAlign: "center", padding: 12, color: "#374151", fontSize: 11 }}>Mum verileri yükleniyor... stratejiler mum kapanışlarında tetiklenir</div> : (
+              <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 5, fontFamily: "var(--h)", fontWeight: 600 }}>TRADE LOG</div>
+              {autoLog.length === 0 ? <div style={{ textAlign: "center", padding: 12, color: "#374151", fontSize: 11 }}>Loading candle data... strategies trigger on candle close</div> : (
                 <div style={{ background: "#0f172a", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 200, overflowY: "auto" }}>
                   {autoLog.map((l, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 9 }}>
                       <span style={{ color: "#4b5563", minWidth: 55 }}>{l.time.toLocaleTimeString()}</span>
-                      <span style={l.side === "buy" ? tB : tSl}>{l.side === "buy" ? "AL" : "SAT"}</span>
+                      <span style={l.side === "buy" ? tB : tSl}>{l.side === "buy" ? "BUY" : "SELL"}</span>
                       <span style={{ color: symColor(l.symbol), fontWeight: 600, minWidth: 28 }}>{l.symbol}</span>
                       <span style={{ color: "#94a3b8" }}>{l.qty}×${fmt(l.price)}</span>
                       <span style={{ color: "#4b5563", marginLeft: "auto" }}>{l.why}</span>
@@ -550,7 +589,7 @@ function App() {
             <div style={{ padding: "16px 24px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
                 <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 24, color: symColor(selected) }}>{selected}/{COINS[selected]?.type === "crypto" ? "USDT" : "USD"}</span>
-                <span style={{ fontSize: 10, background: "rgba(245,158,11,0.1)", color: "#f59e0b", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>5DK</span>
+                <span style={{ fontSize: 10, background: "rgba(245,158,11,0.1)", color: "#f59e0b", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>5M</span>
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
                 <span style={{ fontFamily: "var(--m)", fontSize: 32, fontWeight: 600, color: "#f8fafc" }}>${fmt(sd.cur)}</span>
@@ -563,7 +602,7 @@ function App() {
                   <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
                     <XAxis dataKey="t" hide />
                     <YAxis domain={["auto", "auto"]} hide />
-                    <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={() => ""} formatter={(v, name) => [name === "c" ? `$${fmt(v)}` : v, name === "c" ? "Kapanış" : name === "h" ? "Yüksek" : name === "l" ? "Düşük" : name === "o" ? "Açılış" : name]} />
+                    <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={() => ""} formatter={(v, name) => [name === "c" ? `$${fmt(v)}` : v, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : name === "o" ? "Open" : name]} />
                     {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.upper} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
                     {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.lower} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
                     {sd.ema9 > 0 && <ReferenceLine y={sd.ema9} stroke="#22d3ee" strokeDasharray="2 2" strokeWidth={0.5} />}
@@ -574,7 +613,7 @@ function App() {
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Mum verileri yükleniyor...</div>
+                <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
               )}
 
               {/* Volume */}
@@ -603,16 +642,16 @@ function App() {
           {/* PORTFOLIO */}
           {tab === "portfolio" && (
             <div style={{ padding: 20 }}>
-              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, marginBottom: 14, color: "#f8fafc" }}>Portföy</div>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, marginBottom: 14, color: "#f8fafc" }}>Portfolio</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
-                {[{ l: "Toplam", v: `$${fK(tv)}`, c: "#f8fafc" }, { l: "USDT", v: `$${fK(cash)}`, c: "#94a3b8" }, { l: "Pozisyon", v: `$${fK(hVal)}`, c: "#f59e0b" }, { l: "K/Z", v: `${pnl >= 0 ? "+" : ""}$${fK(pnl)}`, c: pnl >= 0 ? "#22c55e" : "#ef4444" }].map((c, i) => (
+                {[{ l: "Total", v: `$${fK(tv)}`, c: "#f8fafc" }, { l: "USDT", v: `$${fK(cash)}`, c: "#94a3b8" }, { l: "Position", v: `$${fK(hVal)}`, c: "#f59e0b" }, { l: "P&L", v: `${pnl >= 0 ? "+" : ""}$${fK(pnl)}`, c: pnl >= 0 ? "#22c55e" : "#ef4444" }].map((c, i) => (
                   <div key={i} style={{ background: "#0f172a", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.04)" }}>
                     <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 2, fontFamily: "var(--h)", fontWeight: 600 }}>{c.l}</div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: c.c, fontFamily: "var(--m)" }}>{c.v}</div>
                   </div>
                 ))}
               </div>
-              {Object.keys(holdings).length === 0 ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>Henüz pozisyon yok. 🔥 HEPSİNİ AKTİF ET!</div> : (
+              {Object.keys(holdings).length === 0 ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>No positions yet. Activate strategies to start!</div> : (
                 <div style={{ display: "grid", gap: 10 }}>
                   {Object.entries(holdings).map(([sym, h]) => {
                     const p = data[sym].cur; const v = h.qty * p; const pl = (p - h.avgCost) * h.qty; const plP = ((p - h.avgCost) / h.avgCost) * 100;
@@ -628,8 +667,8 @@ function App() {
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 16, marginTop: 6, fontFamily: "var(--m)", fontSize: 10, color: "#6b7280" }}>
-                        <span>Ort. Maliyet: <span style={{ color: "#94a3b8" }}>${fmt(h.avgCost)}</span></span>
-                        <span>Güncel: <span style={{ color: "#f8fafc" }}>${fmt(p)}</span></span>
+                        <span>Avg Cost: <span style={{ color: "#94a3b8" }}>${fmt(h.avgCost)}</span></span>
+                        <span>Current: <span style={{ color: "#f8fafc" }}>${fmt(p)}</span></span>
                       </div>
                     </div>);
                   })}
@@ -641,16 +680,16 @@ function App() {
           {/* ORDERS */}
           {tab === "orders" && (
             <div style={{ padding: 20 }}>
-              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, marginBottom: 14, color: "#f8fafc" }}>İşlem Geçmişi ({orders.length})</div>
-              {orders.length === 0 ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>Henüz işlem yok.</div> : (
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 18, marginBottom: 14, color: "#f8fafc" }}>Trade History ({orders.length})</div>
+              {orders.length === 0 ? <div style={{ textAlign: "center", padding: 24, color: "#6b7280" }}>No trades yet.</div> : (
                 <div style={{ background: "#0f172a", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "80px 45px 40px 65px 85px 75px auto", padding: "7px 12px", fontSize: 9, color: "#6b7280", borderBottom: "1px solid rgba(255,255,255,0.04)", fontFamily: "var(--h)", fontWeight: 600 }}>
-                    <span>ZAMAN</span><span>YÖN</span><span>COİN</span><span>MİKTAR</span><span>FİYAT</span><span>TOPLAM</span><span>STRATEJİ</span>
+                    <span>TIME</span><span>SIDE</span><span>ASSET</span><span>QTY</span><span>PRICE</span><span>TOTAL</span><span>STRATEGY</span>
                   </div>
                   {orders.slice(0, 150).map(o => (
                     <div key={o.id} style={{ display: "grid", gridTemplateColumns: "80px 45px 40px 65px 85px 75px auto", padding: "4px 12px", fontSize: 10, borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)" }}>
                       <span style={{ color: "#4b5563", fontSize: 9 }}>{o.time.toLocaleTimeString()}</span>
-                      <span style={{ color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{o.side === "buy" ? "AL" : "SAT"}</span>
+                      <span style={{ color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{o.side === "buy" ? "BUY" : "SELL"}</span>
                       <span style={{ color: o.symColor(sym), fontWeight: 600 }}>{o.sym}</span>
                       <span style={{ color: "#94a3b8" }}>{o.qty}</span>
                       <span style={{ color: "#94a3b8" }}>${fmt(o.price)}</span>

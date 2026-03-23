@@ -504,8 +504,8 @@ export default function App() {
                       <span style={{ color: "#4b5563", minWidth: 55 }}>{l.time.toLocaleTimeString()}</span>
                       <span style={l.side === "buy" ? tB : tSl}>{l.side === "buy" ? "AL" : "SAT"}</span>
                       <span style={{ color: l.symbol === "BTC" ? "#f59e0b" : "#627eea", fontWeight: 600, minWidth: 28 }}>{l.symbol}</span>
-                      <span style={{ color: "#94a3b8" }}>{l.qty}×${fmt(l.price)}</span>
-                      <span style={{ color: "#4b5563", marginLeft: "auto" }}>{l.why}</span>
+                      <span style={{ color: "#94a3b8" }}>{l.qty}×${fmt(l.price)} = ${fK(l.price * l.qty)}</span>
+                      {l.why && <span style={{ color: "#a78bfa", marginLeft: "auto", fontWeight: 500 }}>({l.why})</span>}
                     </div>
                   ))}
                 </div>

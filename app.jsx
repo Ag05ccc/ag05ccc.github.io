@@ -194,14 +194,15 @@ const STRATS = [
 ];
 
 // ─── PORTFOLIO PROFILES ───
-function qtyFor(sym, mult) {
+function qtyFor(sym, cash, mult) {
   const p = COINS[sym]?.price || 100;
-  if (p > 10000) return +(0.005 * mult).toFixed(4);
-  if (p > 1000) return +(0.02 * mult).toFixed(4);
-  if (p > 100) return +(0.2 * mult).toFixed(3);
-  if (p > 10) return +(2 * mult).toFixed(2);
-  if (p > 1) return +(10 * mult).toFixed(1);
-  return +(200 * mult).toFixed(0);
+  const allocPct = 0.015 * mult; // 1.5% base per trade, scaled by risk multiplier
+  const dollarAmount = cash * allocPct;
+  const q = dollarAmount / p;
+  if (q < 0.0001) return +q.toFixed(6);
+  if (q < 1) return +q.toFixed(4);
+  if (q < 100) return +q.toFixed(2);
+  return +q.toFixed(0);
 }
 
 const PROFILES = [
@@ -268,7 +269,7 @@ function buildStrategies(profile) {
         type: st.id,
         symbol: sym,
         value: val,
-        qty: qtyFor(sym, profile.qtyMult),
+        qty: qtyFor(sym, DEFAULT_CASH, profile.qtyMult),
         active: true,
       });
     });
@@ -283,6 +284,7 @@ function initPortfolio(profile) {
     color: profile.color,
     icon: profile.icon,
     desc: profile.desc,
+    qtyMult: profile.qtyMult,
     cash: DEFAULT_CASH,
     startCash: DEFAULT_CASH,
     holdings: {},
@@ -432,7 +434,7 @@ function App() {
           if (!why) return;
 
           const price = sd.cur;
-          const tq = st.qty;
+          const tq = qtyFor(st.symbol, cash, pf.qtyMult || 1);
           const total = price * tq;
 
           if (side === "buy") {
@@ -463,7 +465,8 @@ function App() {
           }
 
           tradeCount++;
-          orders = [{ id: Date.now() + Math.random(), sym: st.symbol, side, qty: side === "sell" ? Math.min(tq, pos?.qty || tq) : tq, price, time: new Date(), strat: sT.label, why }, ...orders].slice(0, 200);
+          const finalQty = side === "sell" ? Math.min(tq, pos?.qty || tq) : tq;
+          orders = [{ id: Date.now() + Math.random(), sym: st.symbol, side, qty: finalQty, price, total: price * finalQty, time: new Date(), strat: sT.label, why }, ...orders].slice(0, 200);
           log = [{ time: new Date(), strat: sT.label, symbol: st.symbol, side, qty: tq, price, why }, ...log].slice(0, 100);
           changed = true;
         });
@@ -823,12 +826,14 @@ function App() {
                   ) : (
                     <div style={{ background: "#0f172a", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 200, overflowY: "auto" }}>
                       {pf.orders.slice(0, 50).map(o => (
-                        <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 9 }}>
-                          <span style={{ color: "#4b5563", minWidth: 55 }}>{o.time.toLocaleTimeString()}</span>
+                        <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 9, flexWrap: "wrap" }}>
+                          <span style={{ color: "#4b5563", minWidth: 55 }}>{typeof o.time === "string" ? new Date(o.time).toLocaleTimeString() : o.time.toLocaleTimeString()}</span>
                           <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: o.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{o.side === "buy" ? "BUY" : "SELL"}</span>
                           <span style={{ color: symColor(o.sym), fontWeight: 600, minWidth: 35 }}>{o.sym}</span>
                           <span style={{ color: "#94a3b8" }}>{o.qty}x${fmt(o.price)}</span>
-                          <span style={{ color: "#4b5563", marginLeft: "auto" }}>{o.why || o.strat}</span>
+                          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>${fK(o.price * o.qty)}</span>
+                          <span style={{ color: "#6366f1", fontWeight: 500 }}>{o.strat}</span>
+                          {o.why && <span style={{ color: "#a78bfa", marginLeft: "auto", fontWeight: 500 }}>({o.why})</span>}
                         </div>
                       ))}
                     </div>

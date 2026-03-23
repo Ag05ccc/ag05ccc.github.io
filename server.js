@@ -175,28 +175,21 @@ function evalStrategy(st, sd, pos, peakPrice) {
 }
 
 // ─── PORTFOLIO PROFILES ───
-function qtyFor(sym, mult, price) {
-  const p = price || 100;
-  if (p > 10000) return +(0.005 * mult);
-  if (p > 1000) return +(0.02 * mult);
-  if (p > 100) return +(0.2 * mult);
-  if (p > 10) return +(2 * mult);
-  if (p > 1) return +(10 * mult);
-  return +(200 * mult);
-}
+// cashPct: percentage of available cash to use per trade
+// Position size = (cash * cashPct) / price
 
 const PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️", desc: "Low-risk, tight stops",
-    assets: ["AAPL", "MSFT", "GOOGL", "JPM", "V", "WMT", "BTC", "ETH"], qtyMult: 0.5,
+    assets: ["AAPL", "MSFT", "GOOGL", "JPM", "V", "WMT", "BTC", "ETH"], cashPct: 0.02,
     overrides: { rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85, tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4, bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 2.0, breakout_high: 15, breakdown: 15, dip_rsi_macd: 35, dip_rsi_macd_s: 65 } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️", desc: "Balanced mix",
-    assets: ["BTC", "ETH", "SOL", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "LINK", "BNB"], qtyMult: 1.0,
+    assets: ["BTC", "ETH", "SOL", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "LINK", "BNB"], cashPct: 0.05,
     overrides: { rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80, tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8, bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.5, breakout_high: 10, breakdown: 10, dip_rsi_macd: 40, dip_rsi_macd_s: 60 } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥", desc: "High volatility, wider thresholds",
-    assets: ["BTC", "ETH", "SOL", "AVAX", "DOGE", "LINK", "DOT", "NVDA", "TSLA", "META"], qtyMult: 2.0,
+    assets: ["BTC", "ETH", "SOL", "AVAX", "DOGE", "LINK", "DOT", "NVDA", "TSLA", "META"], cashPct: 0.10,
     overrides: { rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70, tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5, bb_lower: 0.2, bb_upper: 0.2, vol_spike_b: 1.2, vol_spike_s: 1.2, breakout_high: 6, breakdown: 6, dip_rsi_macd: 45, dip_rsi_macd_s: 55, ema50_bounce: 0.5, vwap_buy: 0.2, vwap_sell: 0.2, adx_trend_b: 20 } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀", desc: "Maximum risk",
-    assets: ["SOL", "DOGE", "AVAX", "TSLA", "NVDA", "ADA", "XRP", "DOT", "ETH", "BTC"], qtyMult: 4.0,
+    assets: ["SOL", "DOGE", "AVAX", "TSLA", "NVDA", "ADA", "XRP", "DOT", "ETH", "BTC"], cashPct: 0.20,
     overrides: { rsi_ob: 45, rsi_os: 55, stoch_ob: 40, stoch_os: 60, tp_pct: 5.0, sl_pct: 4.0, trailing: 3.0, bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.0, vol_spike_s: 1.0, breakout_high: 4, breakdown: 4, dip_rsi_macd: 48, dip_rsi_macd_s: 52, ema50_bounce: 1.0, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 15 } },
 ];
 
@@ -225,7 +218,7 @@ function buildStrategies(profile) {
   STRATS.forEach(st => {
     profile.assets.forEach(sym => {
       const val = profile.overrides[st.id] !== undefined ? profile.overrides[st.id] : 30;
-      strats.push({ id: `${profile.id}_${st.id}_${sym}`, type: st.id, symbol: sym, value: val, qty: qtyFor(sym, profile.qtyMult, lastPrices[sym]), active: true });
+      strats.push({ id: `${profile.id}_${st.id}_${sym}`, type: st.id, symbol: sym, value: val, cashPct: profile.cashPct, active: true });
     });
   });
   return strats;
@@ -422,7 +415,11 @@ function runStrategies() {
       if (!why) return;
 
       const price = sd.cur;
-      const tq = st.qty;
+      if (price <= 0) return;
+      // Dynamic position sizing: cashPct of available cash
+      const tradeValue = pf.cash * (st.cashPct || 0.05);
+      const tq = +(tradeValue / price).toFixed(6);
+      if (tq <= 0) return;
       const total = price * tq;
       const commission = total * COMMISSION_RATE; // 0.1% commission
 
@@ -457,7 +454,8 @@ function runStrategies() {
       cooldowns[cooldownKey] = now;
 
       pf.tradeCount++;
-      pf.orders = [{ sym: st.symbol, side: sT.side, qty: sT.side === "sell" ? Math.min(tq, (pos && pos.qty) || tq) : tq, price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: sT.label, why }, ...pf.orders].slice(0, 200);
+      const logQty = sT.side === "sell" ? Math.min(tq, (pos && pos.qty) || tq) : tq;
+      pf.orders = [{ sym: st.symbol, side: sT.side, qty: logQty, total: +(price * logQty).toFixed(2), price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: sT.label, why }, ...pf.orders].slice(0, 200);
     });
 
     // Update peaks

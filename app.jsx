@@ -2,30 +2,12 @@ const { useState, useEffect, useRef, useCallback } = React;
 const { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, Legend, AreaChart, Area } = Recharts;
 
 const DEFAULT_CASH = 1000000;
-const TICK_MS = 1500;
-const TICKS_PER_CANDLE = 4;
+const TICK_MS = 2000;
+const TICKS_PER_CANDLE = 30; // 30 ticks x 2s = 60s = 1 minute candles
 
 const COINS = {
   BTC: { name: "Bitcoin", price: 67450, vol: 0.006, drift: 0.00005, type: "crypto" },
   ETH: { name: "Ethereum", price: 3520, vol: 0.008, drift: 0.00003, type: "crypto" },
-  BNB: { name: "BNB", price: 605, vol: 0.009, drift: 0.00002, type: "crypto" },
-  SOL: { name: "Solana", price: 148, vol: 0.015, drift: 0.00006, type: "crypto" },
-  XRP: { name: "Ripple", price: 0.62, vol: 0.012, drift: 0.00001, type: "crypto" },
-  ADA: { name: "Cardano", price: 0.45, vol: 0.014, drift: 0.00001, type: "crypto" },
-  AVAX: { name: "Avalanche", price: 36.50, vol: 0.013, drift: 0.00003, type: "crypto" },
-  DOGE: { name: "Dogecoin", price: 0.165, vol: 0.018, drift: 0.00001, type: "crypto" },
-  DOT: { name: "Polkadot", price: 7.20, vol: 0.012, drift: 0.00002, type: "crypto" },
-  LINK: { name: "Chainlink", price: 14.80, vol: 0.013, drift: 0.00003, type: "crypto" },
-  AAPL: { name: "Apple", price: 178.50, vol: 0.005, drift: 0.00004, type: "stock" },
-  MSFT: { name: "Microsoft", price: 420.50, vol: 0.004, drift: 0.00004, type: "stock" },
-  GOOGL: { name: "Alphabet", price: 155.80, vol: 0.006, drift: 0.00003, type: "stock" },
-  AMZN: { name: "Amazon", price: 185.60, vol: 0.006, drift: 0.00004, type: "stock" },
-  NVDA: { name: "NVIDIA", price: 875.30, vol: 0.012, drift: 0.00008, type: "stock" },
-  META: { name: "Meta", price: 505.20, vol: 0.008, drift: 0.00005, type: "stock" },
-  TSLA: { name: "Tesla", price: 248.30, vol: 0.015, drift: 0.00003, type: "stock" },
-  JPM: { name: "JPMorgan", price: 198.40, vol: 0.004, drift: 0.00003, type: "stock" },
-  V: { name: "Visa", price: 282.60, vol: 0.003, drift: 0.00003, type: "stock" },
-  WMT: { name: "Walmart", price: 168.90, vol: 0.003, drift: 0.00002, type: "stock" },
 };
 const SYMS = Object.keys(COINS);
 
@@ -94,8 +76,7 @@ function calcADX(highs, lows, closes, period = 14) {
 }
 
 function symColor(sym) {
-  const colors = { BTC: "#f59e0b", ETH: "#627eea", BNB: "#f3ba2f", SOL: "#9945ff", XRP: "#00aae4", ADA: "#0033ad", AVAX: "#e84142", DOGE: "#c2a633", DOT: "#e6007a", LINK: "#2a5ada", AAPL: "#a2aaad", MSFT: "#00a4ef", GOOGL: "#4285f4", AMZN: "#ff9900", NVDA: "#76b900", META: "#0081fb", TSLA: "#cc0000", JPM: "#006eb6", V: "#1a1f71", WMT: "#0071ce" };
-  return colors[sym] || "#94a3b8";
+  return sym === "BTC" ? "#f59e0b" : sym === "ETH" ? "#627eea" : "#94a3b8";
 }
 
 function tk(p, v, d) { return Math.max(p * 0.5, +(p + (Math.random() - 0.5) * 2 * v * p + d * p).toFixed(2)); }
@@ -194,23 +175,12 @@ const STRATS = [
 ];
 
 // ─── PORTFOLIO PROFILES ───
-function qtyFor(sym, cash, mult) {
-  const p = COINS[sym]?.price || 100;
-  const allocPct = 0.015 * mult; // 1.5% base per trade, scaled by risk multiplier
-  const dollarAmount = cash * allocPct;
-  const q = dollarAmount / p;
-  if (q < 0.0001) return +q.toFixed(6);
-  if (q < 1) return +q.toFixed(4);
-  if (q < 100) return +q.toFixed(2);
-  return +q.toFixed(0);
-}
-
+// cashPct: how much of available cash to deploy per trade signal
 const PROFILES = [
   {
     id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "Low-risk stocks only, tight stops, small positions",
-    assets: ["AAPL", "MSFT", "GOOGL", "JPM", "V", "WMT", "BTC", "ETH"],
-    qtyMult: 0.5,
+    desc: "Tight stops, 75%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.25,
     overrides: {
       rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85,
       tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4,
@@ -220,9 +190,8 @@ const PROFILES = [
   },
   {
     id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "Balanced mix, standard TA thresholds",
-    assets: ["BTC", "ETH", "SOL", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "LINK", "BNB"],
-    qtyMult: 1.0,
+    desc: "Balanced, 85%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.35,
     overrides: {
       rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80,
       tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8,
@@ -232,9 +201,8 @@ const PROFILES = [
   },
   {
     id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "High-volatility assets, wider thresholds, larger positions",
-    assets: ["BTC", "ETH", "SOL", "AVAX", "DOGE", "LINK", "DOT", "NVDA", "TSLA", "META"],
-    qtyMult: 2.0,
+    desc: "High conviction, 90%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.45,
     overrides: {
       rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70,
       tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5,
@@ -245,9 +213,8 @@ const PROFILES = [
   },
   {
     id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "Maximum risk, all volatile assets, huge positions, loose stops",
-    assets: ["SOL", "DOGE", "AVAX", "TSLA", "NVDA", "ADA", "XRP", "DOT", "ETH", "BTC"],
-    qtyMult: 4.0,
+    desc: "Full send, 100% deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.50,
     overrides: {
       rsi_ob: 45, rsi_os: 55, stoch_ob: 40, stoch_os: 60,
       tp_pct: 5.0, sl_pct: 4.0, trailing: 3.0,
@@ -260,17 +227,13 @@ const PROFILES = [
 
 function buildStrategies(profile) {
   const strats = [];
-  const assets = profile.assets;
-  STRATS.forEach(st => {
-    assets.forEach(sym => {
+  profile.assets.forEach(sym => {
+    STRATS.forEach(st => {
       const val = profile.overrides[st.id] !== undefined ? profile.overrides[st.id] : st.def;
       strats.push({
         id: `${profile.id}_${st.id}_${sym}_${Math.random()}`,
-        type: st.id,
-        symbol: sym,
-        value: val,
-        qty: qtyFor(sym, DEFAULT_CASH, profile.qtyMult),
-        active: true,
+        type: st.id, symbol: sym, value: val,
+        cashPct: profile.cashPct, active: true,
       });
     });
   });
@@ -284,7 +247,7 @@ function initPortfolio(profile) {
     color: profile.color,
     icon: profile.icon,
     desc: profile.desc,
-    qtyMult: profile.qtyMult,
+    cashPct: profile.cashPct,
     cash: DEFAULT_CASH,
     startCash: DEFAULT_CASH,
     holdings: {},
@@ -313,6 +276,7 @@ function App() {
   const [portfolios, setPortfolios] = useState(() => PROFILES.map(initPortfolio));
   const [selected, setSelected] = useState("BTC");
   const [tab, setTab] = useState("compare");
+  const [chartType, setChartType] = useState("candle"); // "candle" or "line"
   const [notif, setNotif] = useState(null);
   const ntRef = useRef(null);
   const [tick, setTick] = useState(0);
@@ -328,38 +292,20 @@ function App() {
     ntRef.current = setTimeout(() => setNotif(null), 2500);
   }, []);
 
-  // Fetch real prices
+  // Fetch real prices (BTC + ETH only)
   useEffect(() => {
-    const CRYPTO_IDS = { BTC: "bitcoin", ETH: "ethereum", BNB: "binancecoin", SOL: "solana", XRP: "ripple", ADA: "cardano", AVAX: "avalanche-2", DOGE: "dogecoin", DOT: "polkadot", LINK: "chainlink" };
-    fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${Object.values(CRYPTO_IDS).join(",")}&vs_currencies=usd`)
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd")
       .then(r => r.json())
       .then(prices => {
         setData(prev => {
           const next = { ...prev };
-          Object.entries(CRYPTO_IDS).forEach(([sym, id]) => {
-            if (prices[id]?.usd) {
-              const p = prices[id].usd;
-              COINS[sym].price = p;
-              next[sym] = { ...next[sym], cur: p, building: { o: p, h: p, l: p, c: p, v: 0, tickCount: 0 }, vwap: p };
-            }
-          });
+          if (prices.bitcoin?.usd) { const p = prices.bitcoin.usd; COINS.BTC.price = p; next.BTC = { ...next.BTC, cur: p, building: { o: p, h: p, l: p, c: p, v: 0, tickCount: 0 }, vwap: p }; }
+          if (prices.ethereum?.usd) { const p = prices.ethereum.usd; COINS.ETH.price = p; next.ETH = { ...next.ETH, cur: p, building: { o: p, h: p, l: p, c: p, v: 0, tickCount: 0 }, vwap: p }; }
           return next;
         });
-        notify("Live crypto prices loaded", "buy");
+        notify("Live BTC/ETH prices loaded", "buy");
       })
       .catch(() => {});
-    ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "WMT"].forEach(sym => {
-      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`)
-        .then(r => r.json())
-        .then(d => {
-          const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-          if (price) {
-            COINS[sym].price = price;
-            setData(prev => ({ ...prev, [sym]: { ...prev[sym], cur: price, building: { o: price, h: price, l: price, c: price, v: 0, tickCount: 0 }, vwap: price } }));
-          }
-        })
-        .catch(() => {});
-    });
   }, []);
 
   // Price engine
@@ -434,7 +380,10 @@ function App() {
           if (!why) return;
 
           const price = sd.cur;
-          const tq = qtyFor(st.symbol, cash, pf.qtyMult || 1);
+          if (price <= 0) return;
+          const tradeValue = cash * (st.cashPct || 0.25);
+          const tq = +(tradeValue / price).toFixed(6);
+          if (tq <= 0) return;
           const total = price * tq;
 
           if (side === "buy") {
@@ -532,7 +481,7 @@ function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px rgba(34,197,94,0.5)", animation: "pulse 2s infinite" }} />
           <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>CRYPTO<span style={{ color: "#f59e0b" }}>TA</span></span>
-          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>4 PORTFOLIOS RACING</span>
+          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>BTC + ETH | 1M CANDLES</span>
         </div>
         <div style={{ display: "flex", gap: 12, fontFamily: "var(--m)", fontSize: 11 }}>
           {pfStats.map(pf => (
@@ -554,30 +503,26 @@ function App() {
       <div style={{ display: "flex", minHeight: "calc(100vh - 85px)" }}>
         {/* LEFT SIDEBAR */}
         <div style={{ width: 210, borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "auto", background: "#0d1117", flexShrink: 0 }}>
-          {[{ label: "CRYPTO", filter: "crypto" }, { label: "STOCKS", filter: "stock" }].map(section => (
-            <div key={section.filter}>
-              <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>{section.label}</div>
-              {Object.entries(COINS).filter(([, c]) => c.type === section.filter).map(([sym, c]) => {
-                const d2 = data[sym]; const p = d2.cur; const open = d2.candles[0]?.o || p;
-                const d = p - open; const dp = d / open;
-                return (
-                  <div key={sym} className="sr" onClick={() => { setSelected(sym); setTab("chart"); }}
-                    style={{ padding: "8px 14px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.03)", background: selected === sym ? "rgba(245,158,11,0.08)" : "transparent", borderLeft: selected === sym ? "2px solid #f59e0b" : "2px solid transparent" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontFamily: "var(--m)", fontWeight: 700, fontSize: 13, color: symColor(sym) }}>{sym}</div>
-                        <div style={{ fontSize: 9, color: "#6b7280" }}>{c.name}</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: "var(--m)", fontSize: 12, fontWeight: 600, color: "#f8fafc" }}>${fmt(p)}</div>
-                        <div style={{ fontFamily: "var(--m)", fontSize: 9, color: d >= 0 ? "#22c55e" : "#ef4444" }}>{pc(dp)}</div>
-                      </div>
-                    </div>
+          <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>CRYPTO</div>
+          {Object.entries(COINS).map(([sym, c]) => {
+            const d2 = data[sym]; const p = d2.cur; const open = d2.candles[0]?.o || p;
+            const d = p - open; const dp = d / open;
+            return (
+              <div key={sym} className="sr" onClick={() => { setSelected(sym); setTab("chart"); }}
+                style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.03)", background: selected === sym ? "rgba(245,158,11,0.08)" : "transparent", borderLeft: selected === sym ? "2px solid #f59e0b" : "2px solid transparent" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontFamily: "var(--m)", fontWeight: 700, fontSize: 14, color: symColor(sym) }}>{sym}</div>
+                    <div style={{ fontSize: 10, color: "#6b7280" }}>{c.name}</div>
                   </div>
-                );
-              })}
-            </div>
-          ))}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "var(--m)", fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>${fmt(p)}</div>
+                    <div style={{ fontFamily: "var(--m)", fontSize: 10, color: d >= 0 ? "#22c55e" : "#ef4444" }}>{pc(dp)}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
           {/* Indicators */}
           <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 6 }}>INDICATORS · {selected}</div>
@@ -701,43 +646,101 @@ function App() {
           )}
 
           {/* ════════ CHART TAB ════════ */}
-          {tab === "chart" && (
+          {tab === "chart" && (() => {
+            const maxVol = Math.max(...chartCandles.map(c => c.v), 1);
+            const avgVol = chartCandles.length > 0 ? chartCandles.reduce((s, c) => s + c.v, 0) / chartCandles.length : 1;
+            return (
             <div style={{ padding: "16px 24px" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
-                <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 24, color: symColor(selected) }}>{selected}/{COINS[selected]?.type === "crypto" ? "USDT" : "USD"}</span>
-                <span style={{ fontSize: 10, background: "rgba(245,158,11,0.1)", color: "#f59e0b", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>5M</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                  <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 24, color: symColor(selected) }}>{selected}/USDT</span>
+                  <span style={{ fontSize: 10, background: "rgba(245,158,11,0.1)", color: "#f59e0b", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>1M</span>
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["candle", "line"].map(t => (
+                    <button key={t} onClick={() => setChartType(t)} style={{ padding: "3px 10px", fontSize: 10, fontFamily: "var(--m)", fontWeight: 600, borderRadius: 4, border: "1px solid", borderColor: chartType === t ? "#f59e0b" : "#1e293b", background: chartType === t ? "rgba(245,158,11,0.15)" : "transparent", color: chartType === t ? "#f59e0b" : "#6b7280", cursor: "pointer" }}>{t === "candle" ? "Candle" : "Line"}</button>
+                  ))}
+                </div>
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
                 <span style={{ fontFamily: "var(--m)", fontSize: 32, fontWeight: 600, color: "#f8fafc" }}>${fmt(sd.cur)}</span>
-                <span style={{ fontFamily: "var(--m)", fontSize: 16, color: ch >= 0 ? "#22c55e" : "#ef4444" }}>{ch >= 0 ? "▲" : "▼"} {fmt(Math.abs(ch))} ({pc(chP)})</span>
+                <span style={{ fontFamily: "var(--m)", fontSize: 16, color: ch >= 0 ? "#22c55e" : "#ef4444" }}>{ch >= 0 ? "+" : ""}{fmt(ch)} ({pc(chP)})</span>
               </div>
 
               {chartCandles.length > 2 ? (
-                <ResponsiveContainer width="100%" height={340}>
-                  <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                    <XAxis dataKey="t" hide />
-                    <YAxis domain={["auto", "auto"]} hide />
-                    <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={() => ""} formatter={(v, name) => [name === "c" ? `$${fmt(v)}` : v, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : name === "o" ? "Open" : name]} />
-                    {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.upper} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
-                    {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.lower} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
-                    {sd.ema9 > 0 && <ReferenceLine y={sd.ema9} stroke="#22d3ee" strokeDasharray="2 2" strokeWidth={0.5} />}
-                    {sd.ema21 > 0 && <ReferenceLine y={sd.ema21} stroke="#f59e0b" strokeDasharray="2 2" strokeWidth={0.5} />}
-                    <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="h" stroke="rgba(255,255,255,0.1)" strokeWidth={0.5} dot={false} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="l" stroke="rgba(255,255,255,0.1)" strokeWidth={0.5} dot={false} isAnimationActive={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                chartType === "candle" ? (
+                  /* ── CANDLESTICK CHART (SVG) ── */
+                  <div style={{ background: "#0f172a", borderRadius: 8, padding: "12px 8px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <svg width="100%" height="340" viewBox={`0 0 ${chartCandles.length * 14 + 20} 340`} preserveAspectRatio="none" style={{ display: "block" }}>
+                      {(() => {
+                        const prices = chartCandles.flatMap(c => [c.h, c.l]);
+                        const minP = Math.min(...prices); const maxP = Math.max(...prices);
+                        const range = maxP - minP || 1;
+                        const yScale = (v) => 330 - ((v - minP) / range) * 320;
+                        const w = 8; const gap = 6;
+                        // BB bands
+                        const bbU = sd.bb?.upper || 0; const bbL = sd.bb?.lower || 0;
+                        return (
+                          <g>
+                            {bbU > 0 && <line x1="0" y1={yScale(bbU)} x2={chartCandles.length * (w + gap)} y2={yScale(bbU)} stroke="#6366f1" strokeDasharray="4 4" strokeWidth="0.5" opacity="0.5" />}
+                            {bbL > 0 && <line x1="0" y1={yScale(bbL)} x2={chartCandles.length * (w + gap)} y2={yScale(bbL)} stroke="#6366f1" strokeDasharray="4 4" strokeWidth="0.5" opacity="0.5" />}
+                            {sd.ema9 > 0 && <line x1="0" y1={yScale(sd.ema9)} x2={chartCandles.length * (w + gap)} y2={yScale(sd.ema9)} stroke="#22d3ee" strokeDasharray="3 3" strokeWidth="0.5" opacity="0.6" />}
+                            {sd.ema21 > 0 && <line x1="0" y1={yScale(sd.ema21)} x2={chartCandles.length * (w + gap)} y2={yScale(sd.ema21)} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth="0.5" opacity="0.6" />}
+                            {chartCandles.map((c, i) => {
+                              const x = i * (w + gap) + 10;
+                              const green = c.c >= c.o;
+                              const color = green ? "#22c55e" : "#ef4444";
+                              const bodyTop = yScale(Math.max(c.o, c.c));
+                              const bodyBot = yScale(Math.min(c.o, c.c));
+                              const bodyH = Math.max(bodyBot - bodyTop, 1);
+                              return (
+                                <g key={i}>
+                                  <line x1={x + w / 2} y1={yScale(c.h)} x2={x + w / 2} y2={yScale(c.l)} stroke={color} strokeWidth="1" />
+                                  <rect x={x} y={bodyTop} width={w} height={bodyH} fill={green ? color : color} rx="1" />
+                                </g>
+                              );
+                            })}
+                          </g>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                ) : (
+                  /* ── LINE CHART ── */
+                  <ResponsiveContainer width="100%" height={340}>
+                    <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                      <XAxis dataKey="t" hide />
+                      <YAxis domain={["auto", "auto"]} hide />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={() => ""} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name]} />
+                      {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.upper} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
+                      {sd.bb?.mid > 0 && <ReferenceLine y={sd.bb.lower} stroke="#6366f1" strokeDasharray="3 3" strokeWidth={0.5} />}
+                      {sd.ema9 > 0 && <ReferenceLine y={sd.ema9} stroke="#22d3ee" strokeDasharray="2 2" strokeWidth={0.5} />}
+                      {sd.ema21 > 0 && <ReferenceLine y={sd.ema21} stroke="#f59e0b" strokeDasharray="2 2" strokeWidth={0.5} />}
+                      <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )
               ) : (
                 <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
               )}
 
+              {/* ── VOLUME BARS (readable) ── */}
               {chartCandles.length > 2 && (
-                <ResponsiveContainer width="100%" height={60}>
-                  <ComposedChart data={chartCandles} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                    <XAxis dataKey="t" hide /><YAxis hide />
-                    <Bar dataKey="v" fill="rgba(99,102,241,0.3)" isAnimationActive={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <div style={{ marginTop: 8, background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>VOLUME</span>
+                    <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--m)" }}>avg: {fK(avgVol)}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 1, height: 40 }}>
+                    {chartCandles.map((c, i) => {
+                      const pct = c.v / maxVol;
+                      const isHigh = c.v > avgVol * 1.5;
+                      return (
+                        <div key={i} title={`Vol: ${fK(c.v)}`} style={{ flex: 1, height: `${Math.max(pct * 100, 2)}%`, borderRadius: "2px 2px 0 0", background: isHigh ? (c.c >= c.o ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)") : "rgba(99,102,241,0.2)", transition: "height 0.2s" }} />
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
@@ -750,7 +753,8 @@ function App() {
                 <IndBadge label="ADX" value={sd.adx?.toFixed(0)} color={sd.adx > 25 ? "#f59e0b" : "#6b7280"} />
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ════════ PORTFOLIOS TAB ════════ */}
           {tab === "portfolios" && (
@@ -826,14 +830,14 @@ function App() {
                   ) : (
                     <div style={{ background: "#0f172a", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 200, overflowY: "auto" }}>
                       {pf.orders.slice(0, 50).map(o => (
-                        <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 9, flexWrap: "wrap" }}>
-                          <span style={{ color: "#4b5563", minWidth: 55 }}>{typeof o.time === "string" ? new Date(o.time).toLocaleTimeString() : o.time.toLocaleTimeString()}</span>
-                          <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: o.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{o.side === "buy" ? "BUY" : "SELL"}</span>
-                          <span style={{ color: symColor(o.sym), fontWeight: 600, minWidth: 35 }}>{o.sym}</span>
-                          <span style={{ color: "#94a3b8" }}>{o.qty}x${fmt(o.price)}</span>
+                        <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 10 }}>
+                          <span style={{ color: "#4b5563", minWidth: 52 }}>{typeof o.time === "string" ? new Date(o.time).toLocaleTimeString() : o.time.toLocaleTimeString()}</span>
+                          <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 3, background: o.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{o.side === "buy" ? "BUY" : "SELL"}</span>
+                          <span style={{ color: symColor(o.sym), fontWeight: 700 }}>{o.sym}</span>
                           <span style={{ color: "#e2e8f0", fontWeight: 600 }}>${fK(o.price * o.qty)}</span>
-                          <span style={{ color: "#6366f1", fontWeight: 500 }}>{o.strat}</span>
-                          {o.why && <span style={{ color: "#a78bfa", marginLeft: "auto", fontWeight: 500 }}>({o.why})</span>}
+                          <span style={{ color: "#6366f1", fontWeight: 600 }}>{o.strat}</span>
+                          {o.why && <span style={{ color: "#a78bfa", fontWeight: 600 }}>| {o.why}</span>}
+                          <span style={{ color: "#4b5563", fontSize: 9 }}>{o.qty.toFixed(4)}x${fmt(o.price)}</span>
                         </div>
                       ))}
                     </div>

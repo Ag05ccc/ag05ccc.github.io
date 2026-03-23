@@ -6,56 +6,16 @@ const https = require('https');
 
 const PORT = 3000;
 const TICK_MS = 2000;
-const CANDLE_TICKS = 4; // 4 ticks per candle = 8 seconds per candle in sim mode
-const PRICE_FETCH_INTERVAL = 30000; // Fetch real prices every 30 seconds
+const CANDLE_TICKS = 30; // 30 ticks x 2s = 60 seconds = 1 minute candles
+const PRICE_FETCH_INTERVAL = 30000;
 const DEFAULT_CASH = 1000000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 const STRATEGY_COOLDOWN_MS = 300000; // 5 minutes cooldown per strategy per asset
 
-// ─── ASSET DEFINITIONS ───
+// ─── ASSET DEFINITIONS (BTC + ETH only) ───
 const COINS = {
-  // Crypto - 20 coins
   BTC: { name: "Bitcoin", cgId: "bitcoin", type: "crypto" },
   ETH: { name: "Ethereum", cgId: "ethereum", type: "crypto" },
-  BNB: { name: "BNB", cgId: "binancecoin", type: "crypto" },
-  SOL: { name: "Solana", cgId: "solana", type: "crypto" },
-  XRP: { name: "Ripple", cgId: "ripple", type: "crypto" },
-  ADA: { name: "Cardano", cgId: "cardano", type: "crypto" },
-  AVAX: { name: "Avalanche", cgId: "avalanche-2", type: "crypto" },
-  DOGE: { name: "Dogecoin", cgId: "dogecoin", type: "crypto" },
-  DOT: { name: "Polkadot", cgId: "polkadot", type: "crypto" },
-  LINK: { name: "Chainlink", cgId: "chainlink", type: "crypto" },
-  MATIC: { name: "Polygon", cgId: "matic-network", type: "crypto" },
-  UNI: { name: "Uniswap", cgId: "uniswap", type: "crypto" },
-  ATOM: { name: "Cosmos", cgId: "cosmos", type: "crypto" },
-  LTC: { name: "Litecoin", cgId: "litecoin", type: "crypto" },
-  NEAR: { name: "NEAR", cgId: "near", type: "crypto" },
-  APT: { name: "Aptos", cgId: "aptos", type: "crypto" },
-  FIL: { name: "Filecoin", cgId: "filecoin", type: "crypto" },
-  ARB: { name: "Arbitrum", cgId: "arbitrum", type: "crypto" },
-  OP: { name: "Optimism", cgId: "optimism", type: "crypto" },
-  SUI: { name: "Sui", cgId: "sui", type: "crypto" },
-  // Stocks - 20 stocks
-  AAPL: { name: "Apple", type: "stock", price: 178.50 },
-  MSFT: { name: "Microsoft", type: "stock", price: 420.50 },
-  GOOGL: { name: "Alphabet", type: "stock", price: 155.80 },
-  AMZN: { name: "Amazon", type: "stock", price: 185.60 },
-  NVDA: { name: "NVIDIA", type: "stock", price: 875.30 },
-  META: { name: "Meta", type: "stock", price: 505.20 },
-  TSLA: { name: "Tesla", type: "stock", price: 248.30 },
-  JPM: { name: "JPMorgan", type: "stock", price: 198.40 },
-  V: { name: "Visa", type: "stock", price: 282.60 },
-  WMT: { name: "Walmart", type: "stock", price: 168.90 },
-  NFLX: { name: "Netflix", type: "stock", price: 628.50 },
-  AMD: { name: "AMD", type: "stock", price: 162.30 },
-  CRM: { name: "Salesforce", type: "stock", price: 272.40 },
-  ORCL: { name: "Oracle", type: "stock", price: 125.80 },
-  INTC: { name: "Intel", type: "stock", price: 43.20 },
-  DIS: { name: "Disney", type: "stock", price: 112.40 },
-  BA: { name: "Boeing", type: "stock", price: 178.90 },
-  PYPL: { name: "PayPal", type: "stock", price: 62.50 },
-  UBER: { name: "Uber", type: "stock", price: 78.30 },
-  COIN: { name: "Coinbase", type: "stock", price: 225.60 },
 };
 
 // ─── TA FUNCTIONS ───
@@ -201,17 +161,17 @@ function evalStrategy(st, sd, pos, peakPrice) {
 // Position size = (cash * cashPct) / price
 
 const PROFILES = [
-  { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️", desc: "Low-risk, tight stops",
-    assets: ["AAPL", "MSFT", "GOOGL", "JPM", "V", "WMT", "NFLX", "ORCL", "BTC", "ETH", "LTC", "LINK"], cashPct: 0.02,
+  { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️", desc: "Low-risk, tight stops, 75%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.25,
     overrides: { rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85, tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4, bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 2.0, breakout_high: 15, breakdown: 15, dip_rsi_macd: 35, dip_rsi_macd_s: 65 } },
-  { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️", desc: "Balanced mix",
-    assets: ["BTC", "ETH", "SOL", "BNB", "LINK", "ATOM", "UNI", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "CRM", "AMD"], cashPct: 0.05,
+  { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️", desc: "Balanced, 85%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.35,
     overrides: { rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80, tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8, bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.5, breakout_high: 10, breakdown: 10, dip_rsi_macd: 40, dip_rsi_macd_s: 60 } },
-  { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥", desc: "High volatility, wider thresholds",
-    assets: ["BTC", "ETH", "SOL", "AVAX", "DOGE", "LINK", "DOT", "NEAR", "ARB", "OP", "NVDA", "TSLA", "META", "AMD", "COIN"], cashPct: 0.10,
+  { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥", desc: "High conviction, 90%+ deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.45,
     overrides: { rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70, tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5, bb_lower: 0.2, bb_upper: 0.2, vol_spike_b: 1.2, vol_spike_s: 1.2, breakout_high: 6, breakdown: 6, dip_rsi_macd: 45, dip_rsi_macd_s: 55, ema50_bounce: 0.5, vwap_buy: 0.2, vwap_sell: 0.2, adx_trend_b: 20 } },
-  { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀", desc: "Maximum risk",
-    assets: ["SOL", "DOGE", "AVAX", "SUI", "APT", "ARB", "OP", "NEAR", "TSLA", "NVDA", "ADA", "XRP", "DOT", "ETH", "BTC", "COIN", "FIL", "MATIC"], cashPct: 0.20,
+  { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀", desc: "Full send, 100% deployed",
+    assets: ["BTC", "ETH"], cashPct: 0.50,
     overrides: { rsi_ob: 45, rsi_os: 55, stoch_ob: 40, stoch_os: 60, tp_pct: 5.0, sl_pct: 4.0, trailing: 3.0, bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.0, vol_spike_s: 1.0, breakout_high: 4, breakdown: 4, dip_rsi_macd: 48, dip_rsi_macd_s: 52, ema50_bounce: 1.0, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 15 } },
 ];
 
@@ -269,11 +229,7 @@ function fetchJSON(url) {
 
 // ─── BINANCE WEBSOCKET (real-time crypto) ───
 const BINANCE_SYMBOLS = {
-  BTC: 'btcusdt', ETH: 'ethusdt', BNB: 'bnbusdt', SOL: 'solusdt',
-  XRP: 'xrpusdt', ADA: 'adausdt', AVAX: 'avaxusdt', DOGE: 'dogeusdt',
-  DOT: 'dotusdt', LINK: 'linkusdt', MATIC: 'maticusdt', UNI: 'uniusdt',
-  ATOM: 'atomusdt', LTC: 'ltcusdt', NEAR: 'nearusdt', APT: 'aptusdt',
-  FIL: 'filusdt', ARB: 'arbusdt', OP: 'opusdt', SUI: 'suiusdt',
+  BTC: 'btcusdt', ETH: 'ethusdt',
 };
 
 let binanceWs = null;
@@ -349,22 +305,8 @@ async function fetchCoinGeckoPrices() {
   }
 }
 
-// ─── STOCK PRICES (Yahoo Finance) ───
-async function fetchStockPrices() {
-  var stockSyms = Object.keys(COINS).filter(function(s) { return COINS[s].type === 'stock'; });
-  for (var i = 0; i < stockSyms.length; i++) {
-    var sym = stockSyms[i];
-    try {
-      var d = await fetchJSON('https://query1.finance.yahoo.com/v8/finance/chart/' + sym + '?interval=1d&range=1d');
-      var price = d && d.chart && d.chart.result && d.chart.result[0] && d.chart.result[0].meta && d.chart.result[0].meta.regularMarketPrice;
-      if (price) lastPrices[sym] = price;
-    } catch(e) { /* ignore */ }
-  }
-}
-
 async function fetchRealPrices() {
   await fetchCoinGeckoPrices();
-  await fetchStockPrices();
   console.log('[' + new Date().toLocaleTimeString() + '] Prices: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH);
 }
 
@@ -587,7 +529,7 @@ async function start() {
   server.listen(PORT, () => {
     console.log('\n  CryptoTA Server running at http://localhost:' + PORT);
     console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
-    console.log('  4 portfolios | 0.1% commission | 5min cooldown');
+    console.log('  4 portfolios | BTC+ETH only | 1min candles | 0.1% commission');
     console.log('\n  To expose to internet, run: ngrok http ' + PORT + '\n');
   });
 
@@ -599,9 +541,6 @@ async function start() {
 
   // Broadcast to WebSocket clients every 2 seconds
   setInterval(broadcast, TICK_MS);
-
-  // Fetch stock prices periodically (Yahoo Finance)
-  setInterval(fetchStockPrices, PRICE_FETCH_INTERVAL);
 
   // CoinGecko as fallback every 60 seconds
   setInterval(fetchCoinGeckoPrices, 60000);

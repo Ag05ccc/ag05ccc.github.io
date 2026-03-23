@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoTA - Live Trading Simulator</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0a0e17; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        @keyframes fsi { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .sr:hover { background: rgba(255,255,255,0.03) !important; }
+        .bt { transition: all .12s; cursor: pointer; }
+        .bt:hover { transform: translateY(-1px); filter: brightness(1.15); }
+        .bt:active { transform: translateY(0); }
+        .bg:hover { background: rgba(255,255,255,0.06) !important; }
+        #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #f59e0b; font-family: 'Space Grotesk', sans-serif; font-size: 18px; gap: 12px; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="root"><div id="loading">Connecting to CryptoTA Server...<div style="font-size:12px;color:#6b7280">Make sure server.js is running</div></div></div>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/prop-types@15/prop-types.min.js" crossorigin></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.getElementById('loading');
+        if (el) el.innerHTML = '<div style="color:red;font-family:monospace;font-size:14px">' + e.message + '</div>';
+      });
+    </script>
+    <script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid } = Recharts;
+
+const COINS_META = {
+  BTC: { name: "Bitcoin", type: "crypto" }, ETH: { name: "Ethereum", type: "crypto" },
+  BNB: { name: "BNB", type: "crypto" }, SOL: { name: "Solana", type: "crypto" },
+  XRP: { name: "Ripple", type: "crypto" }, ADA: { name: "Cardano", type: "crypto" },
+  AVAX: { name: "Avalanche", type: "crypto" }, DOGE: { name: "Dogecoin", type: "crypto" },
+  DOT: { name: "Polkadot", type: "crypto" }, LINK: { name: "Chainlink", type: "crypto" },
+  AAPL: { name: "Apple", type: "stock" }, MSFT: { name: "Microsoft", type: "stock" },
+  GOOGL: { name: "Alphabet", type: "stock" }, AMZN: { name: "Amazon", type: "stock" },
+  NVDA: { name: "NVIDIA", type: "stock" }, META: { name: "Meta", type: "stock" },
+  TSLA: { name: "Tesla", type: "stock" }, JPM: { name: "JPMorgan", type: "stock" },
+  V: { name: "Visa", type: "stock" }, WMT: { name: "Walmart", type: "stock" },
+};
+
+function symColor(sym) {
+  const colors = { BTC: "#f59e0b", ETH: "#627eea", BNB: "#f3ba2f", SOL: "#9945ff", XRP: "#00aae4", ADA: "#0033ad", AVAX: "#e84142", DOGE: "#c2a633", DOT: "#e6007a", LINK: "#2a5ada", AAPL: "#a2aaad", MSFT: "#00a4ef", GOOGL: "#4285f4", AMZN: "#ff9900", NVDA: "#76b900", META: "#0081fb", TSLA: "#cc0000", JPM: "#006eb6", V: "#1a1f71", WMT: "#0071ce" };
+  return colors[sym] || "#94a3b8";
+}
+
+function fmt(n) { return n < 1 ? n.toFixed(4) : n < 100 ? n.toFixed(2) : n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fK(n) { if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + "M"; if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + "K"; return fmt(n); }
+function pc(n) { return (n >= 0 ? "+" : "") + (n * 100).toFixed(2) + "%"; }
+function fmtTime(iso) { return new Date(iso).toLocaleTimeString(); }
+
+const IndBadge = ({ label, value, color }) => (
+  <div style={{ background: "#0f172a", borderRadius: 4, padding: "3px 8px", display: "inline-flex", gap: 4, alignItems: "center", fontSize: 10, fontFamily: "var(--m)" }}>
+    <span style={{ color: "#6b7280" }}>{label}</span>
+    <span style={{ color, fontWeight: 600 }}>{value}</span>
+  </div>
+);
+
+// Timeframe: group candles
+function groupCandles(candles, factor) {
+  if (factor <= 1) return candles;
+  const grouped = [];
+  for (let i = 0; i < candles.length; i += factor) {
+    const slice = candles.slice(i, i + factor);
+    if (slice.length === 0) continue;
+    grouped.push({
+      o: slice[0].o, h: Math.max(...slice.map(c => c.h)), l: Math.min(...slice.map(c => c.l)),
+      c: slice[slice.length - 1].c, v: slice.reduce((a, c) => a + (c.v || 0), 0), t: slice[slice.length - 1].t,
+    });
+  }
+  return grouped;
+}
+
+const TIMEFRAMES = [
+  { label: "1m", factor: 1 },
+  { label: "5m", factor: 5 },
+  { label: "15m", factor: 15 },
+  { label: "1h", factor: 60 },
+  { label: "4h", factor: 240 },
+  { label: "1D", factor: 1440 },
+];
+
+function App() {
+  const [state, setState] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [selected, setSelected] = useState("BTC");
+  const [tab, setTab] = useState("compare");
+  const [tf, setTf] = useState("5m");
+  const wsRef = useRef(null);
+
+  // WebSocket connection
+  useEffect(() => {
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProto}//${window.location.host}`;
+
+    function connect() {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.onopen = () => setConnected(true);
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'init' || msg.type === 'update') {
+            setState(msg.data);
+          }
+        } catch(err) {}
+      };
+      ws.onclose = () => {
+        setConnected(false);
+        setTimeout(connect, 3000);
+      };
+      ws.onerror = () => ws.close();
+    }
+    connect();
+    return () => { if (wsRef.current) wsRef.current.close(); };
+  }, []);
+
+  if (!state || !state.prices) {
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#f59e0b", fontFamily: "'Space Grotesk',sans-serif", fontSize: 18 }}>
+      {connected ? "Loading data..." : "Connecting to server..."}
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: connected ? "#22c55e" : "#ef4444", marginLeft: 10, animation: "pulse 2s infinite" }} />
+    </div>;
+  }
+
+  const prices = state.prices;
+  const pfStats = state.portfolios || [];
+  const sd = prices[selected] || { cur: 0, candles: [], rsi: 50, macd: { hist: 0 }, bb: {}, stoch: { k: 50 }, adx: 20 };
+  const ch = sd.cur - (sd.candles[0]?.o || sd.cur);
+  const chP = sd.candles.length > 0 ? ch / (sd.candles[0]?.o || sd.cur) : 0;
+
+  // Group candles by timeframe
+  const tfObj = TIMEFRAMES.find(t => t.label === tf) || TIMEFRAMES[1];
+  const grouped = groupCandles(sd.candles || [], tfObj.factor);
+  const chartCandles = grouped.slice(-60).map((c, i) => ({
+    t: c.t ? new Date(c.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : i,
+    o: c.o, h: c.h, l: c.l, c: c.c, v: c.v,
+  }));
+
+  // Comparison chart
+  const maxLen = Math.max(...pfStats.map(pf => (pf.history || []).length), 1);
+  const compData = [];
+  for (let i = 0; i < maxLen; i++) {
+    const point = { t: i };
+    pfStats.forEach(pf => {
+      const h = (pf.history || [])[i];
+      point[pf.id] = h ? h.value : ((pf.history || [])[(pf.history || []).length - 1]?.value || pf.startCash);
+    });
+    compData.push(point);
+  }
+
+  return (
+    <div style={{ "--m": "'JetBrains Mono',monospace", "--h": "'Space Grotesk',sans-serif", minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'Space Grotesk',sans-serif" }}>
+
+      {/* HEADER */}
+      <div style={{ padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,14,23,0.95)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: connected ? "#22c55e" : "#ef4444", boxShadow: `0 0 8px ${connected ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)"}`, animation: "pulse 2s infinite" }} />
+          <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>CRYPTO<span style={{ color: "#f59e0b" }}>TA</span></span>
+          <span style={{ fontSize: 10, color: "#22c55e", background: "rgba(34,197,94,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>{connected ? "LIVE" : "OFFLINE"} · SERVER</span>
+          {state.serverTime && <span style={{ fontSize: 9, color: "#4b5563", fontFamily: "var(--m)" }}>{new Date(state.serverTime).toLocaleTimeString()}</span>}
+        </div>
+        <div style={{ display: "flex", gap: 12, fontFamily: "var(--m)", fontSize: 11 }}>
+          {pfStats.map(pf => (
+            <span key={pf.id}>
+              <span style={{ color: pf.color, fontWeight: 600 }}>{pf.icon} </span>
+              <span style={{ color: pf.pnl >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* TABS */}
+      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117" }}>
+        {[["compare", "Compare"], ["chart", "Chart & TA"], ["portfolios", "Portfolios"], ["log", "Trade Log"]].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ padding: "9px 20px", fontSize: 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)" }}>{l}</button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", minHeight: "calc(100vh - 85px)" }}>
+        {/* SIDEBAR */}
+        <div style={{ width: 210, borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "auto", background: "#0d1117", flexShrink: 0 }}>
+          {[{ label: "CRYPTO", filter: "crypto" }, { label: "STOCKS", filter: "stock" }].map(section => (
+            <div key={section.filter}>
+              <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>{section.label}</div>
+              {Object.entries(COINS_META).filter(([, c]) => c.type === section.filter).map(([sym, c]) => {
+                const p = prices[sym]?.cur || 0;
+                const open = prices[sym]?.candles?.[0]?.o || p;
+                const d = p - open; const dp = open > 0 ? d / open : 0;
+                return (
+                  <div key={sym} className="sr" onClick={() => { setSelected(sym); setTab("chart"); }}
+                    style={{ padding: "8px 14px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.03)", background: selected === sym ? "rgba(245,158,11,0.08)" : "transparent", borderLeft: selected === sym ? "2px solid #f59e0b" : "2px solid transparent" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--m)", fontWeight: 700, fontSize: 13, color: symColor(sym) }}>{sym}</div>
+                        <div style={{ fontSize: 9, color: "#6b7280" }}>{c.name}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 12, fontWeight: 600, color: "#f8fafc" }}>${fmt(p)}</div>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 9, color: d >= 0 ? "#22c55e" : "#ef4444" }}>{pc(dp)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 6 }}>INDICATORS · {selected}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <IndBadge label="RSI" value={sd.rsi?.toFixed(1)} color={sd.rsi < 30 ? "#22c55e" : sd.rsi > 70 ? "#ef4444" : "#f8fafc"} />
+              <IndBadge label="MACD" value={sd.macd?.hist?.toFixed(2)} color={sd.macd?.hist > 0 ? "#22c55e" : "#ef4444"} />
+              <IndBadge label="EMA9" value={`$${fmt(sd.ema9 || 0)}`} color="#22d3ee" />
+              <IndBadge label="EMA21" value={`$${fmt(sd.ema21 || 0)}`} color="#f59e0b" />
+              <IndBadge label="Stoch" value={sd.stoch?.k?.toFixed(0)} color={sd.stoch?.k < 20 ? "#22c55e" : sd.stoch?.k > 80 ? "#ef4444" : "#f8fafc"} />
+              <IndBadge label="ADX" value={sd.adx?.toFixed(0)} color={sd.adx > 25 ? "#f59e0b" : "#6b7280"} />
+              <IndBadge label="Candles" value={`${(sd.candles || []).length}`} color="#6b7280" />
+            </div>
+          </div>
+        </div>
+
+        {/* MAIN */}
+        <div style={{ flex: 1, overflow: "auto" }}>
+
+          {/* COMPARE */}
+          {tab === "compare" && (
+            <div style={{ padding: 20 }}>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>Portfolio Race</div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>4 risk profiles trading on real market data · Server-side 24/7</div>
+
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>PORTFOLIO VALUE OVER TIME</div>
+                {compData.length > 2 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="t" hide />
+                      <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={v => `$${fK(v)}`} />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v) => [`$${fK(v)}`, ""]} />
+                      {pfStats.map(pf => (
+                        <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Warming up... strategies trigger on candle close</div>
+                )}
+              </div>
+
+              {/* Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>
+                {[...pfStats].sort((a, b) => b.pnl - a.pnl).map((pf, rank) => {
+                  const wr = pf.wins + pf.losses > 0 ? (pf.wins / (pf.wins + pf.losses) * 100).toFixed(0) : "--";
+                  return (
+                    <div key={pf.id} style={{ background: "#0f172a", borderRadius: 10, padding: 16, border: `1px solid ${rank === 0 && pf.pnl > 0 ? pf.color + "66" : "rgba(255,255,255,0.04)"}`, position: "relative" }}>
+                      {rank === 0 && pf.pnl > 0 && <div style={{ position: "absolute", top: 8, right: 10, fontSize: 8, background: "rgba(245,158,11,0.2)", color: "#f59e0b", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 700 }}>LEADING</div>}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                        <span style={{ fontSize: 20 }}>{pf.icon}</span>
+                        <div>
+                          <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 15, color: pf.color }}>{pf.name}</div>
+                          <div style={{ fontSize: 9, color: "#6b7280" }}>{pf.desc}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: "var(--m)", fontSize: 24, fontWeight: 700, color: "#f8fafc", marginBottom: 4 }}>${fK(pf.totalValue)}</div>
+                      <div style={{ fontFamily: "var(--m)", fontSize: 14, color: pf.pnl >= 0 ? "#22c55e" : "#ef4444", marginBottom: 12 }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)} ({pc(pf.pnl / pf.startCash)})</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10, fontFamily: "var(--m)" }}>
+                        {[{ l: "CASH", v: `$${fK(pf.cash)}` }, { l: "POSITIONS", v: `$${fK(pf.hVal)}` }, { l: "TRADES", v: pf.tradeCount }, { l: "WIN %", v: `${wr}%` }].map((s, i) => (
+                          <div key={i} style={{ background: "#0a0e17", borderRadius: 4, padding: "6px 8px" }}>
+                            <div style={{ color: "#6b7280", fontSize: 8 }}>{s.l}</div>
+                            <div style={{ color: "#94a3b8" }}>{s.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {pf.holdings && Object.keys(pf.holdings).length > 0 && (
+                        <div style={{ marginTop: 8, display: "flex", gap: 3, flexWrap: "wrap" }}>
+                          {Object.entries(pf.holdings).slice(0, 8).map(([sym, h]) => (
+                            <span key={sym} style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: "rgba(255,255,255,0.04)", color: symColor(sym), fontFamily: "var(--m)", fontWeight: 600 }}>{sym}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Leaderboard */}
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", overflow: "hidden" }}>
+                <div style={{ padding: "10px 16px", fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.04)" }}>LEADERBOARD</div>
+                <div style={{ display: "grid", gridTemplateColumns: "30px 1fr 90px 90px 90px 70px 60px", padding: "6px 16px", fontSize: 9, color: "#4b5563", fontFamily: "var(--h)", fontWeight: 600 }}>
+                  <span>#</span><span>PORTFOLIO</span><span>VALUE</span><span>P&L</span><span>P&L %</span><span>TRADES</span><span>WIN %</span>
+                </div>
+                {[...pfStats].sort((a, b) => b.pnl - a.pnl).map((pf, i) => {
+                  const wr = pf.wins + pf.losses > 0 ? (pf.wins / (pf.wins + pf.losses) * 100).toFixed(0) : "--";
+                  return (
+                    <div key={pf.id} style={{ display: "grid", gridTemplateColumns: "30px 1fr 90px 90px 90px 70px 60px", padding: "8px 16px", fontSize: 11, fontFamily: "var(--m)", borderTop: "1px solid rgba(255,255,255,0.02)", background: i === 0 ? "rgba(245,158,11,0.03)" : "transparent" }}>
+                      <span style={{ color: i === 0 ? "#f59e0b" : "#6b7280", fontWeight: 700 }}>{i + 1}</span>
+                      <span style={{ color: pf.color, fontWeight: 600 }}>{pf.icon} {pf.name}</span>
+                      <span style={{ color: "#f8fafc" }}>${fK(pf.totalValue)}</span>
+                      <span style={{ color: pf.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)}</span>
+                      <span style={{ color: pf.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{pc(pf.pnl / pf.startCash)}</span>
+                      <span style={{ color: "#94a3b8" }}>{pf.tradeCount}</span>
+                      <span style={{ color: wr !== "--" && parseInt(wr) >= 50 ? "#22c55e" : "#ef4444" }}>{wr}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* CHART */}
+          {tab === "chart" && (
+            <div style={{ padding: "16px 24px" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
+                <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 24, color: symColor(selected) }}>{selected}/{COINS_META[selected]?.type === "crypto" ? "USDT" : "USD"}</span>
+                {/* Timeframe selector */}
+                <div style={{ display: "flex", gap: 2 }}>
+                  {TIMEFRAMES.map(t => (
+                    <button key={t.label} onClick={() => setTf(t.label)} style={{ padding: "2px 8px", borderRadius: 4, border: tf === t.label ? "1px solid #f59e0b" : "1px solid #1e293b", background: tf === t.label ? "rgba(245,158,11,0.15)" : "transparent", color: tf === t.label ? "#f59e0b" : "#6b7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>{t.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
+                <span style={{ fontFamily: "var(--m)", fontSize: 32, fontWeight: 600, color: "#f8fafc" }}>${fmt(sd.cur)}</span>
+                <span style={{ fontFamily: "var(--m)", fontSize: 16, color: ch >= 0 ? "#22c55e" : "#ef4444" }}>{ch >= 0 ? "▲" : "▼"} {fmt(Math.abs(ch))} ({pc(chP)})</span>
+              </div>
+
+              {chartCandles.length > 2 ? (
+                <ResponsiveContainer width="100%" height={340}>
+                  <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>
+                    <XAxis dataKey="t" tick={{ fontSize: 9, fill: "#4b5563" }} interval="preserveStartEnd" />
+                    <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: "#4b5563" }} tickFormatter={v => `$${fmt(v)}`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : "Open"]} />
+                    <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} name="c" />
+                    <Line type="monotone" dataKey="h" stroke="rgba(255,255,255,0.1)" strokeWidth={0.5} dot={false} isAnimationActive={false} name="h" />
+                    <Line type="monotone" dataKey="l" stroke="rgba(255,255,255,0.1)" strokeWidth={0.5} dot={false} isAnimationActive={false} name="l" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
+              )}
+
+              {chartCandles.length > 2 && (
+                <ResponsiveContainer width="100%" height={60}>
+                  <ComposedChart data={chartCandles} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="t" hide /><YAxis hide />
+                    <Bar dataKey="v" fill="rgba(99,102,241,0.3)" isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <IndBadge label="RSI(14)" value={sd.rsi?.toFixed(1)} color={sd.rsi < 30 ? "#22c55e" : sd.rsi > 70 ? "#ef4444" : "#f8fafc"} />
+                <IndBadge label="MACD" value={sd.macd?.hist?.toFixed(2)} color={sd.macd?.hist > 0 ? "#22c55e" : "#ef4444"} />
+                <IndBadge label="BB" value={`${fmt(sd.bb?.lower || 0)} — ${fmt(sd.bb?.upper || 0)}`} color="#a5b4fc" />
+                <IndBadge label="EMA9" value={`$${fmt(sd.ema9 || 0)}`} color="#22d3ee" />
+                <IndBadge label="EMA21" value={`$${fmt(sd.ema21 || 0)}`} color="#f59e0b" />
+                <IndBadge label="Stoch" value={sd.stoch?.k?.toFixed(0)} color={sd.stoch?.k < 20 ? "#22c55e" : sd.stoch?.k > 80 ? "#ef4444" : "#f8fafc"} />
+                <IndBadge label="ADX" value={sd.adx?.toFixed(0)} color={sd.adx > 25 ? "#f59e0b" : "#6b7280"} />
+              </div>
+            </div>
+          )}
+
+          {/* PORTFOLIOS */}
+          {tab === "portfolios" && (
+            <div style={{ padding: 20 }}>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Portfolio Details</div>
+              {pfStats.map(pf => (
+                <div key={pf.id} style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>{pf.icon}</span>
+                      <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: pf.color }}>{pf.name}</span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: "var(--m)", fontSize: 18, fontWeight: 600, color: "#f8fafc" }}>${fK(pf.totalValue)}</div>
+                      <div style={{ fontFamily: "var(--m)", fontSize: 12, color: pf.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)}</div>
+                    </div>
+                  </div>
+                  {!pf.holdings || Object.keys(pf.holdings).length === 0 ? (
+                    <div style={{ fontSize: 11, color: "#374151", textAlign: "center", padding: 8 }}>No positions yet</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 }}>
+                      {Object.entries(pf.holdings).filter(([,h]) => h && h.qty > 0).map(([sym, h]) => {
+                        const p = prices[sym]?.cur || 0;
+                        const v = h.qty * p;
+                        const pl = (p - h.avgCost) * h.qty;
+                        return (
+                          <div key={sym} style={{ background: "#0a0e17", borderRadius: 6, padding: "8px 10px", display: "flex", justifyContent: "space-between" }}>
+                            <div>
+                              <span style={{ fontFamily: "var(--m)", fontWeight: 600, fontSize: 12, color: symColor(sym) }}>{sym}</span>
+                              <span style={{ fontSize: 9, color: "#6b7280", marginLeft: 4 }}>{h.qty < 1 ? h.qty.toFixed(4) : h.qty.toFixed(2)}</span>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontFamily: "var(--m)", fontSize: 10, color: "#f8fafc" }}>${fmt(v)}</div>
+                              <div style={{ fontFamily: "var(--m)", fontSize: 9, color: pl >= 0 ? "#22c55e" : "#ef4444" }}>{pl >= 0 ? "+" : ""}${fmt(pl)}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* LOG */}
+          {tab === "log" && (
+            <div style={{ padding: 20 }}>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Trade Log</div>
+              {pfStats.map(pf => (
+                <div key={pf.id} style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 14 }}>{pf.icon}</span>
+                    <span style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 13, color: pf.color }}>{pf.name}</span>
+                    <span style={{ fontSize: 9, color: "#6b7280" }}>{pf.tradeCount} trades</span>
+                  </div>
+                  {!pf.orders || pf.orders.length === 0 ? (
+                    <div style={{ fontSize: 11, color: "#374151", padding: 8 }}>No trades yet</div>
+                  ) : (
+                    <div style={{ background: "#0f172a", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 200, overflowY: "auto" }}>
+                      {pf.orders.map((o, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderBottom: "1px solid rgba(255,255,255,0.02)", fontFamily: "var(--m)", fontSize: 9 }}>
+                          <span style={{ color: "#4b5563", minWidth: 60 }}>{o.time ? fmtTime(o.time) : "--"}</span>
+                          <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: o.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: o.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{o.side === "buy" ? "BUY" : "SELL"}</span>
+                          <span style={{ color: symColor(o.sym), fontWeight: 600, minWidth: 35 }}>{o.sym}</span>
+                          <span style={{ color: "#94a3b8" }}>{o.qty}x${fmt(o.price)}</span>
+                          <span style={{ color: "#4b5563", marginLeft: "auto" }}>{o.why || o.strat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+    </script>
+</body>
+</html>

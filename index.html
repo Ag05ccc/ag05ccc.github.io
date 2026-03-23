@@ -15,12 +15,7 @@
         .bt { transition: all .12s; cursor: pointer; }
         .bt:hover { transform: translateY(-1px); filter: brightness(1.15); }
         .bt:active { transform: translateY(0); }
-        .bg { transition: all .12s; cursor: pointer; }
         .bg:hover { background: rgba(255,255,255,0.06) !important; }
-        .sc { transition: border-color .2s; }
-        .sc:hover { border-color: rgba(99,102,241,0.4) !important; }
-        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-        select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; }
         #loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #f59e0b; font-family: 'Space Grotesk', sans-serif; font-size: 18px; }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -34,7 +29,7 @@
     <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
     <script>
       window.addEventListener('error', function(e) {
-        document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;font-family:monospace">' + e.message + '<br>' + (e.filename||'') + ':' + (e.lineno||'') + '</div>';
+        document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;font-family:monospace">' + e.message + '</div>';
       });
     </script>
     <script type="text/babel">

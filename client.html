@@ -273,8 +273,8 @@ function App() {
                       </div>
                       <div style={{ fontFamily: "var(--m)", fontSize: 24, fontWeight: 700, color: "#f8fafc", marginBottom: 4 }}>${fK(pf.totalValue)}</div>
                       <div style={{ fontFamily: "var(--m)", fontSize: 14, color: pf.pnl >= 0 ? "#22c55e" : "#ef4444", marginBottom: 12 }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)} ({pc(pf.pnl / pf.startCash)})</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10, fontFamily: "var(--m)" }}>
-                        {[{ l: "CASH", v: `$${fK(pf.cash)}` }, { l: "POSITIONS", v: `$${fK(pf.hVal)}` }, { l: "TRADES", v: pf.tradeCount }, { l: "WIN %", v: `${wr}%` }].map((s, i) => (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 10, fontFamily: "var(--m)" }}>
+                        {[{ l: "CASH", v: `$${fK(pf.cash)}` }, { l: "POSITIONS", v: `$${fK(pf.hVal)}` }, { l: "TRADES", v: pf.tradeCount }, { l: "WIN %", v: `${wr}%` }, { l: "COMMISSION", v: `$${fK(pf.totalCommission || 0)}` }, { l: "NET P&L", v: `$${fK(pf.pnl)}` }].map((s, i) => (
                           <div key={i} style={{ background: "#0a0e17", borderRadius: 4, padding: "6px 8px" }}>
                             <div style={{ color: "#6b7280", fontSize: 8 }}>{s.l}</div>
                             <div style={{ color: "#94a3b8" }}>{s.v}</div>

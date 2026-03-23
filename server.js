@@ -9,6 +9,8 @@ const TICK_MS = 2000;
 const CANDLE_TICKS = 4; // 4 ticks per candle = 8 seconds per candle in sim mode
 const PRICE_FETCH_INTERVAL = 30000; // Fetch real prices every 30 seconds
 const DEFAULT_CASH = 1000000;
+const COMMISSION_RATE = 0.001; // 0.1% commission per trade
+const STRATEGY_COOLDOWN_MS = 300000; // 5 minutes cooldown per strategy per asset
 
 // ─── ASSET DEFINITIONS ───
 const COINS = {
@@ -166,8 +168,8 @@ function evalStrategy(st, sd, pos, peakPrice) {
     case "tp_pct": if (pos && pos.qty > 0) { const pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl >= st.value) return `TP +${pl.toFixed(1)}%`; } break;
     case "sl_pct": if (pos && pos.qty > 0) { const pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl <= -st.value) return `SL ${pl.toFixed(1)}%`; } break;
     case "trailing": if (pos && pos.qty > 0 && peakPrice) { const dr = ((peakPrice - sd.cur) / peakPrice) * 100; if (dr >= st.value) return `Trail -${dr.toFixed(1)}%`; } break;
-    case "ema200_trend": if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC <= sd.ema200) return `Above EMA200`; } break;
-    case "ema200_break": if (pos && pos.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { const prevC = candles[candles.length - 2]?.c; if (prevC && prevC >= sd.ema200) return `Below EMA200`; } break;
+    case "ema200_trend": if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { const prevC = (candles[candles.length - 2] || {}).c; if (prevC && prevC <= sd.ema200) return `Above EMA200`; } break;
+    case "ema200_break": if (pos && pos.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { const prevC = (candles[candles.length - 2] || {}).c; if (prevC && prevC >= sd.ema200) return `Below EMA200`; } break;
   }
   return null;
 }
@@ -256,7 +258,7 @@ async function fetchRealPrices() {
     const cgIds = Object.entries(COINS).filter(([,c]) => c.cgId).map(([,c]) => c.cgId).join(',');
     const prices = await fetchJSON(`https://api.coingecko.com/api/v3/simple/price?ids=${cgIds}&vs_currencies=usd`);
     Object.entries(COINS).forEach(([sym, c]) => {
-      if (c.cgId && prices[c.cgId]?.usd) {
+      if (c.cgId && (prices[c.cgId] || {}).usd) {
         lastPrices[sym] = prices[c.cgId].usd;
       }
     });
@@ -269,7 +271,7 @@ async function fetchRealPrices() {
   for (const sym of Object.keys(COINS).filter(s => COINS[s].type === 'stock')) {
     try {
       const d = await fetchJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`);
-      const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      const price = d && d.chart && d.chart.result && d.chart.result[0] && d.chart.result[0].meta && d.chart.result[0].meta.regularMarketPrice;
       if (price) lastPrices[sym] = price;
     } catch(e) { /* ignore stock fetch errors */ }
   }
@@ -313,7 +315,7 @@ function priceTick() {
       sd.stoch = calcStoch(highs, lows, closes);
       sd.adx = calcADX(highs, lows, closes);
       sd.vwap = closes.length > 0 ? closes.reduce((a, b) => a + b, 0) / closes.length : np;
-      sd.prevMacdHist = sd.macd?.hist || 0;
+      sd.prevMacdHist = sd.macd && sd.macd.hist || 0;
 
       sd.building = { o: np, h: np, l: np, c: np, v: 0, tickCount: 0 };
 
@@ -324,7 +326,12 @@ function priceTick() {
 }
 
 // ─── STRATEGY ENGINE ───
+// Cooldown tracking: { "portfolioId_stratType_symbol": lastTradeTimestamp }
+const cooldowns = {};
+
 function runStrategies() {
+  const now = Date.now();
+
   portfolios.forEach(pf => {
     pf.actives.forEach(st => {
       if (!st.active) return;
@@ -334,25 +341,34 @@ function runStrategies() {
       const sT = STRATS.find(s => s.id === st.type);
       if (!sT) return;
 
+      // Check cooldown - skip if this strategy+symbol traded recently
+      const cooldownKey = pf.id + '_' + st.type + '_' + st.symbol;
+      if (cooldowns[cooldownKey] && (now - cooldowns[cooldownKey]) < STRATEGY_COOLDOWN_MS) return;
+
       const why = evalStrategy(st, sd, pos, pf.peaks[st.symbol]);
       if (!why) return;
 
       const price = sd.cur;
       const tq = st.qty;
       const total = price * tq;
+      const commission = total * COMMISSION_RATE; // 0.1% commission
 
       if (sT.side === "buy") {
-        if (total > pf.cash) return;
-        pf.cash -= total;
+        if (total + commission > pf.cash) return;
+        pf.cash -= total + commission;
+        pf.totalCommission = (pf.totalCommission || 0) + commission;
         const old = pf.holdings[st.symbol] || { qty: 0, avgCost: 0 };
         const nq = +(old.qty + tq).toFixed(6);
         pf.holdings[st.symbol] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price };
         pf.peaks[st.symbol] = price;
       } else {
-        const held = pos?.qty || 0;
+        const held = (pos && pos.qty) || 0;
         const sq = Math.min(tq, held);
         if (sq <= 0.000001) return;
-        pf.cash += price * sq;
+        const sellTotal = price * sq;
+        const sellCommission = sellTotal * COMMISSION_RATE;
+        pf.cash += sellTotal - sellCommission;
+        pf.totalCommission = (pf.totalCommission || 0) + sellCommission;
         if (pos && pos.avgCost) {
           if (price > pos.avgCost) pf.wins++; else pf.losses++;
         }
@@ -364,18 +380,21 @@ function runStrategies() {
         }
       }
 
+      // Set cooldown
+      cooldowns[cooldownKey] = now;
+
       pf.tradeCount++;
-      pf.orders = [{ sym: st.symbol, side: sT.side, qty: sT.side === "sell" ? Math.min(tq, pos?.qty || tq) : tq, price, time: new Date().toISOString(), strat: sT.label, why }, ...pf.orders].slice(0, 200);
+      pf.orders = [{ sym: st.symbol, side: sT.side, qty: sT.side === "sell" ? Math.min(tq, (pos && pos.qty) || tq) : tq, price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: sT.label, why }, ...pf.orders].slice(0, 200);
     });
 
     // Update peaks
     Object.keys(pf.holdings).forEach(sym => {
-      const c = marketData[sym]?.cur;
+      const c = (marketData[sym] || {}).cur;
       if (c && (!pf.peaks[sym] || c > pf.peaks[sym])) pf.peaks[sym] = c;
     });
 
     // Record history
-    const hVal = Object.entries(pf.holdings).reduce((s, [sym, h]) => s + (h?.qty || 0) * (marketData[sym]?.cur || 0), 0);
+    const hVal = Object.entries(pf.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * ((marketData[sym] || {}).cur || 0), 0);
     pf.history.push({ t: pf.history.length, value: pf.cash + hVal });
     if (pf.history.length > 1000) pf.history = pf.history.slice(-1000);
   });
@@ -396,13 +415,14 @@ function getState() {
   });
 
   const pfs = portfolios.map(pf => {
-    const hVal = Object.entries(pf.holdings).reduce((s, [sym, h]) => s + (h?.qty || 0) * (marketData[sym]?.cur || 0), 0);
+    const hVal = Object.entries(pf.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * ((marketData[sym] || {}).cur || 0), 0);
     return {
       id: pf.id, name: pf.name, color: pf.color, icon: pf.icon, desc: pf.desc,
       cash: pf.cash, startCash: pf.startCash, holdings: pf.holdings,
       orders: pf.orders.slice(0, 50),
       history: pf.history.slice(-300),
       tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
+      totalCommission: pf.totalCommission || 0,
       totalValue: pf.cash + hVal, hVal, pnl: pf.cash + hVal - pf.startCash,
     };
   });

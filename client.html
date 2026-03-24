@@ -223,7 +223,11 @@ function App() {
           {[{ label: "CRYPTO", filter: "crypto" }, { label: "COMMODITIES", filter: "commodity" }, { label: "STOCKS", filter: "stock" }].map(section => (
             <div key={section.filter}>
               <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>{section.label}</div>
-              {Object.entries(COINS_META).filter(([, c]) => c.type === section.filter).map(([sym, c]) => {
+              {Object.entries(COINS_META).filter(([, c]) => c.type === section.filter).sort(([symA], [symB]) => {
+                const tradesA = pfStats.reduce((s, pf) => s + (pf.orders || []).filter(o => o.sym === symA).length, 0);
+                const tradesB = pfStats.reduce((s, pf) => s + (pf.orders || []).filter(o => o.sym === symB).length, 0);
+                return tradesB - tradesA;
+              }).map(([sym, c]) => {
                 const p = prices[sym]?.cur || 0;
                 const open = prices[sym]?.candles?.[0]?.o || p;
                 const d = p - open; const dp = open > 0 ? d / open : 0;

@@ -12,10 +12,10 @@ const DEFAULT_CASH = 1000000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 // Cooldown per profile (ms) - conservative waits long, YOLO trades fast
 const COOLDOWNS = {
-  conservative: 600000,  // 10 minutes
-  moderate: 300000,      // 5 minutes
+  conservative: 300000,  // 5 minutes
+  moderate: 180000,      // 3 minutes
   aggressive: 120000,    // 2 minutes
-  yolo: 180000,          // 3 minutes (was 30s, too fast = commission drain)
+  yolo: 120000,          // 2 minutes
 };
 const STATE_FILE = path.resolve(__dirname, 'state.json');
 const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
@@ -250,39 +250,39 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 // Risk signals (TP/SL/Trailing) always execute immediately (bypass scoring)
 var PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "BTC+ETH, needs 4+ signals to agree",
-    assets: ["BTC", "ETH"], cashPct: 0.10, buyThreshold: 4, sellThreshold: 2,
+    desc: "BTC+ETH, high conviction, fast rotation",
+    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 4, sellThreshold: 2,
     overrides: {
       rsi_ob: 22, rsi_os: 78, stoch_ob: 12, stoch_os: 88,
-      tp_pct: 1.5, sl_pct: 0.6, trailing: 0.5, // R:R ~2:1 after 0.2% commission
+      tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4, // Quick TP to rotate capital
       bb_lower: 0.02, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 2.5,
       breakout_high: 20, breakdown: 20, dip_rsi_macd: 30, dip_rsi_macd_s: 70,
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "BTC+ETH, needs 3+ signals",
-    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
+    desc: "BTC+ETH, balanced rotation",
+    assets: ["BTC", "ETH"], cashPct: 0.40, buyThreshold: 3, sellThreshold: 1.5,
     overrides: {
       rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80,
-      tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8,
+      tp_pct: 1.2, sl_pct: 0.8, trailing: 0.6,
       bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.8, vol_spike_s: 1.8,
       breakout_high: 12, breakdown: 12, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "4 coins, needs 2+ signals",
-    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.40, buyThreshold: 2, sellThreshold: 1,
+    desc: "4 coins, fast rotation",
+    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.50, buyThreshold: 2, sellThreshold: 1,
     overrides: {
       rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
-      tp_pct: 4.0, sl_pct: 3.0, trailing: 2.0,
+      tp_pct: 2.0, sl_pct: 1.5, trailing: 1.0,
       bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.1, vol_spike_s: 1.1,
       breakout_high: 5, breakdown: 5, dip_rsi_macd: 46, dip_rsi_macd_s: 54,
       ema50_bounce: 0.8, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 18,
     } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "6 coins, needs 1+ signal",
-    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.50, buyThreshold: 1, sellThreshold: 1,
+    desc: "6 coins, max capital deployment",
+    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.60, buyThreshold: 1, sellThreshold: 1,
     overrides: {
       rsi_ob: 48, rsi_os: 52, stoch_ob: 45, stoch_os: 55,
-      tp_pct: 8.0, sl_pct: 6.0, trailing: 4.0,
+      tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5,
       bb_lower: 0.5, bb_upper: 0.5, vol_spike_b: 0.8, vol_spike_s: 0.8,
       breakout_high: 3, breakdown: 3, dip_rsi_macd: 49, dip_rsi_macd_s: 51,
       ema50_bounce: 1.5, vwap_buy: 0.05, vwap_sell: 0.05, adx_trend_b: 12,
@@ -705,7 +705,7 @@ function runStrategies() {
         return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
       }, 0);
       var exposurePct = totalValue > 0 ? holdingValue / totalValue : 0;
-      var maxExposure = { conservative: 0.50, moderate: 0.65, aggressive: 0.80, yolo: 0.90 }[pf.id] || 0.70;
+      var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[pf.id] || 0.80;
       var exposureLimited = exposurePct >= maxExposure;
 
       // Regime-based weight multipliers

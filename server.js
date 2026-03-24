@@ -43,6 +43,13 @@ const COINS = {
   OP: { name: "Optimism", cgId: "optimism", type: "crypto" },
   SUI: { name: "Sui", cgId: "sui", type: "crypto" },
   FIL: { name: "Filecoin", cgId: "filecoin", type: "crypto" },
+  // Commodities - simulated from initial prices
+  GOLD: { name: "Gold", type: "commodity", price: 3020.00 },
+  SILVER: { name: "Silver", type: "commodity", price: 33.50 },
+  PLAT: { name: "Platinum", type: "commodity", price: 1020.00 },
+  COPPER: { name: "Copper", type: "commodity", price: 4.85 },
+  OIL: { name: "Crude Oil", type: "commodity", price: 78.50 },
+  NATGAS: { name: "Natural Gas", type: "commodity", price: 3.45 },
   // Stocks (20) - simulated from initial prices
   AAPL: { name: "Apple", type: "stock", price: 178.50 },
   MSFT: { name: "Microsoft", type: "stock", price: 420.50 },

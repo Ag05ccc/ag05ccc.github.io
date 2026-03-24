@@ -557,15 +557,22 @@ function runStrategies() {
 
       const price = sd.cur;
       if (price <= 0) return;
-      // Dynamic position sizing: cashPct of available cash
-      const tradeValue = pf.cash * (st.cashPct || 0.05);
+
+      // Protect against going to $0: keep minimum 2% cash reserve
+      const minCashReserve = pf.startCash * 0.02;
+
+      // Dynamic position sizing: cashPct of available cash (above reserve)
+      const availableCash = Math.max(0, pf.cash - minCashReserve);
+      if (sT.side === "buy" && availableCash < 100) return; // Skip buy if near broke
+
+      const tradeValue = availableCash * (st.cashPct || 0.05);
       const tq = +(tradeValue / price).toFixed(6);
       if (tq <= 0) return;
       const total = price * tq;
       const commission = total * COMMISSION_RATE; // 0.1% commission
 
       if (sT.side === "buy") {
-        if (total + commission > pf.cash) return;
+        if (total + commission > availableCash) return;
         pf.cash -= total + commission;
         pf.totalCommission = (pf.totalCommission || 0) + commission;
         const old = pf.holdings[st.symbol] || { qty: 0, avgCost: 0 };

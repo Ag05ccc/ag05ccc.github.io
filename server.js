@@ -17,8 +17,8 @@ const COOLDOWNS = {
   aggressive: 120000,    // 2 minutes
   yolo: 30000,           // 30 seconds
 };
-const STATE_FILE = path.join(__dirname, 'state.json');
-const STATE_SAVE_INTERVAL = 30000; // Save state every 30 seconds
+const STATE_FILE = path.resolve(__dirname, 'state.json');
+const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
 
 // ─── ASSET DEFINITIONS ───
 const COINS = {
@@ -291,23 +291,31 @@ portfolios = PROFILES.map(p => ({
 // ─── STATE PERSISTENCE ───
 function saveState() {
   try {
-    const state = {
-      portfolios: portfolios.map(pf => ({
-        id: pf.id, cash: pf.cash, startCash: pf.startCash,
-        holdings: pf.holdings, orders: pf.orders.slice(0, 100),
-        peaks: pf.peaks, history: pf.history.slice(-500),
-        tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
-        totalCommission: pf.totalCommission || 0,
-      })),
-      marketData: Object.fromEntries(Object.entries(marketData).map(([sym, sd]) => [sym, {
+    var savedMarket = {};
+    Object.keys(marketData).forEach(function(sym) {
+      var sd = marketData[sym];
+      savedMarket[sym] = {
         candles: sd.candles.slice(-200), cur: sd.cur,
         rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
         ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
         stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
-      }])),
+      };
+    });
+    var state = {
+      portfolios: portfolios.map(function(pf) {
+        return {
+          id: pf.id, cash: pf.cash, startCash: pf.startCash,
+          holdings: pf.holdings, orders: pf.orders.slice(0, 100),
+          peaks: pf.peaks, history: pf.history.slice(-500),
+          tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
+          totalCommission: pf.totalCommission || 0,
+        };
+      }),
+      marketData: savedMarket,
       savedAt: new Date().toISOString(),
     };
     fs.writeFileSync(STATE_FILE, JSON.stringify(state));
+    console.log('[' + new Date().toLocaleTimeString() + '] State saved (' + Object.keys(savedMarket).length + ' assets, ' + portfolios.length + ' portfolios)');
   } catch (e) {
     console.log('Failed to save state:', e.message);
   }

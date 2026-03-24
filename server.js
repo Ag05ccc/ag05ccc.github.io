@@ -15,7 +15,7 @@ const COOLDOWNS = {
   conservative: 600000,  // 10 minutes
   moderate: 300000,      // 5 minutes
   aggressive: 120000,    // 2 minutes
-  yolo: 30000,           // 30 seconds
+  yolo: 180000,          // 3 minutes (was 30s, too fast = commission drain)
 };
 const STATE_FILE = path.resolve(__dirname, 'state.json');
 const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
@@ -247,7 +247,7 @@ var PROFILES = [
     assets: ["BTC", "ETH"], cashPct: 0.10, buyThreshold: 4, sellThreshold: 3,
     overrides: {
       rsi_ob: 22, rsi_os: 78, stoch_ob: 12, stoch_os: 88,
-      tp_pct: 0.8, sl_pct: 0.4, trailing: 0.3,
+      tp_pct: 1.5, sl_pct: 0.6, trailing: 0.5, // R:R ~2:1 after 0.2% commission
       bb_lower: 0.02, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 2.5,
       breakout_high: 20, breakdown: 20, dip_rsi_macd: 30, dip_rsi_macd_s: 70,
     } },
@@ -565,13 +565,55 @@ function priceTick() {
 }
 
 // ─── SCORING-BASED STRATEGY ENGINE ───
-// Cooldown tracking per symbol per portfolio (not per signal)
 var tradeCooldowns = {};
-// Store last scores for UI display
 var lastScores = {};
+
+// Daily tracking: { "portfolioId": { date: "2026-03-24", trades: 0, loss: 0 } }
+var dailyStats = {};
+var DAILY_MAX_TRADES = { conservative: 10, moderate: 20, aggressive: 50, yolo: 100 };
+var DAILY_MAX_LOSS_PCT = 0.05; // 5% max daily loss
+var CIRCUIT_BREAKER_PCT = 0.20; // Stop at 20% total drawdown
+var CATEGORY_CAP = 3.0; // Max score contribution per category
+
+// ─── MULTI-TIMEFRAME: build 15min candles from 1min ───
+function get15mTrend(sd) {
+  if (!sd || sd.candles.length < 30) return 0; // 0 = neutral
+  // Group last 60 candles into 15-candle (15min) bars
+  var candles15 = [];
+  var src = sd.candles.slice(-60);
+  for (var i = 0; i < src.length; i += 15) {
+    var slice = src.slice(i, i + 15);
+    if (slice.length < 5) continue;
+    candles15.push({
+      o: slice[0].o,
+      h: Math.max.apply(null, slice.map(function(c){return c.h;})),
+      l: Math.min.apply(null, slice.map(function(c){return c.l;})),
+      c: slice[slice.length - 1].c,
+    });
+  }
+  if (candles15.length < 2) return 0;
+  var closes15 = candles15.map(function(c){return c.c;});
+  var e9 = ema(closes15, Math.min(9, closes15.length));
+  var e21 = ema(closes15, Math.min(21, closes15.length));
+  if (!e9 || !e21) return 0;
+  if (e9 > e21) return 1;  // 15min uptrend
+  if (e9 < e21) return -1; // 15min downtrend
+  return 0;
+}
+
+// ─── BLACK SWAN FILTER ───
+function isBlackSwan(sd) {
+  if (!sd || sd.candles.length < 5) return false;
+  var recent = sd.candles.slice(-5);
+  var firstOpen = recent[0].o;
+  var lastClose = recent[recent.length - 1].c;
+  var dropPct = ((firstOpen - lastClose) / firstOpen) * 100;
+  return dropPct >= 3; // 3%+ drop in 5 candles
+}
 
 function runStrategies() {
   var now = Date.now();
+  var today = new Date().toISOString().slice(0, 10);
 
   portfolios.forEach(function(pf) {
     var profile = PROFILES.find(function(p) { return p.id === pf.id; });
@@ -580,6 +622,27 @@ function runStrategies() {
     var sellThreshold = profile.sellThreshold || 2;
     var cashPct = profile.cashPct || 0.10;
 
+    // ─── CIRCUIT BREAKER: stop trading if drawdown > 20% ───
+    var hVal = Object.entries(pf.holdings).reduce(function(s, entry) {
+      return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
+    }, 0);
+    var totalValue = pf.cash + hVal;
+    var drawdownPct = (pf.startCash - totalValue) / pf.startCash;
+    if (drawdownPct >= CIRCUIT_BREAKER_PCT) {
+      if (!lastScores[pf.id]) lastScores[pf.id] = {};
+      lastScores[pf.id]._circuitBreaker = true;
+      return; // Stop all trading for this portfolio
+    }
+
+    // ─── DAILY LIMITS ───
+    if (!dailyStats[pf.id] || dailyStats[pf.id].date !== today) {
+      dailyStats[pf.id] = { date: today, trades: 0, loss: 0 };
+    }
+    var ds = dailyStats[pf.id];
+    var maxDailyTrades = DAILY_MAX_TRADES[pf.id] || 50;
+    if (ds.trades >= maxDailyTrades) return;
+    if (ds.loss >= pf.startCash * DAILY_MAX_LOSS_PCT) return; // 5% daily loss limit
+
     // For each asset this profile trades
     profile.assets.forEach(function(sym) {
       var sd = marketData[sym];
@@ -587,13 +650,19 @@ function runStrategies() {
       var pos = pf.holdings[sym];
       var peakPrice = pf.peaks[sym];
 
-      // Check cooldown per symbol (not per signal)
+      // Check cooldown per symbol
       var coolKey = pf.id + '_' + sym;
       var cooldownMs = COOLDOWNS[pf.id] || 300000;
       if (tradeCooldowns[coolKey] && (now - tradeCooldowns[coolKey]) < cooldownMs) return;
 
-      // Detect market regime for this asset
+      // Detect market regime
       var regime = detectRegime(sd);
+
+      // Multi-timeframe: 15min trend direction
+      var trend15m = get15mTrend(sd);
+
+      // Black swan check
+      var blackSwan = isBlackSwan(sd);
 
       // Regime-based weight multipliers
       var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
@@ -604,17 +673,19 @@ function runStrategies() {
         'pattern': 1.0, 'combo': 1.2, 'risk': 0,
       };
 
-      // Score all signals
+      // Score all signals with CATEGORY CAP
       var buyScore = 0, sellScore = 0;
       var buyReasons = [], sellReasons = [];
       var riskSellTriggered = null;
+      var buyCatScores = {}; // { "mean-reversion": 2.5, "trend": 1.5 }
+      var sellCatScores = {};
 
       SIGNALS.forEach(function(sig) {
         var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
         var result = evalSignal(sig.id, val, sd, pos, peakPrice);
         if (!result) return;
 
-        // Risk management signals (TP/SL/Trailing) bypass scoring — execute immediately
+        // Risk signals bypass scoring
         if (sig.category === 'risk') {
           if (pos && pos.qty > 0) riskSellTriggered = result;
           return;
@@ -624,21 +695,45 @@ function runStrategies() {
         var weightedScore = sig.weight * regimeMult;
 
         if (sig.side === 'buy') {
-          buyScore += weightedScore;
+          // Apply category cap
+          var catKey = sig.category;
+          buyCatScores[catKey] = (buyCatScores[catKey] || 0) + weightedScore;
+          if (buyCatScores[catKey] <= CATEGORY_CAP) {
+            buyScore += weightedScore;
+          }
           buyReasons.push(result);
         } else {
-          sellScore += weightedScore;
+          var catKey2 = sig.category;
+          sellCatScores[catKey2] = (sellCatScores[catKey2] || 0) + weightedScore;
+          if (sellCatScores[catKey2] <= CATEGORY_CAP) {
+            sellScore += weightedScore;
+          }
           sellReasons.push(result);
         }
       });
+
+      // ─── MULTI-TIMEFRAME GATE ───
+      // If 15min trend is down, block buy signals (reduce score to 0)
+      // If 15min trend is up, block sell signals (except risk)
+      if (trend15m === -1) buyScore = buyScore * 0.3; // Heavily penalize buys in downtrend
+      if (trend15m === 1) sellScore = sellScore * 0.3;  // Heavily penalize sells in uptrend
+
+      // ─── BLACK SWAN FILTER ───
+      // Block all buys during crash
+      if (blackSwan) {
+        buyScore = 0;
+        buyReasons.push('BLACK SWAN BLOCKED');
+      }
 
       // Store scores for UI
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
       lastScores[pf.id][sym] = {
         buy: +buyScore.toFixed(1), sell: +sellScore.toFixed(1),
         regime: regime.type, volatility: +regime.volatility.toFixed(2),
+        trend15m: trend15m, blackSwan: blackSwan,
         buyReasons: buyReasons, sellReasons: sellReasons,
       };
+      lastScores[pf.id]._circuitBreaker = false;
 
       // Reduce position size in high volatility
       var volAdjust = regime.volatility > 3 ? 0.5 : (regime.volatility > 2 ? 0.75 : 1.0);
@@ -650,17 +745,18 @@ function runStrategies() {
 
       // --- RISK SELL (TP/SL/Trailing) — always execute immediately ---
       if (riskSellTriggered && pos && pos.qty > 0) {
-        var riskQty = pos.qty; // Sell entire position on risk trigger
+        var riskQty = pos.qty;
         var riskTotal = price * riskQty;
         var riskComm = riskTotal * COMMISSION_RATE;
         pf.cash += riskTotal - riskComm;
         pf.totalCommission = (pf.totalCommission || 0) + riskComm;
-        if (price > pos.avgCost) pf.wins++; else pf.losses++;
+        var riskPnl = (price - pos.avgCost) * riskQty;
+        if (riskPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(riskPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
-        pf.tradeCount++;
-        pf.orders = [{ sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price, commission: riskComm.toFixed(2), time: new Date().toISOString(), strat: 'Risk Mgmt', why: riskSellTriggered, score: -sellScore.toFixed(1), regime: regime.type }].concat(pf.orders).slice(0, 200);
-        return; // Don't process further signals for this symbol
+        pf.tradeCount++; ds.trades++;
+        pf.orders = [{ sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price, commission: riskComm.toFixed(2), time: new Date().toISOString(), strat: 'Risk Mgmt', why: riskSellTriggered, score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
+        return;
       }
 
       // --- SCORING-BASED BUY ---
@@ -680,22 +776,23 @@ function runStrategies() {
         pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price };
         pf.peaks[sym] = price;
         tradeCooldowns[coolKey] = now;
-        pf.tradeCount++;
-        pf.orders = [{ sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: buyReasons.length + ' signals', why: buyReasons.join(', '), score: '+' + buyScore.toFixed(1), regime: regime.type }].concat(pf.orders).slice(0, 200);
+        pf.tradeCount++; ds.trades++;
+        pf.orders = [{ sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: buyReasons.length + ' signals', why: buyReasons.join(', '), score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
       }
 
       // --- SCORING-BASED SELL ---
       else if (sellScore >= sellThreshold && sellScore > buyScore && pos && pos.qty > 0) {
-        var sq = pos.qty; // Sell full position when consensus says sell
+        var sq = pos.qty;
         var sellTotal = price * sq;
         var sellComm = sellTotal * COMMISSION_RATE;
         pf.cash += sellTotal - sellComm;
         pf.totalCommission = (pf.totalCommission || 0) + sellComm;
-        if (price > pos.avgCost) pf.wins++; else pf.losses++;
+        var sellPnl = (price - pos.avgCost) * sq;
+        if (sellPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(sellPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
-        pf.tradeCount++;
-        pf.orders = [{ sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price, commission: sellComm.toFixed(2), time: new Date().toISOString(), strat: sellReasons.length + ' signals', why: sellReasons.join(', '), score: '-' + sellScore.toFixed(1), regime: regime.type }].concat(pf.orders).slice(0, 200);
+        pf.tradeCount++; ds.trades++;
+        pf.orders = [{ sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price, commission: sellComm.toFixed(2), time: new Date().toISOString(), strat: sellReasons.length + ' signals', why: sellReasons.join(', '), score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
       }
     });
 

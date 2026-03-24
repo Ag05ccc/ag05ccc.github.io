@@ -108,6 +108,7 @@ function App() {
   const [tab, setTab] = useState("compare");
   const [tf, setTf] = useState("5m");
   const [chartType, setChartType] = useState("candle");
+  const [editProfile, setEditProfile] = useState(null);
   const wsRef = useRef(null);
 
   // WebSocket connection
@@ -136,6 +137,13 @@ function App() {
     connect();
     return () => { if (wsRef.current) wsRef.current.close(); };
   }, []);
+
+  const sendWs = useCallback(function(msg) {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+  const resetPf = useCallback(function(id) { sendWs({ type: 'reset', id: id }); }, [sendWs]);
 
   if (!state || !state.prices) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#f59e0b", fontFamily: "'Space Grotesk',sans-serif", fontSize: 18 }}>
@@ -193,7 +201,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117" }}>
-        {[["compare", "Compare"], ["chart", "Chart & TA"], ["portfolios", "Portfolios"], ["log", "Trade Log"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart & TA"], ["portfolios", "Portfolios"], ["log", "Trade Log"], ["settings", "Settings"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: "9px 20px", fontSize: 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)" }}>{l}</button>
         ))}
       </div>
@@ -294,11 +302,13 @@ function App() {
                       </div>
                       {pf.holdings && Object.keys(pf.holdings).length > 0 && (
                         <div style={{ marginTop: 8, display: "flex", gap: 3, flexWrap: "wrap" }}>
-                          {Object.entries(pf.holdings).slice(0, 8).map(([sym, h]) => (
-                            <span key={sym} style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: "rgba(255,255,255,0.04)", color: symColor(sym), fontFamily: "var(--m)", fontWeight: 600 }}>{sym}</span>
-                          ))}
+                          {Object.entries(pf.holdings).slice(0, 8).map(([sym, h]) => {
+                            const sc = (state.scores && state.scores[pf.id] && state.scores[pf.id][sym]) || {};
+                            return <span key={sym} style={{ fontSize: 8, padding: "1px 5px", borderRadius: 3, background: "rgba(255,255,255,0.04)", color: symColor(sym), fontFamily: "var(--m)", fontWeight: 600 }}>{sym} {sc.regime ? `[${sc.regime}]` : ''}</span>;
+                          })}
                         </div>
                       )}
+                      <button onClick={() => { if (confirm('Reset ' + pf.name + '?')) resetPf(pf.id); }} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", cursor: "pointer" }}>RESET</button>
                     </div>
                   );
                 })}
@@ -503,13 +513,107 @@ function App() {
                           <span style={{ color: "#e2e8f0", fontWeight: 600 }}>${fK((o.price || 0) * (o.qty || 0))}</span>
                           <span style={{ color: "#6366f1", fontWeight: 600 }}>{o.strat}</span>
                           {o.why && <span style={{ color: "#a78bfa", fontWeight: 600 }}>| {o.why}</span>}
-                          <span style={{ color: "#4b5563", fontSize: 9 }}>{(o.qty || 0).toFixed(4)}x${fmt(o.price || 0)}</span>
+                          {o.score && <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontFamily: "var(--m)" }}>score:{o.score}</span>}
+                          {o.regime && <span style={{ fontSize: 8, color: "#4b5563" }}>[{o.regime}]</span>}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* SETTINGS */}
+          {tab === "settings" && (
+            <div style={{ padding: 20 }}>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>Strategy Settings</div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>Scoring system: signals vote buy (+weight) or sell (-weight). Trade executes when score meets threshold. Risk signals (TP/SL/Trailing) always execute immediately.</div>
+
+              {/* Signal scores live view */}
+              {state.scores && (
+                <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>LIVE SIGNAL SCORES</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+                    {pfStats.map(pf => (
+                      <div key={pf.id} style={{ background: "#0a0e17", borderRadius: 6, padding: 10 }}>
+                        <div style={{ color: pf.color, fontWeight: 700, fontSize: 12, fontFamily: "var(--h)", marginBottom: 6 }}>{pf.icon} {pf.name}</div>
+                        {state.scores[pf.id] && Object.entries(state.scores[pf.id]).map(([sym, sc]) => (
+                          <div key={sym} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 10, fontFamily: "var(--m)", marginBottom: 3 }}>
+                            <span style={{ color: symColor(sym), fontWeight: 600, minWidth: 35 }}>{sym}</span>
+                            <span style={{ color: "#22c55e" }}>B:{sc.buy}</span>
+                            <span style={{ color: "#ef4444" }}>S:{sc.sell}</span>
+                            <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: sc.regime === 'trending' ? "rgba(245,158,11,0.15)" : sc.regime === 'ranging' ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.05)", color: sc.regime === 'trending' ? "#f59e0b" : sc.regime === 'ranging' ? "#a5b4fc" : "#6b7280" }}>{sc.regime}</span>
+                            <span style={{ fontSize: 8, color: "#4b5563" }}>vol:{sc.volatility}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Profile configs */}
+              {(state.profiles || []).map(prof => {
+                const pf = pfStats.find(p => p.id === prof.id);
+                const isEditing = editProfile === prof.id;
+                return (
+                  <div key={prof.id} style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 16 }}>{pf?.icon}</span>
+                        <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 14, color: pf?.color }}>{pf?.name}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setEditProfile(isEditing ? null : prof.id)} style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid #1e293b", background: isEditing ? "rgba(245,158,11,0.15)" : "transparent", color: isEditing ? "#f59e0b" : "#6b7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>{isEditing ? "CLOSE" : "EDIT"}</button>
+                        <button onClick={() => { if (confirm('Reset ' + (pf?.name || prof.id) + '?')) resetPf(prof.id); }} style={{ padding: "4px 12px", borderRadius: 4, border: "1px solid #ef4444", background: "transparent", color: "#ef4444", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>RESET</button>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(34,197,94,0.1)", color: "#22c55e", fontFamily: "var(--m)" }}>Buy Threshold: {prof.buyThreshold}</span>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(239,68,68,0.1)", color: "#ef4444", fontFamily: "var(--m)" }}>Sell Threshold: {prof.sellThreshold}</span>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(99,102,241,0.1)", color: "#a5b4fc", fontFamily: "var(--m)" }}>Position: {(prof.cashPct * 100).toFixed(0)}%</span>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.05)", color: "#6b7280", fontFamily: "var(--m)" }}>Assets: {prof.assets.join(', ')}</span>
+                    </div>
+
+                    {/* Editable params */}
+                    {isEditing && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+                          {[["buyThreshold", "Buy Threshold", prof.buyThreshold], ["sellThreshold", "Sell Threshold", prof.sellThreshold], ["cashPct", "Position %", prof.cashPct]].map(([key, label, val]) => (
+                            <div key={key} style={{ background: "#0a0e17", borderRadius: 4, padding: 6 }}>
+                              <div style={{ fontSize: 8, color: "#6b7280", marginBottom: 3 }}>{label}</div>
+                              <input type="number" step={key === "cashPct" ? "0.05" : "0.5"} defaultValue={val} style={{ width: "100%", padding: "3px 6px", borderRadius: 3, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 11, fontFamily: "var(--m)", outline: "none" }}
+                                onBlur={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  if (!isNaN(v)) { const msg = { type: 'updateConfig', id: prof.id, overrides: {} }; msg[key] = v; sendWs(msg); }
+                                }} />
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 6 }}>SIGNAL THRESHOLDS</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 4 }}>
+                          {Object.entries(prof.overrides || {}).map(([key, val]) => {
+                            const sig = (state.signals || []).find(s => s.id === key);
+                            return (
+                              <div key={key} style={{ display: "flex", alignItems: "center", gap: 4, background: "#0a0e17", borderRadius: 4, padding: "4px 6px" }}>
+                                <span style={{ fontSize: 8, color: sig?.side === "buy" ? "#22c55e" : "#ef4444", flex: 1, fontFamily: "var(--m)" }}>{sig?.label || key}</span>
+                                <input type="number" step="0.1" defaultValue={val} style={{ width: 50, padding: "2px 4px", borderRadius: 3, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 10, fontFamily: "var(--m)", outline: "none", textAlign: "right" }}
+                                  onBlur={(e) => {
+                                    const v = parseFloat(e.target.value);
+                                    if (!isNaN(v)) { const overrides = {}; overrides[key] = v; sendWs({ type: 'updateConfig', id: prof.id, overrides: overrides }); }
+                                  }} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

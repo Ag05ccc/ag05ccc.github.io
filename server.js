@@ -333,7 +333,7 @@ function loadState() {
 // ─── FETCH REAL PRICES ───
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'CryptoTA/1.0' } }, res => {
+    https.get(url, { headers: { 'User-Agent': 'TradeSimBot/1.0' } }, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -649,7 +649,7 @@ async function start() {
   const restored = loadState();
 
   server.listen(PORT, () => {
-    console.log('\n  CryptoTA Server running at http://localhost:' + PORT);
+    console.log('\n  TradeSimBot Server running at http://localhost:' + PORT);
     console.log('  ' + Object.keys(COINS).map(function(s) { return s + ': $' + (lastPrices[s] || 'N/A'); }).join(' | '));
     console.log('  4 portfolios | ' + Object.keys(COINS).length + ' coins | 1min candles | 0.1% commission');
     if (restored) console.log('  State restored from disk');

@@ -485,7 +485,7 @@ function App() {
       <div style={{ padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,14,23,0.95)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px rgba(34,197,94,0.5)", animation: "pulse 2s infinite" }} />
-          <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>CRYPTO<span style={{ color: "#f59e0b" }}>TA</span></span>
+          <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>TRADE<span style={{ color: "#f59e0b" }}>SIMBOT</span></span>
           <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>6 CRYPTO | 1M CANDLES</span>
         </div>
         <div style={{ display: "flex", gap: 12, fontFamily: "var(--m)", fontSize: 11 }}>

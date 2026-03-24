@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "================================"
-echo "  CryptoTA Trading Simulator"
+echo "  TradeSimBot Trading Simulator"
 echo "================================"
 echo ""
 

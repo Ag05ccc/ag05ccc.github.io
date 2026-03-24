@@ -171,7 +171,8 @@ function App() {
   const tfObj = TIMEFRAMES.find(t => t.label === tf) || TIMEFRAMES[1];
   const grouped = groupCandles(sd.candles || [], tfObj.factor);
   const chartCandles = grouped.slice(-60).map((c, i) => ({
-    t: c.t ? new Date(c.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : i,
+    t: c.t ? new Date(c.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${i}`,
+    rawT: c.t || 0,
     o: c.o, h: c.h, l: c.l, c: c.c, v: c.v,
   }));
 
@@ -425,7 +426,7 @@ function App() {
                     const bw = Math.max(Math.min(pw / n * 0.6, 12), 3);
                     const xS = i => ml + (i + 0.5) * (pw / n);
                     const bbU = sd.bb?.upper || 0, bbL = sd.bb?.lower || 0;
-                    const fmtT = t => { try { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(e) { return ''; } };
+                    // c.t is already formatted "HH:MM" string from chartCandles
 
                     let s = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
                     // Background
@@ -440,7 +441,7 @@ function App() {
                     const step = Math.max(1, Math.floor(n / 7));
                     for (let i = 0; i < n; i += step) {
                       const c = chartCandles[i], x = xS(i);
-                      const t = c.t ? fmtT(c.t) : '';
+                      const t = c.t || '';
                       if (!t) continue;
                       s += `<line x1="${x}" y1="${mt + ph}" x2="${x}" y2="${mt + ph + 5}" stroke="#334155" stroke-width="0.5"/>`;
                       s += `<text x="${x}" y="${mt + ph + 18}" fill="#64748b" font-size="9" font-family="'JetBrains Mono',monospace" text-anchor="middle">${t}</text>`;

@@ -193,10 +193,9 @@ function detectRegime(sd) {
   var stddev = Math.sqrt(closes.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / closes.length);
   var volPct = mean > 0 ? (stddev / mean) * 100 : 0;
 
-  var type = 'unknown';
+  var type = 'mixed';
   if (adx >= 25) type = 'trending';
   else if (adx <= 18) type = 'ranging';
-  else type = 'mixed';
 
   return { type: type, adx: adx, volatility: volPct };
 }

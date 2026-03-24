@@ -8,7 +8,7 @@ const PORT = 3000;
 const TICK_MS = 2000;
 const CANDLE_TICKS = 30; // 30 ticks x 2s = 60 seconds = 1 minute candles
 const PRICE_FETCH_INTERVAL = 30000;
-const DEFAULT_CASH = 1000000;
+const DEFAULT_CASH = 100000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 // Cooldown per profile (ms) - conservative waits long, YOLO trades fast
 const COOLDOWNS = {

@@ -826,7 +826,8 @@ function runStrategies() {
       // --- SCORING-BASED BUY ---
       if (buyScore >= buyThreshold && buyScore > sellScore) {
         if (availableCash < 100) return;
-        var tradeValue = availableCash * cashPct * volAdjust;
+        // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
+        var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);
         var tq = +(tradeValue / price).toFixed(6);
         if (tq <= 0) return;
         var total = price * tq;

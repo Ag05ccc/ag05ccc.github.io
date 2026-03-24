@@ -801,7 +801,18 @@ function runStrategies() {
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
-        pf.orders = [{ sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price, commission: riskComm.toFixed(2), time: new Date().toISOString(), strat: 'Risk Mgmt', why: riskSellTriggered, score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
+        pf.orders = [{
+          sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price,
+          commission: riskComm.toFixed(2), time: new Date().toISOString(),
+          strat: 'Risk Mgmt', why: riskSellTriggered,
+          score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
+          pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
+          avgCost: +pos.avgCost.toFixed(2),
+          exposure: +(exposurePct * 100).toFixed(0), volatility: +regime.volatility.toFixed(2),
+          rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
+          cashAfter: +pf.cash.toFixed(0), candleCount: sd.candles.length,
+          blackSwan: blackSwan,
+        }].concat(pf.orders).slice(0, 200);
         return;
       }
 
@@ -823,7 +834,20 @@ function runStrategies() {
         pf.peaks[sym] = price;
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
-        pf.orders = [{ sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price, commission: commission.toFixed(2), time: new Date().toISOString(), strat: buyReasons.length + ' signals', why: buyReasons.join(', '), score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
+        var prevHolding = (pf.holdings[sym] && pf.holdings[sym].qty) || 0;
+        pf.orders = [{
+          sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price,
+          commission: commission.toFixed(2), time: new Date().toISOString(),
+          strat: buyReasons.length + ' signals', why: buyReasons.join(', '),
+          score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m,
+          pnl: 0, pnlPct: 0,
+          avgCost: +((pf.holdings[sym] || {}).avgCost || price).toFixed(2),
+          holdingBefore: +prevHolding.toFixed(6),
+          exposure: +(exposurePct * 100).toFixed(0), volatility: +regime.volatility.toFixed(2),
+          rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
+          cashBefore: +(pf.cash + total + commission).toFixed(0), cashAfter: +pf.cash.toFixed(0),
+          candleCount: sd.candles.length, blackSwan: blackSwan,
+        }].concat(pf.orders).slice(0, 200);
       }
 
       // --- SCORING-BASED SELL ---
@@ -838,7 +862,19 @@ function runStrategies() {
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
-        pf.orders = [{ sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price, commission: sellComm.toFixed(2), time: new Date().toISOString(), strat: sellReasons.length + ' signals', why: sellReasons.join(', '), score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m }].concat(pf.orders).slice(0, 200);
+        pf.orders = [{
+          sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price,
+          commission: sellComm.toFixed(2), time: new Date().toISOString(),
+          strat: sellReasons.length + ' signals', why: sellReasons.join(', '),
+          score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
+          pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
+          avgCost: +pos.avgCost.toFixed(2),
+          holdingBefore: +pos.qty.toFixed(6),
+          exposure: +(exposurePct * 100).toFixed(0), volatility: +regime.volatility.toFixed(2),
+          rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
+          cashBefore: +(pf.cash - sellTotal + sellComm).toFixed(0), cashAfter: +pf.cash.toFixed(0),
+          candleCount: sd.candles.length, blackSwan: blackSwan,
+        }].concat(pf.orders).slice(0, 200);
       }
     });
 
@@ -936,15 +972,19 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: resetPortfolio(resetId) }));
   } else if (req.url === '/api/logs') {
     // Download all trade logs as CSV
-    var csv = 'time,portfolio,symbol,side,qty,price,total,commission,strategy,reason,score,regime,trend15m\n';
+    var csv = 'time,portfolio,symbol,side,qty,price,total,commission,pnl,pnlPct,avgCost,strategy,reason,score,regime,trend15m,exposure,volatility,rsi,macdHist,adx,cashBefore,cashAfter,holdingBefore,candleCount,blackSwan\n';
     portfolios.forEach(function(pf) {
       (pf.orders || []).forEach(function(o) {
         csv += [
           o.time || '', pf.id, o.sym || '', o.side || '', (o.qty || 0).toFixed(6),
           (o.price || 0).toFixed(2), (o.total || 0).toFixed(2), o.commission || '0',
+          o.pnl || 0, o.pnlPct || 0, o.avgCost || 0,
           '"' + (o.strat || '').replace(/"/g, '""') + '"',
           '"' + (o.why || '').replace(/"/g, '""') + '"',
-          o.score || '', o.regime || '', o.trend15m || ''
+          o.score || '', o.regime || '', o.trend15m || '',
+          o.exposure || '', o.volatility || '', o.rsi || '', o.macdHist || '', o.adx || '',
+          o.cashBefore || '', o.cashAfter || '', o.holdingBefore || '',
+          o.candleCount || '', o.blackSwan ? 'true' : 'false'
         ].join(',') + '\n';
       });
     });

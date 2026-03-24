@@ -185,7 +185,7 @@ var STRATS = SIGNALS;
 // ranging: ADX < 20, good for mean-reversion (RSI, BB)
 // volatile: high stddev, reduce position sizes
 function detectRegime(sd) {
-  if (!sd || sd.candles.length < 20) return { type: 'unknown', adx: 20, volatility: 0 };
+  if (!sd || sd.candles.length < 20) return { type: 'warming up', adx: 20, volatility: 0 };
   var adx = sd.adx || 20;
   // Calculate recent volatility (stddev of last 20 closes / mean)
   var closes = sd.candles.slice(-20).map(function(c) { return c.c; });

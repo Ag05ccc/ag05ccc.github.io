@@ -373,7 +373,7 @@ function App() {
                         <span style={{ color: "#e2e8f0", fontWeight: 600 }}>${fK(o.total || (o.price || 0) * (o.qty || 0))}</span>
                         {o.pnl !== undefined && o.pnl !== 0 && <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: o.pnl > 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: o.pnl > 0 ? "#22c55e" : "#ef4444" }}>{o.pnl > 0 ? "+" : ""}${fK(o.pnl)}</span>}
                         {o.score && <span style={{ fontSize: 8, color: "#f59e0b" }}>{o.score}</span>}
-                        {!isMobile && o.why && <span style={{ color: "#a78bfa", fontSize: 8, marginLeft: "auto" }}>{o.why}</span>}
+                        {o.why && <span style={{ color: "#a78bfa", fontSize: 8 }}>{o.why}</span>}
                       </div>
                     ));
                   })()}
@@ -413,48 +413,74 @@ function App() {
                   <div ref={el => {
                     if (!el) return;
                     const W = el.offsetWidth - 16;
-                    const H = 340;
-                    const ml = 60, mr = 10, mt = 10, mb = 28;
+                    const H = 380;
+                    const ml = 65, mr = 12, mt = 12, mb = 32;
                     const pw = W - ml - mr, ph = H - mt - mb;
                     const allP = chartCandles.flatMap(c => [c.h, c.l]);
-                    const minP = Math.min(...allP), maxP = Math.max(...allP);
+                    const pad = (Math.max(...allP) - Math.min(...allP)) * 0.05 || 1;
+                    const minP = Math.min(...allP) - pad, maxP = Math.max(...allP) + pad;
                     const range = maxP - minP || 1;
                     const yS = v => mt + ph - ((v - minP) / range) * ph;
                     const n = chartCandles.length;
-                    const bw = Math.max(Math.min(pw / n * 0.65, 10), 2);
+                    const bw = Math.max(Math.min(pw / n * 0.6, 12), 3);
                     const xS = i => ml + (i + 0.5) * (pw / n);
                     const bbU = sd.bb?.upper || 0, bbL = sd.bb?.lower || 0;
+                    const fmtT = t => { try { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(e) { return ''; } };
 
-                    let svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
-                    // Grid + Y axis
-                    for (let j = 0; j <= 4; j++) {
-                      const v = minP + range * j / 4, y = yS(v);
-                      svg += `<line x1="${ml}" y1="${y}" x2="${W - mr}" y2="${y}" stroke="#1e293b" stroke-width="0.5"/>`;
-                      svg += `<text x="${ml - 4}" y="${y + 3}" fill="#6b7280" font-size="9" font-family="monospace" text-anchor="end">$${fmt(v)}</text>`;
+                    let s = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
+                    // Background
+                    s += `<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="#0a0e17" rx="4"/>`;
+                    // Grid + Y axis (6 levels)
+                    for (let j = 0; j <= 5; j++) {
+                      const v = minP + range * j / 5, y = yS(v);
+                      s += `<line x1="${ml}" y1="${y}" x2="${ml + pw}" y2="${y}" stroke="#1e293b" stroke-width="0.5"/>`;
+                      s += `<text x="${ml - 6}" y="${y + 3}" fill="#64748b" font-size="9" font-family="'JetBrains Mono',monospace" text-anchor="end">$${fmt(v)}</text>`;
                     }
-                    // X axis
-                    const step = Math.max(1, Math.floor(n / 8));
+                    // X axis time labels
+                    const step = Math.max(1, Math.floor(n / 7));
                     for (let i = 0; i < n; i += step) {
                       const c = chartCandles[i], x = xS(i);
-                      const t = c.t ? new Date(c.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                      svg += `<text x="${x}" y="${H - 4}" fill="#6b7280" font-size="8" font-family="monospace" text-anchor="middle">${t}</text>`;
+                      const t = c.t ? fmtT(c.t) : '';
+                      if (!t) continue;
+                      s += `<line x1="${x}" y1="${mt + ph}" x2="${x}" y2="${mt + ph + 5}" stroke="#334155" stroke-width="0.5"/>`;
+                      s += `<text x="${x}" y="${mt + ph + 18}" fill="#64748b" font-size="9" font-family="'JetBrains Mono',monospace" text-anchor="middle">${t}</text>`;
                     }
-                    // BB lines
-                    if (bbU > 0) svg += `<line x1="${ml}" y1="${yS(bbU)}" x2="${W-mr}" y2="${yS(bbU)}" stroke="#6366f1" stroke-dasharray="4 4" stroke-width="0.5" opacity="0.5"/>`;
-                    if (bbL > 0) svg += `<line x1="${ml}" y1="${yS(bbL)}" x2="${W-mr}" y2="${yS(bbL)}" stroke="#6366f1" stroke-dasharray="4 4" stroke-width="0.5" opacity="0.5"/>`;
-                    if (sd.ema9 > 0) svg += `<line x1="${ml}" y1="${yS(sd.ema9)}" x2="${W-mr}" y2="${yS(sd.ema9)}" stroke="#22d3ee" stroke-dasharray="3 3" stroke-width="0.5" opacity="0.6"/>`;
-                    if (sd.ema21 > 0) svg += `<line x1="${ml}" y1="${yS(sd.ema21)}" x2="${W-mr}" y2="${yS(sd.ema21)}" stroke="#f59e0b" stroke-dasharray="3 3" stroke-width="0.5" opacity="0.6"/>`;
-                    // Candles
+                    // EMA lines as smooth paths
+                    const ema9pts = [], ema21pts = [];
+                    chartCandles.forEach((c, i) => { if (i >= 9) ema9pts.push(`${xS(i)},${yS(c.c)}`); if (i >= 21) ema21pts.push(`${xS(i)},${yS(c.c)}`); });
+                    // BB band fill
+                    if (bbU > 0 && bbL > 0) {
+                      s += `<rect x="${ml}" y="${yS(bbU)}" width="${pw}" height="${Math.abs(yS(bbL) - yS(bbU))}" fill="rgba(99,102,241,0.04)" rx="2"/>`;
+                      s += `<line x1="${ml}" y1="${yS(bbU)}" x2="${ml+pw}" y2="${yS(bbU)}" stroke="#6366f1" stroke-dasharray="4 2" stroke-width="0.7" opacity="0.4"/>`;
+                      s += `<line x1="${ml}" y1="${yS(bbL)}" x2="${ml+pw}" y2="${yS(bbL)}" stroke="#6366f1" stroke-dasharray="4 2" stroke-width="0.7" opacity="0.4"/>`;
+                    }
+                    if (sd.ema9 > 0) s += `<line x1="${ml}" y1="${yS(sd.ema9)}" x2="${ml+pw}" y2="${yS(sd.ema9)}" stroke="#22d3ee" stroke-dasharray="3 2" stroke-width="0.7" opacity="0.5"/>`;
+                    if (sd.ema21 > 0) s += `<line x1="${ml}" y1="${yS(sd.ema21)}" x2="${ml+pw}" y2="${yS(sd.ema21)}" stroke="#f59e0b" stroke-dasharray="3 2" stroke-width="0.7" opacity="0.5"/>`;
+                    // Candles with glow
                     chartCandles.forEach((c, i) => {
-                      const x = xS(i), g = c.c >= c.o, col = g ? "#22c55e" : "#ef4444";
+                      const x = xS(i), g = c.c >= c.o;
+                      const col = g ? "#22c55e" : "#ef4444";
+                      const colDim = g ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
                       const oY = yS(c.o), cY = yS(c.c), hY = yS(c.h), lY = yS(c.l);
                       const top = Math.min(oY, cY), bot = Math.max(oY, cY), bh = Math.max(bot - top, 1);
-                      svg += `<line x1="${x}" y1="${hY}" x2="${x}" y2="${lY}" stroke="${col}" stroke-width="1"/>`;
-                      svg += `<rect x="${x - bw/2}" y="${top}" width="${bw}" height="${bh}" fill="${col}" rx="1"/>`;
+                      // Wick
+                      s += `<line x1="${x}" y1="${hY}" x2="${x}" y2="${lY}" stroke="${col}" stroke-width="1" opacity="0.7"/>`;
+                      // Body glow
+                      s += `<rect x="${x - bw/2 - 1}" y="${top - 1}" width="${bw + 2}" height="${bh + 2}" fill="${colDim}" rx="2"/>`;
+                      // Body
+                      s += `<rect x="${x - bw/2}" y="${top}" width="${bw}" height="${bh}" fill="${col}" rx="1"/>`;
                     });
-                    svg += `</svg>`;
-                    el.innerHTML = svg;
-                  }} style={{ background: "#0f172a", borderRadius: 8, padding: "8px", border: "1px solid rgba(255,255,255,0.04)" }} />
+                    // Current price line
+                    const curY = yS(sd.cur);
+                    s += `<line x1="${ml}" y1="${curY}" x2="${ml+pw}" y2="${curY}" stroke="#f59e0b" stroke-dasharray="2 2" stroke-width="0.8" opacity="0.8"/>`;
+                    s += `<rect x="${ml+pw+2}" y="${curY - 8}" width="50" height="16" fill="#f59e0b" rx="3"/>`;
+                    s += `<text x="${ml+pw+27}" y="${curY + 4}" fill="#0a0e17" font-size="8" font-family="'JetBrains Mono',monospace" text-anchor="middle" font-weight="600">$${fmt(sd.cur)}</text>`;
+                    // EMA labels
+                    if (sd.ema9 > 0) { const ey = yS(sd.ema9); s += `<text x="${ml + 4}" y="${ey - 4}" fill="#22d3ee" font-size="7" font-family="'JetBrains Mono',monospace" opacity="0.7">EMA9</text>`; }
+                    if (sd.ema21 > 0) { const ey = yS(sd.ema21); s += `<text x="${ml + 4}" y="${ey - 4}" fill="#f59e0b" font-size="7" font-family="'JetBrains Mono',monospace" opacity="0.7">EMA21</text>`; }
+                    s += `</svg>`;
+                    el.innerHTML = s;
+                  }} style={{ background: "#0f172a", borderRadius: 10, padding: "8px", border: "1px solid rgba(255,255,255,0.06)" }} />
                 ) : (
                   <ResponsiveContainer width="100%" height={340}>
                     <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>

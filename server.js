@@ -22,12 +22,48 @@ const STATE_SAVE_INTERVAL = 30000; // Save state every 30 seconds
 
 // ─── ASSET DEFINITIONS ───
 const COINS = {
+  // Crypto (20) - real-time via Binance + CoinGecko
   BTC: { name: "Bitcoin", cgId: "bitcoin", type: "crypto" },
   ETH: { name: "Ethereum", cgId: "ethereum", type: "crypto" },
   SOL: { name: "Solana", cgId: "solana", type: "crypto" },
-  DOGE: { name: "Dogecoin", cgId: "dogecoin", type: "crypto" },
+  BNB: { name: "BNB", cgId: "binancecoin", type: "crypto" },
+  XRP: { name: "Ripple", cgId: "ripple", type: "crypto" },
+  ADA: { name: "Cardano", cgId: "cardano", type: "crypto" },
   AVAX: { name: "Avalanche", cgId: "avalanche-2", type: "crypto" },
+  DOGE: { name: "Dogecoin", cgId: "dogecoin", type: "crypto" },
+  DOT: { name: "Polkadot", cgId: "polkadot", type: "crypto" },
   LINK: { name: "Chainlink", cgId: "chainlink", type: "crypto" },
+  MATIC: { name: "Polygon", cgId: "matic-network", type: "crypto" },
+  UNI: { name: "Uniswap", cgId: "uniswap", type: "crypto" },
+  ATOM: { name: "Cosmos", cgId: "cosmos", type: "crypto" },
+  LTC: { name: "Litecoin", cgId: "litecoin", type: "crypto" },
+  NEAR: { name: "NEAR", cgId: "near", type: "crypto" },
+  APT: { name: "Aptos", cgId: "aptos", type: "crypto" },
+  ARB: { name: "Arbitrum", cgId: "arbitrum", type: "crypto" },
+  OP: { name: "Optimism", cgId: "optimism", type: "crypto" },
+  SUI: { name: "Sui", cgId: "sui", type: "crypto" },
+  FIL: { name: "Filecoin", cgId: "filecoin", type: "crypto" },
+  // Stocks (20) - simulated from initial prices
+  AAPL: { name: "Apple", type: "stock", price: 178.50 },
+  MSFT: { name: "Microsoft", type: "stock", price: 420.50 },
+  GOOGL: { name: "Alphabet", type: "stock", price: 155.80 },
+  AMZN: { name: "Amazon", type: "stock", price: 185.60 },
+  NVDA: { name: "NVIDIA", type: "stock", price: 875.30 },
+  META: { name: "Meta", type: "stock", price: 505.20 },
+  TSLA: { name: "Tesla", type: "stock", price: 248.30 },
+  JPM: { name: "JPMorgan", type: "stock", price: 198.40 },
+  V: { name: "Visa", type: "stock", price: 282.60 },
+  WMT: { name: "Walmart", type: "stock", price: 168.90 },
+  NFLX: { name: "Netflix", type: "stock", price: 628.50 },
+  AMD: { name: "AMD", type: "stock", price: 162.30 },
+  CRM: { name: "Salesforce", type: "stock", price: 272.40 },
+  ORCL: { name: "Oracle", type: "stock", price: 125.80 },
+  INTC: { name: "Intel", type: "stock", price: 43.20 },
+  DIS: { name: "Disney", type: "stock", price: 112.40 },
+  BA: { name: "Boeing", type: "stock", price: 178.90 },
+  PYPL: { name: "PayPal", type: "stock", price: 62.50 },
+  UBER: { name: "Uber", type: "stock", price: 78.30 },
+  COIN: { name: "Coinbase", type: "stock", price: 225.60 },
 };
 
 // ─── TA FUNCTIONS ───
@@ -345,8 +381,11 @@ function fetchJSON(url) {
 
 // ─── BINANCE WEBSOCKET (real-time crypto) ───
 const BINANCE_SYMBOLS = {
-  BTC: 'btcusdt', ETH: 'ethusdt', SOL: 'solusdt',
-  DOGE: 'dogeusdt', AVAX: 'avaxusdt', LINK: 'linkusdt',
+  BTC: 'btcusdt', ETH: 'ethusdt', SOL: 'solusdt', BNB: 'bnbusdt',
+  XRP: 'xrpusdt', ADA: 'adausdt', AVAX: 'avaxusdt', DOGE: 'dogeusdt',
+  DOT: 'dotusdt', LINK: 'linkusdt', MATIC: 'maticusdt', UNI: 'uniusdt',
+  ATOM: 'atomusdt', LTC: 'ltcusdt', NEAR: 'nearusdt', APT: 'aptusdt',
+  ARB: 'arbusdt', OP: 'opusdt', SUI: 'suiusdt', FIL: 'filusdt',
 };
 
 let binanceWs = null;
@@ -424,8 +463,7 @@ async function fetchCoinGeckoPrices() {
 
 async function fetchRealPrices() {
   await fetchCoinGeckoPrices();
-  var priceLog = Object.keys(COINS).map(function(s) { return s + '=$' + (lastPrices[s] || 'N/A'); }).join(' ');
-  console.log('[' + new Date().toLocaleTimeString() + '] Prices: ' + priceLog);
+  console.log('[' + new Date().toLocaleTimeString() + '] Prices loaded: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH + ' +' + (Object.keys(COINS).length - 2) + ' more');
 }
 
 // ─── PRICE TICK ───
@@ -435,9 +473,19 @@ function priceTick() {
 
   Object.keys(COINS).forEach(sym => {
     const sd = marketData[sym];
-    // Use real price directly - Binance gives real-time updates for crypto
-    const realPrice = lastPrices[sym] || sd.cur;
-    const np = realPrice;
+    const coin = COINS[sym];
+    var np;
+    if (coin.type === 'crypto') {
+      // Real price from Binance/CoinGecko
+      np = lastPrices[sym] || sd.cur;
+    } else {
+      // Stocks: simulate with small random walk from last known price
+      var prev = sd.cur || coin.price || 100;
+      var vol = 0.0015; // 0.15% per tick volatility
+      var drift = 0.000002;
+      np = Math.max(prev * 0.5, +(prev + (Math.random() - 0.5) * 2 * vol * prev + drift * prev).toFixed(2));
+      lastPrices[sym] = np;
+    }
     sd.cur = np;
 
     const b = sd.building;
@@ -650,8 +698,10 @@ async function start() {
 
   server.listen(PORT, () => {
     console.log('\n  TradeSimBot Server running at http://localhost:' + PORT);
-    console.log('  ' + Object.keys(COINS).map(function(s) { return s + ': $' + (lastPrices[s] || 'N/A'); }).join(' | '));
-    console.log('  4 portfolios | ' + Object.keys(COINS).length + ' coins | 1min candles | 0.1% commission');
+    var cryptoCount = Object.values(COINS).filter(function(c) { return c.type === 'crypto'; }).length;
+    var stockCount = Object.values(COINS).filter(function(c) { return c.type === 'stock'; }).length;
+    console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
+    console.log('  4 portfolios | ' + cryptoCount + ' crypto + ' + stockCount + ' stocks | 1min candles');
     if (restored) console.log('  State restored from disk');
     console.log('');
   });

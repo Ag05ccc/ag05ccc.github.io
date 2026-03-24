@@ -6,12 +6,48 @@ const TICK_MS = 2000;
 const TICKS_PER_CANDLE = 30; // 30 ticks x 2s = 60s = 1 minute candles
 
 const COINS = {
+  // Crypto
   BTC: { name: "Bitcoin", price: 67450, vol: 0.006, drift: 0.00005, type: "crypto" },
   ETH: { name: "Ethereum", price: 3520, vol: 0.008, drift: 0.00003, type: "crypto" },
   SOL: { name: "Solana", price: 148, vol: 0.015, drift: 0.00006, type: "crypto" },
-  DOGE: { name: "Dogecoin", price: 0.165, vol: 0.018, drift: 0.00001, type: "crypto" },
+  BNB: { name: "BNB", price: 605, vol: 0.009, drift: 0.00002, type: "crypto" },
+  XRP: { name: "Ripple", price: 0.62, vol: 0.012, drift: 0.00001, type: "crypto" },
+  ADA: { name: "Cardano", price: 0.45, vol: 0.014, drift: 0.00001, type: "crypto" },
   AVAX: { name: "Avalanche", price: 36.50, vol: 0.013, drift: 0.00003, type: "crypto" },
+  DOGE: { name: "Dogecoin", price: 0.165, vol: 0.018, drift: 0.00001, type: "crypto" },
+  DOT: { name: "Polkadot", price: 7.20, vol: 0.012, drift: 0.00002, type: "crypto" },
   LINK: { name: "Chainlink", price: 14.80, vol: 0.013, drift: 0.00003, type: "crypto" },
+  MATIC: { name: "Polygon", price: 0.72, vol: 0.014, drift: 0.00001, type: "crypto" },
+  UNI: { name: "Uniswap", price: 9.80, vol: 0.013, drift: 0.00002, type: "crypto" },
+  ATOM: { name: "Cosmos", price: 8.50, vol: 0.012, drift: 0.00002, type: "crypto" },
+  LTC: { name: "Litecoin", price: 72.30, vol: 0.010, drift: 0.00002, type: "crypto" },
+  NEAR: { name: "NEAR", price: 5.20, vol: 0.015, drift: 0.00003, type: "crypto" },
+  APT: { name: "Aptos", price: 8.90, vol: 0.014, drift: 0.00002, type: "crypto" },
+  ARB: { name: "Arbitrum", price: 1.10, vol: 0.015, drift: 0.00002, type: "crypto" },
+  OP: { name: "Optimism", price: 2.30, vol: 0.015, drift: 0.00002, type: "crypto" },
+  SUI: { name: "Sui", price: 1.50, vol: 0.016, drift: 0.00002, type: "crypto" },
+  FIL: { name: "Filecoin", price: 5.80, vol: 0.014, drift: 0.00002, type: "crypto" },
+  // Stocks
+  AAPL: { name: "Apple", price: 178.50, vol: 0.005, drift: 0.00004, type: "stock" },
+  MSFT: { name: "Microsoft", price: 420.50, vol: 0.004, drift: 0.00004, type: "stock" },
+  GOOGL: { name: "Alphabet", price: 155.80, vol: 0.006, drift: 0.00003, type: "stock" },
+  AMZN: { name: "Amazon", price: 185.60, vol: 0.006, drift: 0.00004, type: "stock" },
+  NVDA: { name: "NVIDIA", price: 875.30, vol: 0.012, drift: 0.00008, type: "stock" },
+  META: { name: "Meta", price: 505.20, vol: 0.008, drift: 0.00005, type: "stock" },
+  TSLA: { name: "Tesla", price: 248.30, vol: 0.015, drift: 0.00003, type: "stock" },
+  JPM: { name: "JPMorgan", price: 198.40, vol: 0.004, drift: 0.00003, type: "stock" },
+  V: { name: "Visa", price: 282.60, vol: 0.003, drift: 0.00003, type: "stock" },
+  WMT: { name: "Walmart", price: 168.90, vol: 0.003, drift: 0.00002, type: "stock" },
+  NFLX: { name: "Netflix", price: 628.50, vol: 0.008, drift: 0.00004, type: "stock" },
+  AMD: { name: "AMD", price: 162.30, vol: 0.012, drift: 0.00005, type: "stock" },
+  CRM: { name: "Salesforce", price: 272.40, vol: 0.006, drift: 0.00003, type: "stock" },
+  ORCL: { name: "Oracle", price: 125.80, vol: 0.005, drift: 0.00003, type: "stock" },
+  INTC: { name: "Intel", price: 43.20, vol: 0.008, drift: 0.00001, type: "stock" },
+  DIS: { name: "Disney", price: 112.40, vol: 0.006, drift: 0.00002, type: "stock" },
+  BA: { name: "Boeing", price: 178.90, vol: 0.008, drift: 0.00002, type: "stock" },
+  PYPL: { name: "PayPal", price: 62.50, vol: 0.010, drift: 0.00002, type: "stock" },
+  UBER: { name: "Uber", price: 78.30, vol: 0.009, drift: 0.00003, type: "stock" },
+  COIN: { name: "Coinbase", price: 225.60, vol: 0.015, drift: 0.00005, type: "stock" },
 };
 const SYMS = Object.keys(COINS);
 
@@ -80,7 +116,7 @@ function calcADX(highs, lows, closes, period = 14) {
 }
 
 function symColor(sym) {
-  const colors = { BTC: "#f59e0b", ETH: "#627eea", SOL: "#9945ff", DOGE: "#c2a633", AVAX: "#e84142", LINK: "#2a5ada" };
+  const colors = { BTC: "#f59e0b", ETH: "#627eea", SOL: "#9945ff", BNB: "#f3ba2f", XRP: "#00aae4", ADA: "#0033ad", AVAX: "#e84142", DOGE: "#c2a633", DOT: "#e6007a", LINK: "#2a5ada", MATIC: "#8247e5", UNI: "#ff007a", ATOM: "#2e3148", LTC: "#bfbbbb", NEAR: "#00c08b", APT: "#00bfa5", ARB: "#28a0f0", OP: "#ff0420", SUI: "#4da2ff", FIL: "#0090ff", AAPL: "#a2aaad", MSFT: "#00a4ef", GOOGL: "#4285f4", AMZN: "#ff9900", NVDA: "#76b900", META: "#0081fb", TSLA: "#cc0000", JPM: "#006eb6", V: "#1a1f71", WMT: "#0071ce", NFLX: "#e50914", AMD: "#ed1c24", CRM: "#00a1e0", ORCL: "#f80000", INTC: "#0071c5", DIS: "#113ccf", BA: "#0033a0", PYPL: "#003087", UBER: "#000000", COIN: "#0052ff" };
   return colors[sym] || "#94a3b8";
 }
 
@@ -486,7 +522,7 @@ function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px rgba(34,197,94,0.5)", animation: "pulse 2s infinite" }} />
           <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>TRADE<span style={{ color: "#f59e0b" }}>SIMBOT</span></span>
-          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>6 CRYPTO | 1M CANDLES</span>
+          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>20 CRYPTO + 20 STOCKS | 1M CANDLES</span>
         </div>
         <div style={{ display: "flex", gap: 12, fontFamily: "var(--m)", fontSize: 11 }}>
           {pfStats.map(pf => (
@@ -508,26 +544,30 @@ function App() {
       <div style={{ display: "flex", minHeight: "calc(100vh - 85px)" }}>
         {/* LEFT SIDEBAR */}
         <div style={{ width: 210, borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "auto", background: "#0d1117", flexShrink: 0 }}>
-          <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>MARKETS</div>
-          {Object.entries(COINS).map(([sym, c]) => {
-            const d2 = data[sym]; const p = d2.cur; const open = d2.candles[0]?.o || p;
-            const d = p - open; const dp = d / open;
-            return (
-              <div key={sym} className="sr" onClick={() => { setSelected(sym); setTab("chart"); }}
-                style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.03)", background: selected === sym ? "rgba(245,158,11,0.08)" : "transparent", borderLeft: selected === sym ? "2px solid #f59e0b" : "2px solid transparent" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontFamily: "var(--m)", fontWeight: 700, fontSize: 14, color: symColor(sym) }}>{sym}</div>
-                    <div style={{ fontSize: 10, color: "#6b7280" }}>{c.name}</div>
+          {[["CRYPTO", "crypto"], ["STOCKS", "stock"]].map(([label, type]) => (
+            <React.Fragment key={type}>
+              <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>{label}</div>
+              {Object.entries(COINS).filter(([, c]) => c.type === type).map(([sym, c]) => {
+                const d2 = data[sym]; const p = d2.cur; const open = d2.candles[0]?.o || p;
+                const d = p - open; const dp = d / open;
+                return (
+                  <div key={sym} className="sr" onClick={() => { setSelected(sym); setTab("chart"); }}
+                    style={{ padding: "8px 14px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.03)", background: selected === sym ? "rgba(245,158,11,0.08)" : "transparent", borderLeft: selected === sym ? "2px solid #f59e0b" : "2px solid transparent" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--m)", fontWeight: 700, fontSize: 12, color: symColor(sym) }}>{sym}</div>
+                        <div style={{ fontSize: 9, color: "#6b7280" }}>{c.name}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 11, fontWeight: 600, color: "#f8fafc" }}>${fmt(p)}</div>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 9, color: d >= 0 ? "#22c55e" : "#ef4444" }}>{pc(dp)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "var(--m)", fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>${fmt(p)}</div>
-                    <div style={{ fontFamily: "var(--m)", fontSize: 10, color: d >= 0 ? "#22c55e" : "#ef4444" }}>{pc(dp)}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </React.Fragment>
+          ))}
           {/* Indicators */}
           <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 6 }}>INDICATORS · {selected}</div>

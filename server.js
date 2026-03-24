@@ -210,7 +210,7 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
     case "bb_upper": if (pos && pos.qty > 0 && sd.bb.upper > 0 && sd.cur >= sd.bb.upper * (1 + val / 100)) return 'BB upper'; break;
     case "ema_golden": if (sd.ema9 > sd.ema21 && candles.length > 21) { var prevE9 = ema(candles.slice(0, -1).map(function(c){return c.c;}), 9); if (prevE9 && prevE9 <= sd.ema21) return 'Golden cross'; } break;
     case "ema_death": if (pos && pos.qty > 0 && sd.ema9 < sd.ema21 && candles.length > 21) { var prevE9b = ema(candles.slice(0, -1).map(function(c){return c.c;}), 9); if (prevE9b && prevE9b >= sd.ema21) return 'Death cross'; } break;
-    case "ema50_bounce": if (sd.ema50 > 0) { var dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= val && lastCandle.c > lastCandle.o) return 'EMA50 bounce'; } break;
+    case "ema50_bounce": if (sd.ema50 > 0 && prevCandle) { var dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= val && lastCandle.c > lastCandle.o && prevCandle.c < prevCandle.o) return 'EMA50 bounce'; } break;
     case "stoch_ob": if (sd.stoch.k <= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
     case "stoch_os": if (pos && pos.qty > 0 && sd.stoch.k >= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
     case "vol_spike_b": if (candles.length >= 10) { var avgV = candles.slice(-10).reduce(function(a,c2){return a+c2.v;},0)/10; if (lastCandle.v > avgV * val && lastCandle.c > lastCandle.o) return 'Vol ' + (lastCandle.v/avgV).toFixed(1) + 'x'; } break;
@@ -244,7 +244,7 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 var PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
     desc: "BTC+ETH, needs 4+ signals to agree",
-    assets: ["BTC", "ETH"], cashPct: 0.10, buyThreshold: 4, sellThreshold: 3,
+    assets: ["BTC", "ETH"], cashPct: 0.10, buyThreshold: 4, sellThreshold: 2,
     overrides: {
       rsi_ob: 22, rsi_os: 78, stoch_ob: 12, stoch_os: 88,
       tp_pct: 1.5, sl_pct: 0.6, trailing: 0.5, // R:R ~2:1 after 0.2% commission
@@ -253,7 +253,7 @@ var PROFILES = [
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
     desc: "BTC+ETH, needs 3+ signals",
-    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 2.5,
+    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
     overrides: {
       rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80,
       tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8,
@@ -262,7 +262,7 @@ var PROFILES = [
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
     desc: "4 coins, needs 2+ signals",
-    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.40, buyThreshold: 2, sellThreshold: 1.5,
+    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.40, buyThreshold: 2, sellThreshold: 1,
     overrides: {
       rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
       tp_pct: 4.0, sl_pct: 3.0, trailing: 2.0,
@@ -693,9 +693,19 @@ function runStrategies() {
       // Black swan check (with post-crash cooldown)
       var blackSwan = isBlackSwan(sd, sym);
 
+      // Portfolio exposure limit: block new buys when holdings exceed threshold
+      var holdingValue = Object.entries(pf.holdings).reduce(function(s, entry) {
+        return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
+      }, 0);
+      var exposurePct = totalValue > 0 ? holdingValue / totalValue : 0;
+      var maxExposure = { conservative: 0.50, moderate: 0.65, aggressive: 0.80, yolo: 0.90 }[pf.id] || 0.70;
+      var exposureLimited = exposurePct >= maxExposure;
+
       // Regime-based weight multipliers
+      // Ranging + downtrend detection: if ranging but price below EMA21, it's a disguised downtrend
+      var rangingDowntrend = regime.type === 'ranging' && sd.ema21 > 0 && sd.cur < sd.ema21;
       var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
-      var meanRevMult = regime.type === 'ranging' ? 1.5 : (regime.type === 'trending' ? 0.5 : 1.0);
+      var meanRevMult = regime.type === 'ranging' ? (rangingDowntrend ? 0.5 : 1.5) : (regime.type === 'trending' ? 0.5 : 1.0);
       var regimeMultipliers = {
         'trend': trendMult, 'momentum': trendMult,
         'mean-reversion': meanRevMult,
@@ -754,12 +764,19 @@ function runStrategies() {
         buyReasons.push('BLACK SWAN BLOCKED');
       }
 
+      // ─── EXPOSURE LIMIT ───
+      // Block buys when portfolio is over-exposed to holdings
+      if (exposureLimited) {
+        buyScore = 0;
+      }
+
       // Store scores for UI
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
       lastScores[pf.id][sym] = {
         buy: +buyScore.toFixed(1), sell: +sellScore.toFixed(1),
-        regime: regime.type, volatility: +regime.volatility.toFixed(2),
+        regime: regime.type + (rangingDowntrend ? '↓' : ''), volatility: +regime.volatility.toFixed(2),
         trend15m: trend15m, blackSwan: blackSwan,
+        exposure: +(exposurePct * 100).toFixed(0), exposureLimited: exposureLimited,
         buyReasons: buyReasons, sellReasons: sellReasons,
       };
       lastScores[pf.id]._circuitBreaker = false;

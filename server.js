@@ -602,13 +602,42 @@ function get15mTrend(sd) {
 }
 
 // ─── BLACK SWAN FILTER ───
-function isBlackSwan(sd) {
-  if (!sd || sd.candles.length < 5) return false;
-  var recent = sd.candles.slice(-5);
-  var firstOpen = recent[0].o;
-  var lastClose = recent[recent.length - 1].c;
+// Black swan: 3%+ drop in 5 candles triggers freeze
+// Recovery: must see 3 consecutive stable candles (< 0.5% drop each) after crash ends
+var blackSwanCooldown = {}; // { "BTC": cooldownUntilCandleCount }
+
+function isBlackSwan(sd, sym) {
+  if (!sd || sd.candles.length < 8) return false;
+  var recent5 = sd.candles.slice(-5);
+  var firstOpen = recent5[0].o;
+  var lastClose = recent5[recent5.length - 1].c;
   var dropPct = ((firstOpen - lastClose) / firstOpen) * 100;
-  return dropPct >= 3; // 3%+ drop in 5 candles
+
+  if (dropPct >= 3) {
+    // Active crash - set cooldown to current candle count + 3
+    blackSwanCooldown[sym] = sd.candles.length + 3;
+    return true;
+  }
+
+  // Check if still in cooldown (crash ended but waiting for stability)
+  if (blackSwanCooldown[sym] && sd.candles.length < blackSwanCooldown[sym]) {
+    return true; // Still in post-crash cooldown
+  }
+
+  // Cooldown expired - check last 3 candles are stable
+  if (blackSwanCooldown[sym] && sd.candles.length >= blackSwanCooldown[sym]) {
+    var last3 = sd.candles.slice(-3);
+    var allStable = last3.every(function(c) {
+      return Math.abs((c.c - c.o) / c.o) * 100 < 0.5;
+    });
+    if (allStable) {
+      delete blackSwanCooldown[sym]; // Clear cooldown
+      return false;
+    }
+    return true; // Still volatile, extend freeze
+  }
+
+  return false;
 }
 
 function runStrategies() {
@@ -661,8 +690,8 @@ function runStrategies() {
       // Multi-timeframe: 15min trend direction
       var trend15m = get15mTrend(sd);
 
-      // Black swan check
-      var blackSwan = isBlackSwan(sd);
+      // Black swan check (with post-crash cooldown)
+      var blackSwan = isBlackSwan(sd, sym);
 
       // Regime-based weight multipliers
       var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
@@ -888,6 +917,43 @@ const server = http.createServer((req, res) => {
     var resetId = req.url.replace('/api/reset/', '');
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ ok: resetPortfolio(resetId) }));
+  } else if (req.url === '/api/logs') {
+    // Download all trade logs as CSV
+    var csv = 'time,portfolio,symbol,side,qty,price,total,commission,strategy,reason,score,regime,trend15m\n';
+    portfolios.forEach(function(pf) {
+      (pf.orders || []).forEach(function(o) {
+        csv += [
+          o.time || '', pf.id, o.sym || '', o.side || '', (o.qty || 0).toFixed(6),
+          (o.price || 0).toFixed(2), (o.total || 0).toFixed(2), o.commission || '0',
+          '"' + (o.strat || '').replace(/"/g, '""') + '"',
+          '"' + (o.why || '').replace(/"/g, '""') + '"',
+          o.score || '', o.regime || '', o.trend15m || ''
+        ].join(',') + '\n';
+      });
+    });
+    res.writeHead(200, {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': 'attachment; filename="tradesimbot-logs-' + new Date().toISOString().slice(0,10) + '.csv"',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(csv);
+  } else if (req.url === '/api/logs/json') {
+    // Download all logs as JSON
+    var logs = {};
+    portfolios.forEach(function(pf) {
+      logs[pf.id] = {
+        name: pf.name, cash: pf.cash, startCash: pf.startCash,
+        tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
+        totalCommission: pf.totalCommission || 0,
+        holdings: pf.holdings, orders: pf.orders, history: pf.history,
+      };
+    });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Disposition': 'attachment; filename="tradesimbot-logs-' + new Date().toISOString().slice(0,10) + '.json"',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(logs, null, 2));
   } else {
     res.writeHead(404);
     res.end('Not found');

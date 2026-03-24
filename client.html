@@ -493,7 +493,13 @@ function App() {
           {/* LOG */}
           {tab === "log" && (
             <div style={{ padding: 20 }}>
-              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Trade Log</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc" }}>Trade Log</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <a href="/api/logs" download style={{ padding: "5px 12px", borderRadius: 4, border: "1px solid #22c55e", background: "transparent", color: "#22c55e", fontSize: 10, fontWeight: 600, fontFamily: "var(--m)", textDecoration: "none", cursor: "pointer" }}>CSV</a>
+                  <a href="/api/logs/json" download style={{ padding: "5px 12px", borderRadius: 4, border: "1px solid #6366f1", background: "transparent", color: "#6366f1", fontSize: 10, fontWeight: 600, fontFamily: "var(--m)", textDecoration: "none", cursor: "pointer" }}>JSON</a>
+                </div>
+              </div>
               {pfStats.map(pf => (
                 <div key={pf.id} style={{ marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>

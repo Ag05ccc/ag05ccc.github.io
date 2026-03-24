@@ -8,6 +8,10 @@ const TICKS_PER_CANDLE = 30; // 30 ticks x 2s = 60s = 1 minute candles
 const COINS = {
   BTC: { name: "Bitcoin", price: 67450, vol: 0.006, drift: 0.00005, type: "crypto" },
   ETH: { name: "Ethereum", price: 3520, vol: 0.008, drift: 0.00003, type: "crypto" },
+  SOL: { name: "Solana", price: 148, vol: 0.015, drift: 0.00006, type: "crypto" },
+  DOGE: { name: "Dogecoin", price: 0.165, vol: 0.018, drift: 0.00001, type: "crypto" },
+  AVAX: { name: "Avalanche", price: 36.50, vol: 0.013, drift: 0.00003, type: "crypto" },
+  LINK: { name: "Chainlink", price: 14.80, vol: 0.013, drift: 0.00003, type: "crypto" },
 };
 const SYMS = Object.keys(COINS);
 
@@ -76,7 +80,8 @@ function calcADX(highs, lows, closes, period = 14) {
 }
 
 function symColor(sym) {
-  return sym === "BTC" ? "#f59e0b" : sym === "ETH" ? "#627eea" : "#94a3b8";
+  const colors = { BTC: "#f59e0b", ETH: "#627eea", SOL: "#9945ff", DOGE: "#c2a633", AVAX: "#e84142", LINK: "#2a5ada" };
+  return colors[sym] || "#94a3b8";
 }
 
 function tk(p, v, d) { return Math.max(p * 0.5, +(p + (Math.random() - 0.5) * 2 * v * p + d * p).toFixed(2)); }
@@ -179,48 +184,48 @@ const STRATS = [
 const PROFILES = [
   {
     id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "Tight stops, 75%+ deployed",
-    assets: ["BTC", "ETH"], cashPct: 0.25,
+    desc: "BTC+ETH only, tight stops, small positions",
+    assets: ["BTC", "ETH"], cashPct: 0.10,
     overrides: {
-      rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85,
-      tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4,
-      bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 2.0,
-      breakout_high: 15, breakdown: 15, dip_rsi_macd: 35, dip_rsi_macd_s: 65,
+      rsi_ob: 22, rsi_os: 78, stoch_ob: 12, stoch_os: 88,
+      tp_pct: 0.8, sl_pct: 0.4, trailing: 0.3,
+      bb_lower: 0.02, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 2.5,
+      breakout_high: 20, breakdown: 20, dip_rsi_macd: 30, dip_rsi_macd_s: 70,
     },
   },
   {
     id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "Balanced, 85%+ deployed",
-    assets: ["BTC", "ETH"], cashPct: 0.35,
+    desc: "BTC+ETH, balanced thresholds",
+    assets: ["BTC", "ETH"], cashPct: 0.25,
     overrides: {
       rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80,
       tp_pct: 1.5, sl_pct: 1.0, trailing: 0.8,
-      bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.5,
-      breakout_high: 10, breakdown: 10, dip_rsi_macd: 40, dip_rsi_macd_s: 60,
+      bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.8, vol_spike_s: 1.8,
+      breakout_high: 12, breakdown: 12, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
     },
   },
   {
     id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "High conviction, 90%+ deployed",
-    assets: ["BTC", "ETH"], cashPct: 0.45,
+    desc: "4 coins, loose triggers, big positions",
+    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.40,
     overrides: {
-      rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70,
-      tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5,
-      bb_lower: 0.2, bb_upper: 0.2, vol_spike_b: 1.2, vol_spike_s: 1.2,
-      breakout_high: 6, breakdown: 6, dip_rsi_macd: 45, dip_rsi_macd_s: 55,
-      ema50_bounce: 0.5, vwap_buy: 0.2, vwap_sell: 0.2, adx_trend_b: 20,
+      rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
+      tp_pct: 4.0, sl_pct: 3.0, trailing: 2.0,
+      bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.1, vol_spike_s: 1.1,
+      breakout_high: 5, breakdown: 5, dip_rsi_macd: 46, dip_rsi_macd_s: 54,
+      ema50_bounce: 0.8, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 18,
     },
   },
   {
     id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "Full send, 100% deployed",
-    assets: ["BTC", "ETH"], cashPct: 0.50,
+    desc: "6 coins, triggers everything, all-in",
+    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.50,
     overrides: {
-      rsi_ob: 45, rsi_os: 55, stoch_ob: 40, stoch_os: 60,
-      tp_pct: 5.0, sl_pct: 4.0, trailing: 3.0,
-      bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.0, vol_spike_s: 1.0,
-      breakout_high: 4, breakdown: 4, dip_rsi_macd: 48, dip_rsi_macd_s: 52,
-      ema50_bounce: 1.0, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 15,
+      rsi_ob: 48, rsi_os: 52, stoch_ob: 45, stoch_os: 55,
+      tp_pct: 8.0, sl_pct: 6.0, trailing: 4.0,
+      bb_lower: 0.5, bb_upper: 0.5, vol_spike_b: 0.8, vol_spike_s: 0.8,
+      breakout_high: 3, breakdown: 3, dip_rsi_macd: 49, dip_rsi_macd_s: 51,
+      ema50_bounce: 1.5, vwap_buy: 0.05, vwap_sell: 0.05, adx_trend_b: 12,
     },
   },
 ];
@@ -481,7 +486,7 @@ function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px rgba(34,197,94,0.5)", animation: "pulse 2s infinite" }} />
           <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f8fafc" }}>CRYPTO<span style={{ color: "#f59e0b" }}>TA</span></span>
-          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>BTC + ETH | 1M CANDLES</span>
+          <span style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)", fontWeight: 600 }}>6 CRYPTO | 1M CANDLES</span>
         </div>
         <div style={{ display: "flex", gap: 12, fontFamily: "var(--m)", fontSize: 11 }}>
           {pfStats.map(pf => (
@@ -503,7 +508,7 @@ function App() {
       <div style={{ display: "flex", minHeight: "calc(100vh - 85px)" }}>
         {/* LEFT SIDEBAR */}
         <div style={{ width: 210, borderRight: "1px solid rgba(255,255,255,0.06)", overflow: "auto", background: "#0d1117", flexShrink: 0 }}>
-          <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>CRYPTO</div>
+          <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>MARKETS</div>
           {Object.entries(COINS).map(([sym, c]) => {
             const d2 = data[sym]; const p = d2.cur; const open = d2.candles[0]?.o || p;
             const d = p - open; const dp = d / open;

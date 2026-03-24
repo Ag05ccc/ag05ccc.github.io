@@ -284,7 +284,7 @@ function loadState() {
 
     console.log('[' + new Date().toLocaleTimeString() + '] Restored state from ' + state.savedAt);
     state.portfolios.forEach(p => {
-      const hVal = Object.entries(p.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * (lastPrices[sym] || marketData[sym]?.cur || 0), 0);
+      const hVal = Object.entries(p.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * (lastPrices[sym] || (marketData[sym] && marketData[sym].cur) || 0), 0);
       console.log('  ' + p.id + ': $' + (p.cash + hVal).toFixed(0) + ' (' + p.tradeCount + ' trades)');
     });
     return true;

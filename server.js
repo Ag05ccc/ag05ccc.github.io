@@ -11,6 +11,8 @@ const PRICE_FETCH_INTERVAL = 30000;
 const DEFAULT_CASH = 1000000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 const STRATEGY_COOLDOWN_MS = 300000; // 5 minutes cooldown per strategy per asset
+const STATE_FILE = path.join(__dirname, 'state.json');
+const STATE_SAVE_INTERVAL = 30000; // Save state every 30 seconds
 
 // ─── ASSET DEFINITIONS (BTC + ETH only) ───
 const COINS = {
@@ -213,6 +215,84 @@ portfolios = PROFILES.map(p => ({
   history: [{ t: 0, value: DEFAULT_CASH }],
   tradeCount: 0, wins: 0, losses: 0,
 }));
+
+// ─── STATE PERSISTENCE ───
+function saveState() {
+  try {
+    const state = {
+      portfolios: portfolios.map(pf => ({
+        id: pf.id, cash: pf.cash, startCash: pf.startCash,
+        holdings: pf.holdings, orders: pf.orders.slice(0, 100),
+        peaks: pf.peaks, history: pf.history.slice(-500),
+        tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
+        totalCommission: pf.totalCommission || 0,
+      })),
+      marketData: Object.fromEntries(Object.entries(marketData).map(([sym, sd]) => [sym, {
+        candles: sd.candles.slice(-200), cur: sd.cur,
+        rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
+        ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
+        stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
+      }])),
+      savedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state));
+  } catch (e) {
+    console.log('Failed to save state:', e.message);
+  }
+}
+
+function loadState() {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return false;
+    const raw = fs.readFileSync(STATE_FILE, 'utf8');
+    const state = JSON.parse(raw);
+    if (!state.portfolios || !state.marketData) return false;
+
+    // Restore portfolios
+    state.portfolios.forEach(saved => {
+      const pf = portfolios.find(p => p.id === saved.id);
+      if (!pf) return;
+      pf.cash = saved.cash;
+      pf.startCash = saved.startCash;
+      pf.holdings = saved.holdings || {};
+      pf.orders = saved.orders || [];
+      pf.peaks = saved.peaks || {};
+      pf.history = saved.history || [{ t: 0, value: DEFAULT_CASH }];
+      pf.tradeCount = saved.tradeCount || 0;
+      pf.wins = saved.wins || 0;
+      pf.losses = saved.losses || 0;
+      pf.totalCommission = saved.totalCommission || 0;
+    });
+
+    // Restore market data (candles + indicators)
+    Object.entries(state.marketData).forEach(([sym, saved]) => {
+      if (!marketData[sym]) return;
+      marketData[sym].candles = saved.candles || [];
+      marketData[sym].cur = saved.cur || marketData[sym].cur;
+      marketData[sym].rsi = saved.rsi || 50;
+      marketData[sym].macd = saved.macd || { macd: 0, signal: 0, hist: 0 };
+      marketData[sym].bb = saved.bb || { upper: 0, mid: 0, lower: 0 };
+      marketData[sym].ema9 = saved.ema9 || 0;
+      marketData[sym].ema21 = saved.ema21 || 0;
+      marketData[sym].ema50 = saved.ema50 || 0;
+      marketData[sym].ema200 = saved.ema200 || 0;
+      marketData[sym].stoch = saved.stoch || { k: 50, d: 50 };
+      marketData[sym].adx = saved.adx || 20;
+      marketData[sym].vwap = saved.vwap || saved.cur || 0;
+      marketData[sym].prevMacdHist = saved.prevMacdHist || 0;
+    });
+
+    console.log('[' + new Date().toLocaleTimeString() + '] Restored state from ' + state.savedAt);
+    state.portfolios.forEach(p => {
+      const hVal = Object.entries(p.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * (lastPrices[sym] || marketData[sym]?.cur || 0), 0);
+      console.log('  ' + p.id + ': $' + (p.cash + hVal).toFixed(0) + ' (' + p.tradeCount + ' trades)');
+    });
+    return true;
+  } catch (e) {
+    console.log('Failed to load state:', e.message);
+    return false;
+  }
+}
 
 // ─── FETCH REAL PRICES ───
 function fetchJSON(url) {
@@ -526,11 +606,15 @@ async function start() {
     actives: buildStrategies(p),
   }));
 
+  // Restore saved state (portfolios, candles, indicators)
+  const restored = loadState();
+
   server.listen(PORT, () => {
     console.log('\n  CryptoTA Server running at http://localhost:' + PORT);
     console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
     console.log('  4 portfolios | BTC+ETH only | 1min candles | 0.1% commission');
-    console.log('\n  To expose to internet, run: ngrok http ' + PORT + '\n');
+    if (restored) console.log('  State restored from disk');
+    console.log('');
   });
 
   // Connect Binance WebSocket for real-time crypto
@@ -544,6 +628,13 @@ async function start() {
 
   // CoinGecko as fallback every 60 seconds
   setInterval(fetchCoinGeckoPrices, 60000);
+
+  // Save state to disk every 30 seconds
+  setInterval(saveState, STATE_SAVE_INTERVAL);
+
+  // Save state on shutdown
+  process.on('SIGINT', () => { saveState(); console.log('\nState saved. Goodbye!'); process.exit(0); });
+  process.on('SIGTERM', () => { saveState(); process.exit(0); });
 }
 
 start();

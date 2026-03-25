@@ -2,3 +2,4 @@ node_modules/
 state.json
 ngrok_recovery_codes.txt
 .env
+logs/

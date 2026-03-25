@@ -255,17 +255,17 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 // Risk signals (TP/SL/Trailing) always execute immediately (bypass scoring)
 var PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "BTC+ETH, high conviction, steady returns",
-    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
+    desc: "Blue chips + BTC/ETH, steady returns",
+    assets: ["BTC", "ETH", "AAPL", "MSFT", "GOOGL", "JPM", "V", "GOLD"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
     overrides: {
       rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85,
-      tp_pct: 1.6, sl_pct: 0.8, trailing: 0.6, // 1.6:1 R:R after commission
+      tp_pct: 1.6, sl_pct: 0.8, trailing: 0.6,
       bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.2, vol_spike_s: 2.2,
       breakout_high: 15, breakdown: 15, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "BTC+ETH, balanced approach",
-    assets: ["BTC", "ETH"], cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.5,
+    desc: "Diversified crypto + tech stocks",
+    assets: ["BTC", "ETH", "SOL", "LINK", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOLD"], cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.5,
     overrides: {
       rsi_ob: 32, rsi_os: 68, stoch_ob: 22, stoch_os: 78,
       tp_pct: 2.0, sl_pct: 1.0, trailing: 0.8,
@@ -273,8 +273,8 @@ var PROFILES = [
       breakout_high: 10, breakdown: 10, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "4 coins, active trading",
-    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.45, buyThreshold: 2, sellThreshold: 1,
+    desc: "Wide crypto + growth stocks",
+    assets: ["BTC", "ETH", "SOL", "LINK", "AVAX", "DOGE", "NVDA", "TSLA", "AMD", "COIN", "META", "GOLD"], cashPct: 0.45, buyThreshold: 2, sellThreshold: 1,
     overrides: {
       rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
       tp_pct: 3.0, sl_pct: 1.5, trailing: 1.2,
@@ -283,8 +283,8 @@ var PROFILES = [
       ema50_bounce: 0.8, vwap_buy: 0.15, vwap_sell: 0.15, adx_trend_b: 18,
     } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "6 coins, max capital deployment",
-    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1,
+    desc: "All assets, max capital deployment",
+    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK", "DOT", "ADA", "NVDA", "TSLA", "AMD", "COIN", "META", "NFLX", "UBER", "GOLD"], cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1,
     overrides: {
       rsi_ob: 46, rsi_os: 54, stoch_ob: 42, stoch_os: 58,
       tp_pct: 5.0, sl_pct: 3.0, trailing: 2.0,

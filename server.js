@@ -4,25 +4,36 @@ const path = require('path');
 const WebSocket = require('ws');
 const https = require('https');
 
+// Load .env file
+const envPath = path.resolve(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    const [k, v] = line.split('=');
+    if (k && v) process.env[k.trim()] = v.trim();
+  });
+}
+
 const PORT = 3000;
 const TICK_MS = 2000;
 const CANDLE_TICKS = 30; // 30 ticks x 2s = 60 seconds = 1 minute candles
 const PRICE_FETCH_INTERVAL = 30000;
 const DEFAULT_CASH = 100000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
+const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
+const TWELVEDATA_INTERVAL = 60000; // 1 request per minute (8 credits/min limit)
 // Cooldown per profile (ms) - conservative waits long, YOLO trades fast
 const COOLDOWNS = {
-  conservative: 300000,  // 5 minutes
-  moderate: 180000,      // 3 minutes
-  aggressive: 120000,    // 2 minutes
-  yolo: 120000,          // 2 minutes
+  conservative: 180000,  // 3 minutes
+  moderate: 120000,      // 2 minutes
+  aggressive: 60000,     // 1 minute
+  yolo: 60000,           // 1 minute
 };
 const STATE_FILE = path.resolve(__dirname, 'state.json');
 const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
 
 // ─── ASSET DEFINITIONS ───
 const COINS = {
-  // Crypto (20) - real-time via Binance + CoinGecko
+  // Crypto (20) - real-time via Binance WebSocket + CoinGecko fallback
   BTC: { name: "Bitcoin", cgId: "bitcoin", type: "crypto" },
   ETH: { name: "Ethereum", cgId: "ethereum", type: "crypto" },
   SOL: { name: "Solana", cgId: "solana", type: "crypto" },
@@ -43,34 +54,29 @@ const COINS = {
   OP: { name: "Optimism", cgId: "optimism", type: "crypto" },
   SUI: { name: "Sui", cgId: "sui", type: "crypto" },
   FIL: { name: "Filecoin", cgId: "filecoin", type: "crypto" },
-  // Commodities - simulated from initial prices
-  GOLD: { name: "Gold", type: "commodity", price: 3020.00 },
-  SILVER: { name: "Silver", type: "commodity", price: 33.50 },
-  PLAT: { name: "Platinum", type: "commodity", price: 1020.00 },
-  COPPER: { name: "Copper", type: "commodity", price: 4.85 },
-  OIL: { name: "Crude Oil", type: "commodity", price: 78.50 },
-  NATGAS: { name: "Natural Gas", type: "commodity", price: 3.45 },
-  // Stocks (20) - simulated from initial prices
-  AAPL: { name: "Apple", type: "stock", price: 178.50 },
-  MSFT: { name: "Microsoft", type: "stock", price: 420.50 },
-  GOOGL: { name: "Alphabet", type: "stock", price: 155.80 },
-  AMZN: { name: "Amazon", type: "stock", price: 185.60 },
-  NVDA: { name: "NVIDIA", type: "stock", price: 875.30 },
-  META: { name: "Meta", type: "stock", price: 505.20 },
-  TSLA: { name: "Tesla", type: "stock", price: 248.30 },
-  JPM: { name: "JPMorgan", type: "stock", price: 198.40 },
-  V: { name: "Visa", type: "stock", price: 282.60 },
-  WMT: { name: "Walmart", type: "stock", price: 168.90 },
-  NFLX: { name: "Netflix", type: "stock", price: 628.50 },
-  AMD: { name: "AMD", type: "stock", price: 162.30 },
-  CRM: { name: "Salesforce", type: "stock", price: 272.40 },
-  ORCL: { name: "Oracle", type: "stock", price: 125.80 },
-  INTC: { name: "Intel", type: "stock", price: 43.20 },
-  DIS: { name: "Disney", type: "stock", price: 112.40 },
-  BA: { name: "Boeing", type: "stock", price: 178.90 },
-  PYPL: { name: "PayPal", type: "stock", price: 62.50 },
-  UBER: { name: "Uber", type: "stock", price: 78.30 },
-  COIN: { name: "Coinbase", type: "stock", price: 225.60 },
+  // Commodity - real-time via Twelve Data (XAU/USD)
+  GOLD: { name: "Gold", type: "commodity", tdSymbol: "XAU/USD" },
+  // Stocks (20) - real-time via Twelve Data API
+  AAPL: { name: "Apple", type: "stock", tdSymbol: "AAPL" },
+  MSFT: { name: "Microsoft", type: "stock", tdSymbol: "MSFT" },
+  GOOGL: { name: "Alphabet", type: "stock", tdSymbol: "GOOGL" },
+  AMZN: { name: "Amazon", type: "stock", tdSymbol: "AMZN" },
+  NVDA: { name: "NVIDIA", type: "stock", tdSymbol: "NVDA" },
+  META: { name: "Meta", type: "stock", tdSymbol: "META" },
+  TSLA: { name: "Tesla", type: "stock", tdSymbol: "TSLA" },
+  JPM: { name: "JPMorgan", type: "stock", tdSymbol: "JPM" },
+  V: { name: "Visa", type: "stock", tdSymbol: "V" },
+  WMT: { name: "Walmart", type: "stock", tdSymbol: "WMT" },
+  NFLX: { name: "Netflix", type: "stock", tdSymbol: "NFLX" },
+  AMD: { name: "AMD", type: "stock", tdSymbol: "AMD" },
+  CRM: { name: "Salesforce", type: "stock", tdSymbol: "CRM" },
+  ORCL: { name: "Oracle", type: "stock", tdSymbol: "ORCL" },
+  INTC: { name: "Intel", type: "stock", tdSymbol: "INTC" },
+  DIS: { name: "Disney", type: "stock", tdSymbol: "DIS" },
+  BA: { name: "Boeing", type: "stock", tdSymbol: "BA" },
+  PYPL: { name: "PayPal", type: "stock", tdSymbol: "PYPL" },
+  UBER: { name: "Uber", type: "stock", tdSymbol: "UBER" },
+  COIN: { name: "Coinbase", type: "stock", tdSymbol: "COIN" },
 };
 
 // ─── TA FUNCTIONS ───
@@ -249,42 +255,42 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 // Risk signals (TP/SL/Trailing) always execute immediately (bypass scoring)
 var PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "BTC+ETH, high conviction, fast rotation",
-    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 4, sellThreshold: 2,
+    desc: "BTC+ETH, high conviction, steady returns",
+    assets: ["BTC", "ETH"], cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
     overrides: {
-      rsi_ob: 22, rsi_os: 78, stoch_ob: 12, stoch_os: 88,
-      tp_pct: 0.8, sl_pct: 0.5, trailing: 0.4, // Quick TP to rotate capital
-      bb_lower: 0.02, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 2.5,
-      breakout_high: 20, breakdown: 20, dip_rsi_macd: 30, dip_rsi_macd_s: 70,
+      rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85,
+      tp_pct: 1.6, sl_pct: 0.8, trailing: 0.6, // 1.6:1 R:R after commission
+      bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.2, vol_spike_s: 2.2,
+      breakout_high: 15, breakdown: 15, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "BTC+ETH, balanced rotation",
-    assets: ["BTC", "ETH"], cashPct: 0.40, buyThreshold: 3, sellThreshold: 1.5,
+    desc: "BTC+ETH, balanced approach",
+    assets: ["BTC", "ETH"], cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.5,
     overrides: {
-      rsi_ob: 30, rsi_os: 70, stoch_ob: 20, stoch_os: 80,
-      tp_pct: 1.2, sl_pct: 0.8, trailing: 0.6,
-      bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.8, vol_spike_s: 1.8,
-      breakout_high: 12, breakdown: 12, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
+      rsi_ob: 32, rsi_os: 68, stoch_ob: 22, stoch_os: 78,
+      tp_pct: 2.0, sl_pct: 1.0, trailing: 0.8,
+      bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.6, vol_spike_s: 1.6,
+      breakout_high: 10, breakdown: 10, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "4 coins, fast rotation",
-    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.50, buyThreshold: 2, sellThreshold: 1,
+    desc: "4 coins, active trading",
+    assets: ["BTC", "ETH", "SOL", "LINK"], cashPct: 0.45, buyThreshold: 2, sellThreshold: 1,
     overrides: {
       rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
-      tp_pct: 2.0, sl_pct: 1.5, trailing: 1.0,
-      bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.1, vol_spike_s: 1.1,
-      breakout_high: 5, breakdown: 5, dip_rsi_macd: 46, dip_rsi_macd_s: 54,
-      ema50_bounce: 0.8, vwap_buy: 0.1, vwap_sell: 0.1, adx_trend_b: 18,
+      tp_pct: 3.0, sl_pct: 1.5, trailing: 1.2,
+      bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.2, vol_spike_s: 1.2,
+      breakout_high: 6, breakdown: 6, dip_rsi_macd: 44, dip_rsi_macd_s: 56,
+      ema50_bounce: 0.8, vwap_buy: 0.15, vwap_sell: 0.15, adx_trend_b: 18,
     } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
     desc: "6 coins, max capital deployment",
-    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.60, buyThreshold: 1, sellThreshold: 1,
+    assets: ["BTC", "ETH", "SOL", "DOGE", "AVAX", "LINK"], cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1,
     overrides: {
-      rsi_ob: 48, rsi_os: 52, stoch_ob: 45, stoch_os: 55,
-      tp_pct: 3.0, sl_pct: 2.0, trailing: 1.5,
+      rsi_ob: 46, rsi_os: 54, stoch_ob: 42, stoch_os: 58,
+      tp_pct: 5.0, sl_pct: 3.0, trailing: 2.0,
       bb_lower: 0.5, bb_upper: 0.5, vol_spike_b: 0.8, vol_spike_s: 0.8,
-      breakout_high: 3, breakdown: 3, dip_rsi_macd: 49, dip_rsi_macd_s: 51,
-      ema50_bounce: 1.5, vwap_buy: 0.05, vwap_sell: 0.05, adx_trend_b: 12,
+      breakout_high: 4, breakdown: 4, dip_rsi_macd: 48, dip_rsi_macd_s: 52,
+      ema50_bounce: 1.5, vwap_buy: 0.08, vwap_sell: 0.08, adx_trend_b: 14,
     } },
 ];
 
@@ -463,6 +469,10 @@ function connectBinance() {
         for (var sym in BINANCE_SYMBOLS) {
           if (BINANCE_SYMBOLS[sym] === symbol.toLowerCase()) {
             lastPrices[sym] = parseFloat(msg.p);
+            // Track real volume
+            if (marketData[sym] && msg.q) {
+              marketData[sym].building.v += parseFloat(msg.q);
+            }
             break;
           }
         }
@@ -508,9 +518,47 @@ async function fetchCoinGeckoPrices() {
   }
 }
 
+// ─── TWELVE DATA (Stocks + Gold) ───
+// 8 credits/min limit, each symbol = 1 credit
+// Split 21 symbols into 3 batches of 7-8, rotate 1 batch per minute
+const tdSymbols = Object.entries(COINS)
+  .filter(([_, c]) => c.tdSymbol)
+  .map(([sym, c]) => ({ sym, tdSymbol: c.tdSymbol }));
+const TD_BATCHES = [];
+for (let i = 0; i < tdSymbols.length; i += 7) {
+  TD_BATCHES.push(tdSymbols.slice(i, i + 7));
+}
+let tdBatchIndex = 0;
+
+async function fetchTwelveDataBatch() {
+  if (!TWELVEDATA_KEY || TD_BATCHES.length === 0) return;
+  const batch = TD_BATCHES[tdBatchIndex % TD_BATCHES.length];
+  tdBatchIndex++;
+  const symbols = batch.map(b => b.tdSymbol).join(',');
+  try {
+    const data = await fetchJSON('https://api.twelvedata.com/price?symbol=' + symbols + '&apikey=' + TWELVEDATA_KEY);
+    let updated = 0;
+    batch.forEach(b => {
+      const entry = data[b.tdSymbol] || data;
+      if (entry && entry.price && !entry.code) {
+        lastPrices[b.sym] = parseFloat(entry.price);
+        updated++;
+      }
+    });
+    if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] TwelveData batch ' + (tdBatchIndex) + ': updated ' + updated + ' prices (' + batch.map(b => b.sym).join(',') + ')');
+  } catch(e) {
+    console.log('TwelveData fetch failed:', e.message);
+  }
+}
+
+// Rotate batches: 1 batch per minute, full cycle every 3 minutes
+setInterval(fetchTwelveDataBatch, TWELVEDATA_INTERVAL);
+
 async function fetchRealPrices() {
   await fetchCoinGeckoPrices();
-  console.log('[' + new Date().toLocaleTimeString() + '] Prices loaded: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH + ' +' + (Object.keys(COINS).length - 2) + ' more');
+  // Fetch first batch of stocks/gold immediately
+  await fetchTwelveDataBatch();
+  console.log('[' + new Date().toLocaleTimeString() + '] Prices loaded: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH + ' AAPL=$' + (lastPrices.AAPL || '?') + ' GOLD=$' + (lastPrices.GOLD || '?'));
 }
 
 // ─── PRICE TICK ───
@@ -520,26 +568,16 @@ function priceTick() {
 
   Object.keys(COINS).forEach(sym => {
     const sd = marketData[sym];
-    const coin = COINS[sym];
-    var np;
-    if (coin.type === 'crypto') {
-      // Real price from Binance/CoinGecko
-      np = lastPrices[sym] || sd.cur;
-    } else {
-      // Stocks: simulate with small random walk from last known price
-      var prev = sd.cur || coin.price || 100;
-      var vol = 0.0015; // 0.15% per tick volatility
-      var drift = 0.000002;
-      np = Math.max(prev * 0.5, +(prev + (Math.random() - 0.5) * 2 * vol * prev + drift * prev).toFixed(2));
-      lastPrices[sym] = np;
-    }
+    // All prices come from real sources (Binance/CoinGecko for crypto, TwelveData for stocks/gold)
+    var np = lastPrices[sym] || sd.cur;
+    if (!np || np <= 0) return; // Skip if no real price yet
     sd.cur = np;
 
     const b = sd.building;
     b.h = Math.max(b.h, np);
     b.l = Math.min(b.l, np);
     b.c = np;
-    b.v += Math.random() * 50 + 10;
+    b.v += 1; // Volume increments per tick, real volume not available
     b.tickCount++;
 
     if (b.tickCount >= CANDLE_TICKS) {
@@ -823,7 +861,9 @@ function runStrategies() {
       }
 
       // --- SCORING-BASED BUY ---
-      if (buyScore >= buyThreshold && buyScore > sellScore) {
+      // Exposure limit: conservative/moderate cap at 80%, aggressive 90%, yolo 95%
+      var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
+      if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
         if (availableCash < 100) return;
         // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
         var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);

@@ -20,7 +20,7 @@ const PRICE_FETCH_INTERVAL = 30000;
 const DEFAULT_CASH = 100000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
-const TWELVEDATA_INTERVAL = 60000; // 1 request per minute (8 credits/min limit)
+const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
 // Cooldown per profile (ms) - conservative waits long, YOLO trades fast
 const COOLDOWNS = {
   conservative: 180000,  // 3 minutes
@@ -532,7 +532,16 @@ let tdBatchIndex = 0;
 
 async function fetchTwelveDataBatch() {
   if (!TWELVEDATA_KEY || TD_BATCHES.length === 0) return;
-  const batch = TD_BATCHES[tdBatchIndex % TD_BATCHES.length];
+  // US market hours: Mon-Fri 14:30-21:00 UTC (skip weekends + off-hours to save credits)
+  var now = new Date();
+  var utcH = now.getUTCHours(), utcM = now.getUTCMinutes(), day = now.getUTCDay();
+  var marketOpen = day >= 1 && day <= 5 && (utcH > 14 || (utcH === 14 && utcM >= 30)) && utcH < 21;
+  // During market hours: fetch every interval. Off-hours: fetch only GOLD batch (index 0) every 3rd cycle
+  if (!marketOpen) {
+    if (tdBatchIndex % 3 !== 0) { tdBatchIndex++; return; } // Only GOLD batch off-hours
+  }
+  var batchIdx = marketOpen ? (tdBatchIndex % TD_BATCHES.length) : 0; // Off-hours: only first batch (includes GOLD)
+  var batch = TD_BATCHES[batchIdx];
   tdBatchIndex++;
   const symbols = batch.map(b => b.tdSymbol).join(',');
   try {

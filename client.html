@@ -163,6 +163,7 @@ function App() {
 
   const prices = state.prices;
   const pfStats = state.portfolios || [];
+  const allSymbols = Object.keys(prices).filter(s => prices[s] && prices[s].cur > 0);
   const sd = prices[selected] || { cur: 0, candles: [], rsi: 50, macd: { hist: 0 }, bb: {}, stoch: { k: 50 }, adx: 20 };
   const ch = sd.cur - (sd.candles[0]?.o || sd.cur);
   const chP = sd.candles.length > 0 ? ch / (sd.candles[0]?.o || sd.cur) : 0;
@@ -665,12 +666,34 @@ function App() {
                       <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(34,197,94,0.1)", color: "#22c55e", fontFamily: "var(--m)" }}>Buy Threshold: {prof.buyThreshold}</span>
                       <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(239,68,68,0.1)", color: "#ef4444", fontFamily: "var(--m)" }}>Sell Threshold: {prof.sellThreshold}</span>
                       <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(99,102,241,0.1)", color: "#a5b4fc", fontFamily: "var(--m)" }}>Position: {(prof.cashPct * 100).toFixed(0)}%</span>
-                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.05)", color: "#6b7280", fontFamily: "var(--m)" }}>Assets: {prof.assets.join(', ')}</span>
+                      <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.05)", color: "#6b7280", fontFamily: "var(--m)" }}>Assets: {prof.assets.length}/{allSymbols.length}</span>
                     </div>
 
                     {/* Editable params */}
                     {isEditing && (
                       <div style={{ marginTop: 8 }}>
+                        {/* Asset toggles */}
+                        <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 6 }}>TRADEABLE ASSETS ({prof.assets.length}/{allSymbols.length})</div>
+                        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", marginBottom: 10 }}>
+                          <button onClick={() => sendWs({ type: 'updateConfig', id: prof.id, assets: allSymbols })} style={{ padding: "3px 8px", borderRadius: 3, border: "1px solid #1e293b", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontSize: 8, cursor: "pointer", fontFamily: "var(--m)", fontWeight: 600 }}>ALL</button>
+                          <button onClick={() => sendWs({ type: 'updateConfig', id: prof.id, assets: [] })} style={{ padding: "3px 8px", borderRadius: 3, border: "1px solid #1e293b", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 8, cursor: "pointer", fontFamily: "var(--m)", fontWeight: 600 }}>NONE</button>
+                          <button onClick={() => sendWs({ type: 'updateConfig', id: prof.id, assets: allSymbols.filter(s => (state.prices[s]||{}).type === 'crypto') })} style={{ padding: "3px 8px", borderRadius: 3, border: "1px solid #1e293b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontSize: 8, cursor: "pointer", fontFamily: "var(--m)", fontWeight: 600 }}>CRYPTO</button>
+                          <button onClick={() => sendWs({ type: 'updateConfig', id: prof.id, assets: allSymbols.filter(s => (state.prices[s]||{}).type === 'stock') })} style={{ padding: "3px 8px", borderRadius: 3, border: "1px solid #1e293b", background: "rgba(99,102,241,0.1)", color: "#a5b4fc", fontSize: 8, cursor: "pointer", fontFamily: "var(--m)", fontWeight: 600 }}>STOCKS</button>
+                        </div>
+                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 12 }}>
+                          {allSymbols.map(sym => {
+                            const active = prof.assets.includes(sym);
+                            const type = (state.prices[sym]||{}).type;
+                            const tc = type === 'crypto' ? '#f59e0b' : type === 'stock' ? '#a5b4fc' : '#22c55e';
+                            return (
+                              <button key={sym} onClick={() => {
+                                const newAssets = active ? prof.assets.filter(a => a !== sym) : [...prof.assets, sym];
+                                sendWs({ type: 'updateConfig', id: prof.id, assets: newAssets });
+                              }} style={{ padding: "3px 7px", borderRadius: 4, border: active ? `1px solid ${tc}` : "1px solid #1e293b", background: active ? `${tc}15` : "transparent", color: active ? tc : "#4b5563", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)", fontWeight: active ? 600 : 400, opacity: active ? 1 : 0.5 }}>{sym}</button>
+                            );
+                          })}
+                        </div>
+
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
                           {[["buyThreshold", "Buy Threshold", prof.buyThreshold], ["sellThreshold", "Sell Threshold", prof.sellThreshold], ["cashPct", "Position %", prof.cashPct]].map(([key, label, val]) => (
                             <div key={key} style={{ background: "#0a0e17", borderRadius: 4, padding: 6 }}>

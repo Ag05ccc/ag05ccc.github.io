@@ -978,7 +978,7 @@ function getState() {
   Object.keys(COINS).forEach(sym => {
     const sd = marketData[sym];
     prices[sym] = {
-      cur: sd.cur,
+      cur: sd.cur, type: COINS[sym].type, name: COINS[sym].name,
       candles: sd.candles.slice(-200),
       rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
       ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
@@ -1086,13 +1086,20 @@ wss.on('connection', function(ws) {
         resetPortfolio(msg.id);
         broadcast();
       }
-      if (msg.type === 'updateConfig' && msg.id && msg.overrides) {
+      if (msg.type === 'updateConfig' && msg.id) {
         var prof = PROFILES.find(function(p) { return p.id === msg.id; });
         if (prof) {
-          Object.keys(msg.overrides).forEach(function(k) { prof.overrides[k] = msg.overrides[k]; });
+          if (msg.overrides) Object.keys(msg.overrides).forEach(function(k) { prof.overrides[k] = msg.overrides[k]; });
           if (msg.buyThreshold !== undefined) prof.buyThreshold = msg.buyThreshold;
           if (msg.sellThreshold !== undefined) prof.sellThreshold = msg.sellThreshold;
           if (msg.cashPct !== undefined) prof.cashPct = msg.cashPct;
+          if (msg.assets !== undefined) {
+            prof.assets = msg.assets;
+            // Rebuild strategies for this profile
+            var pf = portfolios.find(function(p) { return p.id === msg.id; });
+            if (pf) pf.strategies = buildStrategies(prof);
+            console.log('[' + new Date().toLocaleTimeString() + '] Assets updated for ' + msg.id + ': ' + msg.assets.length + ' assets');
+          }
           console.log('[' + new Date().toLocaleTimeString() + '] Config updated: ' + msg.id);
           broadcast();
         }

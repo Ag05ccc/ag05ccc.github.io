@@ -211,7 +211,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["settings", "Settings"], ["releases", "v1.5"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -711,8 +711,24 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.7.0", date: "2026-03-25", changes: [
+                  "All prices now real: Twelve Data API for 20 stocks + Gold (XAU/USD)",
+                  "Smart API usage: market hours vs off-hours batching (~500/800 daily credits)",
+                  "Removed unavailable commodities (Silver, Platinum, Copper, Oil, NatGas)",
+                  "API key secured in .env file, never pushed to GitHub",
+                ]},
+                { v: "1.6.0", date: "2026-03-25", changes: [
+                  "Fixed regime 'unknown' → always resolves to trending/ranging/mixed",
+                  "Fixed candlestick chart time labels (no more Invalid Date)",
+                  "Improved candlestick rendering with proper axes",
+                  "Trade reasons moved to left side for visibility",
+                  "Conservative buyThreshold 4→3, sell threshold lowered for all profiles",
+                  "Exposure limit: Conservative 80%, Aggressive 90%, YOLO 95%",
+                  "Cooldowns adjusted: Conservative 3min, Moderate 2min, Aggressive/YOLO 1min",
+                  "Conservative TP recalibrated to 1.6% (1.6:1 R:R after commission)",
+                ]},
                 { v: "1.5.0", date: "2026-03-24", changes: [
-                  "Commodities: Gold, Silver, Platinum, Copper, Oil, Natural Gas",
+                  "Gold (XAU/USD) via Twelve Data",
                   "Mobile responsive UI - sidebar, charts, trade log",
                   "Enriched trade logs: P&L, indicators, exposure, cash flow per trade",
                   "CSV/JSON export with all fields",

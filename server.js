@@ -257,41 +257,43 @@ var PROFILES = [
   // All profiles trade ALL 41 assets - differentiation is in thresholds, sizing, and cooldowns
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
     desc: "All 41 assets, strict thresholds, steady returns",
-    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.5,
+    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.0,
     overrides: {
-      rsi_ob: 25, rsi_os: 75, stoch_ob: 15, stoch_os: 85,
+      rsi_ob: 28, rsi_os: 72, stoch_ob: 20, stoch_os: 80,
       tp_pct: 1.6, sl_pct: 0.8, trailing: 0.6,
-      bb_lower: 0.05, bb_upper: 0.05, vol_spike_b: 2.2, vol_spike_s: 2.2,
-      breakout_high: 15, breakdown: 15, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
+      bb_lower: 0.05, bb_upper: 0.03, vol_spike_b: 2.2, vol_spike_s: 1.8,
+      breakout_high: 15, breakdown: 12, dip_rsi_macd: 35, dip_rsi_macd_s: 65,
+      vwap_sell: 0.05,
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
     desc: "All 41 assets, balanced thresholds",
-    assets: Object.keys(COINS), cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.5,
+    assets: Object.keys(COINS), cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.0,
     overrides: {
-      rsi_ob: 32, rsi_os: 68, stoch_ob: 22, stoch_os: 78,
+      rsi_ob: 35, rsi_os: 65, stoch_ob: 25, stoch_os: 75,
       tp_pct: 2.0, sl_pct: 1.0, trailing: 0.8,
-      bb_lower: 0.1, bb_upper: 0.1, vol_spike_b: 1.6, vol_spike_s: 1.6,
-      breakout_high: 10, breakdown: 10, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
+      bb_lower: 0.1, bb_upper: 0.08, vol_spike_b: 1.6, vol_spike_s: 1.3,
+      breakout_high: 10, breakdown: 8, dip_rsi_macd: 40, dip_rsi_macd_s: 60,
+      vwap_sell: 0.08,
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
     desc: "All 41 assets, loose thresholds, active trading",
-    assets: Object.keys(COINS), cashPct: 0.45, buyThreshold: 2, sellThreshold: 1,
+    assets: Object.keys(COINS), cashPct: 0.45, buyThreshold: 2, sellThreshold: 1.0,
     overrides: {
       rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
       tp_pct: 3.0, sl_pct: 1.5, trailing: 1.2,
-      bb_lower: 0.3, bb_upper: 0.3, vol_spike_b: 1.2, vol_spike_s: 1.2,
-      breakout_high: 6, breakdown: 6, dip_rsi_macd: 44, dip_rsi_macd_s: 56,
-      ema50_bounce: 0.8, vwap_buy: 0.15, vwap_sell: 0.15, adx_trend_b: 18,
+      bb_lower: 0.3, bb_upper: 0.2, vol_spike_b: 1.2, vol_spike_s: 1.0,
+      breakout_high: 6, breakdown: 5, dip_rsi_macd: 44, dip_rsi_macd_s: 56,
+      ema50_bounce: 0.8, vwap_buy: 0.15, vwap_sell: 0.1, adx_trend_b: 18,
     } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
     desc: "All 41 assets, max capital deployment",
-    assets: Object.keys(COINS), cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1,
+    assets: Object.keys(COINS), cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1.0,
     overrides: {
       rsi_ob: 46, rsi_os: 54, stoch_ob: 42, stoch_os: 58,
       tp_pct: 5.0, sl_pct: 3.0, trailing: 2.0,
-      bb_lower: 0.5, bb_upper: 0.5, vol_spike_b: 0.8, vol_spike_s: 0.8,
-      breakout_high: 4, breakdown: 4, dip_rsi_macd: 48, dip_rsi_macd_s: 52,
-      ema50_bounce: 1.5, vwap_buy: 0.08, vwap_sell: 0.08, adx_trend_b: 14,
+      bb_lower: 0.5, bb_upper: 0.3, vol_spike_b: 0.8, vol_spike_s: 0.6,
+      breakout_high: 4, breakdown: 3, dip_rsi_macd: 48, dip_rsi_macd_s: 52,
+      ema50_bounce: 1.5, vwap_buy: 0.08, vwap_sell: 0.05, adx_trend_b: 14,
     } },
 ];
 
@@ -806,10 +808,11 @@ function runStrategies() {
       });
 
       // ─── MULTI-TIMEFRAME GATE ───
-      // If 15min trend is down, block buy signals (reduce score to 0)
-      // If 15min trend is up, block sell signals (except risk)
-      if (trend15m === -1) buyScore = buyScore * 0.3; // Heavily penalize buys in downtrend
-      if (trend15m === 1) sellScore = sellScore * 0.3;  // Heavily penalize sells in uptrend
+      // If 15min trend is down, penalize buys
+      // NEVER penalize sells — we always want to be able to exit positions
+      if (trend15m === -1) buyScore = buyScore * 0.3;
+      // If 15min trend is up, give a small buy boost instead of blocking sells
+      if (trend15m === 1) buyScore = buyScore * 1.2;
 
       // ─── BLACK SWAN FILTER ───
       // Block all buys during crash
@@ -822,6 +825,9 @@ function runStrategies() {
       // Block buys when portfolio is over-exposed to holdings
       if (exposureLimited) {
         buyScore = 0;
+        // Auto-rebalance: boost sell score when over-exposed
+        sellScore += 1.5;
+        sellReasons.push('Over-exposed');
       }
 
       // Store scores for UI
@@ -855,6 +861,7 @@ function runStrategies() {
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
+        console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL(risk) ' + sym + ' qty=' + riskQty.toFixed(4) + ' $' + riskTotal.toFixed(0) + ' pnl=$' + riskPnl.toFixed(0) + ' reason=' + riskSellTriggered);
         pf.orders = [{
           sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price,
           commission: riskComm.toFixed(2), time: new Date().toISOString(),
@@ -891,6 +898,7 @@ function runStrategies() {
         pf.peaks[sym] = price;
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
+        console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' BUY ' + sym + ' qty=' + tq.toFixed(4) + ' $' + total.toFixed(0) + ' score=+' + buyScore.toFixed(1) + ' regime=' + regime.type + ' [' + buyReasons.join(', ') + ']');
         var prevHolding = (pf.holdings[sym] && pf.holdings[sym].qty) || 0;
         pf.orders = [{
           sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price,
@@ -908,7 +916,7 @@ function runStrategies() {
       }
 
       // --- SCORING-BASED SELL ---
-      else if (sellScore >= sellThreshold && sellScore > buyScore && pos && pos.qty > 0) {
+      else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
         var sq = pos.qty;
         var sellTotal = price * sq;
         var sellComm = sellTotal * COMMISSION_RATE;
@@ -919,6 +927,7 @@ function runStrategies() {
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
+        console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL ' + sym + ' qty=' + sq.toFixed(4) + ' $' + sellTotal.toFixed(0) + ' pnl=$' + sellPnl.toFixed(0) + ' score=-' + sellScore.toFixed(1) + ' regime=' + regime.type + ' [' + sellReasons.join(', ') + ']');
         pf.orders = [{
           sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price,
           commission: sellComm.toFixed(2), time: new Date().toISOString(),

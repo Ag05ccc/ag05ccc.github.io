@@ -165,7 +165,7 @@ const SIGNALS = [
   { id: "vol_spike_b", label: "Vol Spike Buy", side: "buy", category: "momentum", weight: 1.2 },
   { id: "hammer", label: "Hammer", side: "buy", category: "pattern", weight: 0.8 },  // Reduced: too frequent
   { id: "engulf_b", label: "Bull Engulfing", side: "buy", category: "pattern", weight: 1.5 },
-  { id: "vwap_buy", label: "Below VWAP", side: "buy", category: "mean-reversion", weight: 0.5 },  // Reduced: too frequent
+  { id: "vwap_buy", label: "Below VWAP", side: "buy", category: "neutral", weight: 0.5 },  // Neutral: VWAP is reference, not mean-reversion
   { id: "adx_trend_b", label: "ADX Trend Buy", side: "buy", category: "trend", weight: 1.0 },
   { id: "fib_buy", label: "Fib 61.8%", side: "buy", category: "mean-reversion", weight: 0.8 },
   { id: "dip_rsi_macd", label: "RSI+MACD Buy", side: "buy", category: "combo", weight: 2.5 },  // Best combo signal
@@ -180,7 +180,7 @@ const SIGNALS = [
   { id: "vol_spike_s", label: "Vol Spike Sell", side: "sell", category: "momentum", weight: 1.5 },  // Boosted
   { id: "shooting_star", label: "Shooting Star", side: "sell", category: "pattern", weight: 1.2 },
   { id: "engulf_s", label: "Bear Engulfing", side: "sell", category: "pattern", weight: 2.0 },  // Boosted
-  { id: "vwap_sell", label: "Above VWAP", side: "sell", category: "mean-reversion", weight: 0.8 },
+  { id: "vwap_sell", label: "Above VWAP", side: "sell", category: "neutral", weight: 0.8 },  // Neutral: VWAP is reference
   { id: "dip_rsi_macd_s", label: "RSI+MACD Sell", side: "sell", category: "combo", weight: 2.5 },
   { id: "breakdown", label: "Breakdown", side: "sell", category: "momentum", weight: 1.8 },  // Boosted
   { id: "ema200_break", label: "EMA200 Break", side: "sell", category: "trend", weight: 1.5 },
@@ -941,15 +941,45 @@ function runStrategies() {
       var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[pf.id] || 0.80;
       var exposureLimited = exposurePct >= maxExposure;
 
-      // Regime-based weight multipliers
-      // Ranging + downtrend detection: if ranging but price below EMA21, it's a disguised downtrend
-      var rangingDowntrend = regime.type === 'ranging' && sd.ema21 > 0 && sd.cur < sd.ema21;
-      var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
-      var meanRevMult = regime.type === 'ranging' ? (rangingDowntrend ? 0.5 : 1.5) : (regime.type === 'trending' ? 0.5 : 1.0);
+      // Regime-based weight multipliers with:
+      // 1. Profile-specific multiplier intensity (Conservative aggressive, YOLO mild)
+      // 2. Linear interpolation in transition zone (ADX 18-25)
+      // 3. Ranging downtrend protection
+      var profileRegime = {
+        conservative: { trendHigh: 2.0, trendLow: 0.3, mrHigh: 2.0, mrLow: 0.3 },
+        moderate:     { trendHigh: 1.5, trendLow: 0.5, mrHigh: 1.5, mrLow: 0.5 },
+        aggressive:   { trendHigh: 1.3, trendLow: 0.6, mrHigh: 1.3, mrLow: 0.6 },
+        yolo:         { trendHigh: 1.2, trendLow: 0.8, mrHigh: 1.2, mrLow: 0.8 },
+      };
+      var pr = profileRegime[pf.id] || profileRegime.moderate;
+      var adxVal = regime.adx || 20;
+
+      // Linear interpolation for smooth transition
+      // ADX <= 18: full ranging multipliers
+      // ADX >= 25: full trending multipliers
+      // 18 < ADX < 25: linear blend between ranging and trending
+      var trendMult, meanRevMult;
+      if (adxVal >= 25) {
+        trendMult = pr.trendHigh;   // trend signals boosted
+        meanRevMult = pr.mrLow;     // mean-rev suppressed
+      } else if (adxVal <= 18) {
+        trendMult = pr.trendLow;    // trend signals suppressed
+        meanRevMult = pr.mrHigh;    // mean-rev boosted
+      } else {
+        // Linear interpolation: ADX 18-25 => t goes 0.0 to 1.0
+        var t = (adxVal - 18) / 7;  // 0 at ADX=18, 1 at ADX=25
+        trendMult = pr.trendLow + t * (pr.trendHigh - pr.trendLow);
+        meanRevMult = pr.mrHigh + t * (pr.mrLow - pr.mrHigh);
+      }
+
+      // Ranging downtrend protection: if ranging but price below EMA21, suppress mean-rev buys
+      var rangingDowntrend = adxVal <= 18 && sd.ema21 > 0 && sd.cur < sd.ema21;
+      if (rangingDowntrend) meanRevMult = pr.mrLow; // Don't buy dips in a downtrend
+
       var regimeMultipliers = {
         'trend': trendMult, 'momentum': trendMult,
         'mean-reversion': meanRevMult,
-        'pattern': 1.0, 'combo': 1.2, 'risk': 0,
+        'neutral': 1.0, 'pattern': 1.0, 'combo': 1.2, 'risk': 0,
       };
 
       // Score all signals with CATEGORY CAP
@@ -1538,14 +1568,25 @@ const server = http.createServer((req, res) => {
             // Detect regime
             var regime = detectRegime(sd);
 
-            // Regime-based weight multipliers (same as live)
-            var rangingDowntrend = regime.type === 'ranging' && sd.ema21 > 0 && sd.cur < sd.ema21;
-            var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
-            var meanRevMult = regime.type === 'ranging' ? (rangingDowntrend ? 0.5 : 1.5) : (regime.type === 'trending' ? 0.5 : 1.0);
+            // Regime-based weight multipliers (same as live: profile-specific + linear interpolation)
+            var profileRegime = {
+              conservative: { trendHigh: 2.0, trendLow: 0.3, mrHigh: 2.0, mrLow: 0.3 },
+              moderate:     { trendHigh: 1.5, trendLow: 0.5, mrHigh: 1.5, mrLow: 0.5 },
+              aggressive:   { trendHigh: 1.3, trendLow: 0.6, mrHigh: 1.3, mrLow: 0.6 },
+              yolo:         { trendHigh: 1.2, trendLow: 0.8, mrHigh: 1.2, mrLow: 0.8 },
+            };
+            var pr = profileRegime[profileId] || profileRegime.moderate;
+            var adxVal = regime.adx || 20;
+            var trendMult, meanRevMult;
+            if (adxVal >= 25) { trendMult = pr.trendHigh; meanRevMult = pr.mrLow; }
+            else if (adxVal <= 18) { trendMult = pr.trendLow; meanRevMult = pr.mrHigh; }
+            else { var t = (adxVal - 18) / 7; trendMult = pr.trendLow + t * (pr.trendHigh - pr.trendLow); meanRevMult = pr.mrHigh + t * (pr.mrLow - pr.mrHigh); }
+            var rangingDowntrend = adxVal <= 18 && sd.ema21 > 0 && sd.cur < sd.ema21;
+            if (rangingDowntrend) meanRevMult = pr.mrLow;
             var regimeMultipliers = {
               'trend': trendMult, 'momentum': trendMult,
               'mean-reversion': meanRevMult,
-              'pattern': 1.0, 'combo': 1.2, 'risk': 0,
+              'neutral': 1.0, 'pattern': 1.0, 'combo': 1.2, 'risk': 0,
             };
 
             // Score signals with category cap (same as live)

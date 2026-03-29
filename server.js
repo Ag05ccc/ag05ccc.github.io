@@ -607,6 +607,7 @@ function priceTick() {
     // All prices come from real sources (Binance/CoinGecko for crypto, TwelveData for stocks/gold)
     var np = lastPrices[sym] || sd.cur;
     if (!np || np <= 0) return; // Skip if no real price yet
+    if (np !== sd.cur || !lastPriceUpdate[sym]) lastPriceUpdate[sym] = now;
     sd.cur = np;
 
     const b = sd.building;
@@ -642,6 +643,103 @@ function priceTick() {
       runStrategies();
     }
   });
+}
+
+// ─── PRE-TRADE RISK ENGINE ───
+var MAX_POSITIONS = { conservative: 8, moderate: 15, aggressive: 25, yolo: 41 };
+
+function preTradeRiskCheck(pf, side, symbol, qty, price, profile) {
+  var totalHVal = Object.entries(pf.holdings).reduce(function(s, entry) {
+    return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
+  }, 0);
+  var totalValue = pf.cash + totalHVal;
+  if (totalValue <= 0) totalValue = pf.startCash;
+  var tradeValue = qty * price;
+
+  // 1. Max single trade size: no trade > 30% of total portfolio value
+  if (tradeValue > totalValue * 0.30) {
+    return { allowed: false, reason: 'Trade size ' + (tradeValue / totalValue * 100).toFixed(0) + '% exceeds 30% max' };
+  }
+
+  // 2. Max position concentration: no single asset > 40% of portfolio (for buys)
+  if (side === 'buy') {
+    var existing = (pf.holdings[symbol] && pf.holdings[symbol].qty) || 0;
+    var posValue = (existing * price) + tradeValue;
+    if (posValue > totalValue * 0.40) {
+      return { allowed: false, reason: symbol + ' concentration ' + (posValue / totalValue * 100).toFixed(0) + '% exceeds 40% max' };
+    }
+  }
+
+  // 3. Daily loss limit: if today's realized losses > 5% of startCash, stop trading
+  var today = new Date().toISOString().slice(0, 10);
+  var ds = dailyStats[pf.id];
+  if (ds && ds.date === today && ds.loss >= pf.startCash * 0.05) {
+    return { allowed: false, reason: 'Daily loss limit reached ($' + ds.loss.toFixed(0) + ')' };
+  }
+
+  // 4. Max open positions
+  if (side === 'buy') {
+    var openPositions = Object.keys(pf.holdings).filter(function(s) {
+      var h = pf.holdings[s];
+      return h && h.qty > 0;
+    }).length;
+    var maxPos = MAX_POSITIONS[pf.id] || 15;
+    // Only count as new position if we don't already hold it
+    var isNew = !pf.holdings[symbol] || pf.holdings[symbol].qty <= 0;
+    if (isNew && openPositions >= maxPos) {
+      return { allowed: false, reason: 'Max positions (' + maxPos + ') reached' };
+    }
+  }
+
+  // 5. Minimum cash reserve: always keep 2% cash (for buys)
+  if (side === 'buy') {
+    var minReserve = pf.startCash * 0.02;
+    if (pf.cash - tradeValue < minReserve) {
+      return { allowed: false, reason: 'Would breach 2% cash reserve' };
+    }
+  }
+
+  return { allowed: true, reason: '' };
+}
+
+// ─── STRATEGY STATE MACHINE ───
+// States: RUNNING, DEGRADED, STOPPED
+var portfolioStates = {};  // { "conservative": "RUNNING", ... }
+var degradedSymbols = {};  // { "BTC": true } - symbols with stale data
+var lastPriceUpdate = {};  // { "BTC": timestamp } - last time price was updated
+
+function checkDataFreshness() {
+  var now = Date.now();
+  var staleThreshold = 5 * 60 * 1000; // 5 minutes
+  var staleSyms = {};
+
+  Object.keys(COINS).forEach(function(sym) {
+    if (lastPriceUpdate[sym] && (now - lastPriceUpdate[sym]) > staleThreshold) {
+      staleSyms[sym] = true;
+    }
+  });
+
+  degradedSymbols = staleSyms;
+
+  // Update portfolio states based on staleness
+  portfolios.forEach(function(pf) {
+    // Don't override STOPPED state (manual resume required)
+    if (portfolioStates[pf.id] === 'STOPPED') return;
+
+    var profile = PROFILES.find(function(p) { return p.id === pf.id; });
+    if (!profile) return;
+
+    var hasStale = profile.assets.some(function(sym) { return staleSyms[sym]; });
+    portfolioStates[pf.id] = hasStale ? 'DEGRADED' : 'RUNNING';
+  });
+}
+
+function resumePortfolio(id) {
+  portfolioStates[id] = 'RUNNING';
+  // Reset circuit breaker flag
+  if (lastScores[id]) lastScores[id]._circuitBreaker = false;
+  console.log('[' + new Date().toLocaleTimeString() + '] Portfolio resumed: ' + id);
+  return true;
 }
 
 // ─── SCORING-BASED STRATEGY ENGINE ───
@@ -762,9 +860,23 @@ function runStrategies() {
   var now = Date.now();
   var today = new Date().toISOString().slice(0, 10);
 
+  // Check data freshness for state machine
+  checkDataFreshness();
+
   portfolios.forEach(function(pf) {
     var profile = PROFILES.find(function(p) { return p.id === pf.id; });
     if (!profile) return;
+
+    // Initialize portfolio state if needed
+    if (!portfolioStates[pf.id]) portfolioStates[pf.id] = 'RUNNING';
+
+    // ─── STRATEGY STATE MACHINE ───
+    if (portfolioStates[pf.id] === 'STOPPED') {
+      if (!lastScores[pf.id]) lastScores[pf.id] = {};
+      lastScores[pf.id]._circuitBreaker = true;
+      return; // Manual resume required
+    }
+
     var buyThreshold = profile.buyThreshold || 3;
     var sellThreshold = profile.sellThreshold || 2;
     var cashPct = profile.cashPct || 0.10;
@@ -778,6 +890,8 @@ function runStrategies() {
     if (drawdownPct >= CIRCUIT_BREAKER_PCT) {
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
       lastScores[pf.id]._circuitBreaker = true;
+      portfolioStates[pf.id] = 'STOPPED';
+      console.log('[' + new Date().toLocaleTimeString() + '] CIRCUIT BREAKER: ' + pf.id + ' -> STOPPED (drawdown ' + (drawdownPct * 100).toFixed(1) + '%)');
       return; // Stop all trading for this portfolio
     }
 
@@ -912,6 +1026,9 @@ function runStrategies() {
       var minCashReserve = pf.startCash * 0.02;
       var availableCash = Math.max(0, pf.cash - minCashReserve);
 
+      // ─── DEGRADED STATE: skip symbols with stale data ───
+      if (portfolioStates[pf.id] === 'DEGRADED' && degradedSymbols[sym]) return;
+
       // --- RISK SELL (TP/SL/Trailing) — always execute immediately ---
       if (riskSellTriggered && pos && pos.qty > 0) {
         var riskFillPrice = price * (1 - slippagePct); // slippage: sell fills lower
@@ -956,6 +1073,13 @@ function runStrategies() {
         var commission = total * COMMISSION_RATE;
         if (total + commission > availableCash) return;
 
+        // Pre-trade risk check
+        var buyRisk = preTradeRiskCheck(pf, 'buy', sym, tq, buyFillPrice, profile);
+        if (!buyRisk.allowed) {
+          console.log('[' + new Date().toLocaleTimeString() + '] RISK REJECTED ' + pf.id + ' BUY ' + sym + ': ' + buyRisk.reason);
+          return;
+        }
+
         pf.cash -= total + commission;
         pf.totalCommission = (pf.totalCommission || 0) + commission;
         var old = pf.holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
@@ -996,6 +1120,14 @@ function runStrategies() {
         var sq = pos.qty;
         var sellTotal = sellFillPrice * sq;
         var sellComm = sellTotal * COMMISSION_RATE;
+
+        // Pre-trade risk check
+        var sellRisk = preTradeRiskCheck(pf, 'sell', sym, sq, sellFillPrice, profile);
+        if (!sellRisk.allowed) {
+          console.log('[' + new Date().toLocaleTimeString() + '] RISK REJECTED ' + pf.id + ' SELL ' + sym + ': ' + sellRisk.reason);
+          return;
+        }
+
         pf.cash += sellTotal - sellComm;
         pf.totalCommission = (pf.totalCommission || 0) + sellComm;
         var sellPnl = calcFifoPnl(pos, sq, sellFillPrice);
@@ -1082,6 +1214,7 @@ function getState() {
       tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
       totalCommission: pf.totalCommission || 0,
       totalValue: pf.cash + hVal, hVal, pnl: pf.cash + hVal - pf.startCash,
+      state: portfolioStates[pf.id] || 'RUNNING',
     };
   });
 
@@ -1651,6 +1784,10 @@ wss.on('connection', function(ws) {
       var msg = JSON.parse(raw);
       if (msg.type === 'reset' && msg.id) {
         resetPortfolio(msg.id);
+        broadcast();
+      }
+      if (msg.type === 'resume' && msg.id) {
+        resumePortfolio(msg.id);
         broadcast();
       }
       if (msg.type === 'updateConfig' && msg.id) {

@@ -3,3 +3,5 @@ state.json
 ngrok_recovery_codes.txt
 .env
 logs/
+backtest/data/1m/
+backtest/data/*.zip

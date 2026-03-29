@@ -1082,7 +1082,7 @@ function App() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                         <span style={{ fontSize: 20 }}>{pf.icon}</span>
                         <div>
-                          <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 15, color: pf.color }}>{pf.name}</div>
+                          <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 15, color: pf.color, display: "flex", alignItems: "center", gap: 6 }}>{pf.name} <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 3, fontWeight: 700, fontFamily: "var(--m)", background: pf.state === "STOPPED" ? "rgba(239,68,68,0.2)" : pf.state === "DEGRADED" ? "rgba(234,179,8,0.2)" : "rgba(34,197,94,0.2)", color: pf.state === "STOPPED" ? "#ef4444" : pf.state === "DEGRADED" ? "#eab308" : "#22c55e" }}>{pf.state || "RUNNING"}</span></div>
                           <div style={{ fontSize: 9, color: "#6b7280" }}>{pf.desc}</div>
                         </div>
                       </div>
@@ -1107,6 +1107,7 @@ function App() {
                       <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
                         <a href={"/api/portfolio/" + pf.id + "/export/csv"} download className="bt" style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #22c55e", background: "transparent", color: "#22c55e", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", textAlign: "center", textDecoration: "none" }}>CSV</a>
                         <a href={"/api/portfolio/" + pf.id + "/export/json"} download className="bt" style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #6366f1", background: "transparent", color: "#6366f1", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", textAlign: "center", textDecoration: "none" }}>JSON</a>
+                        {pf.state === "STOPPED" && <button onClick={() => sendWs({ type: 'resume', id: pf.id })} style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #eab308", background: "rgba(234,179,8,0.1)", color: "#eab308", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", cursor: "pointer" }}>RESUME</button>}
                         <button onClick={() => { if (confirm('Reset ' + pf.name + '?')) resetPf(pf.id); }} style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", cursor: "pointer" }}>RESET</button>
                       </div>
                     </div>

@@ -40,7 +40,7 @@
     </script>
     <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid } = Recharts;
+const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend } = Recharts;
 
 const COINS_META = {
   BTC: { name: "Bitcoin", type: "crypto" }, ETH: { name: "Ethereum", type: "crypto" },
@@ -418,6 +418,9 @@ function App() {
   const isMobile = window.innerWidth <= 768;
   const [editProfile, setEditProfile] = useState(null);
   const [compareStart, setCompareStart] = useState("");
+  const [simLoading, setSimLoading] = useState(false);
+  const [simResults, setSimResults] = useState(null);
+  const [simError, setSimError] = useState(null);
   const [histMode, setHistMode] = useState(false);
   const [histData, setHistData] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
@@ -523,6 +526,66 @@ function App() {
     compData.push(point);
   }
 
+  // Simulation: run backtest for all 4 profiles
+  const simProfiles = [
+    { id: "conservative", name: "Conservative", color: "#3b82f6" },
+    { id: "moderate", name: "Moderate", color: "#22c55e" },
+    { id: "aggressive", name: "Aggressive", color: "#f59e0b" },
+    { id: "yolo", name: "YOLO", color: "#ef4444" },
+  ];
+  const cryptoSymbols = Object.entries(COINS_META).filter(([, c]) => c.type === "crypto").map(([s]) => s);
+
+  function runSimulation() {
+    if (!compareStart) return;
+    setSimLoading(true);
+    setSimError(null);
+    setSimResults(null);
+    Promise.all(simProfiles.map(p =>
+      fetch('/api/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: p.id, symbols: cryptoSymbols, startDate: compareStart }),
+      }).then(r => r.json())
+    )).then(results => {
+      setSimLoading(false);
+      const err = results.find(r => r.error);
+      if (err) { setSimError(err.error); return; }
+      setSimResults(results);
+    }).catch(e => { setSimLoading(false); setSimError(e.message || 'Simulation failed'); });
+  }
+
+  function clearSimulation() {
+    setSimResults(null);
+    setSimError(null);
+    setSimLoading(false);
+  }
+
+  // Build simulation chart data by merging equity curves by date
+  const simChartData = (() => {
+    if (!simResults) return [];
+    const dateMap = {};
+    simResults.forEach((res, i) => {
+      const pid = simProfiles[i].id;
+      (res.equityCurve || []).forEach(pt => {
+        if (!dateMap[pt.date]) dateMap[pt.date] = { date: pt.date };
+        dateMap[pt.date][pid] = pt.value;
+      });
+    });
+    // Add buy & hold reference: normalize to 100k start
+    const firstResult = simResults[0];
+    const startCash = (firstResult && firstResult.metrics) ? firstResult.metrics.startCash : 100000;
+    const bhReturn = (firstResult && firstResult.metrics) ? firstResult.metrics.buyHoldReturn / 100 : 0;
+    const dates = Object.keys(dateMap).sort();
+    if (dates.length > 1) {
+      const bhStart = startCash;
+      const bhEnd = startCash * (1 + bhReturn);
+      dates.forEach((d, i) => {
+        dateMap[d].buyHold = +(bhStart + (bhEnd - bhStart) * (i / (dates.length - 1))).toFixed(2);
+      });
+    }
+    return dates.map(d => dateMap[d]);
+  })();
+
   return (
     <div style={{ "--m": "'JetBrains Mono',monospace", "--h": "'Space Grotesk',sans-serif", minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'Space Grotesk',sans-serif" }}>
 
@@ -610,14 +673,37 @@ function App() {
 
               <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
-                  <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>PORTFOLIO VALUE OVER TIME</div>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>{simResults ? "SIMULATED BACKTEST COMPARISON" : "PORTFOLIO VALUE OVER TIME"}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>FROM</span>
-                    <input type="date" value={compareStart} onChange={e => setCompareStart(e.target.value)} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 10, fontFamily: "var(--m)", outline: "none" }} />
-                    {compareStart && <button onClick={() => setCompareStart("")} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)" }}>Clear</button>}
+                    {!simResults && <>
+                      <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>FROM</span>
+                      <input type="date" value={compareStart} onChange={e => setCompareStart(e.target.value)} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 10, fontFamily: "var(--m)", outline: "none" }} />
+                      {compareStart && <button onClick={runSimulation} disabled={simLoading} style={{ padding: "3px 8px", borderRadius: 4, border: "none", background: simLoading ? "#374151" : "#f59e0b", color: simLoading ? "#9ca3af" : "#0a0e17", fontSize: 9, cursor: simLoading ? "not-allowed" : "pointer", fontFamily: "var(--m)", fontWeight: 700 }}>{simLoading ? "Running..." : "Simulate"}</button>}
+                    </>}
+                    {(simResults || simLoading) && <button onClick={() => { clearSimulation(); setCompareStart(""); }} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)" }}>Clear</button>}
+                    {!simResults && !simLoading && compareStart && <button onClick={() => setCompareStart("")} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)" }}>Reset</button>}
                   </div>
                 </div>
-                {compData.length > 2 ? (
+                {simError && <div style={{ padding: "8px 12px", marginBottom: 8, borderRadius: 6, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: 11, fontFamily: "var(--m)" }}>{simError}</div>}
+                {simLoading ? (
+                  <div style={{ height: 280, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                    <div style={{ display: "inline-block", width: 32, height: 32, border: "3px solid #1e293b", borderTop: "3px solid #f59e0b", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--m)" }}>Running 4 backtests from {compareStart}...</div>
+                  </div>
+                ) : simResults && simChartData.length > 2 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <LineChart data={simChartData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#6b7280" }} tickFormatter={d => d ? d.slice(5) : ""} interval={Math.max(1, Math.floor(simChartData.length / 8))} />
+                      <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={v => `$${fK(v)}`} />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={d => d} formatter={(v, name) => [`$${fK(v)}`, name]} />
+                      {simProfiles.map(p => (
+                        <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={false} isAnimationActive={false} />
+                      ))}
+                      <Line type="monotone" dataKey="buyHold" name="Buy & Hold" stroke="#6b7280" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : compData.length > 2 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -632,7 +718,55 @@ function App() {
                 ) : (
                   <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Warming up... strategies trigger on candle close</div>
                 )}
+                {simResults && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    {simProfiles.map(p => (
+                      <span key={p.id} style={{ fontSize: 9, fontFamily: "var(--m)", color: p.color, fontWeight: 600 }}>{"\u25CF"} {p.name}</span>
+                    ))}
+                    <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#6b7280", fontWeight: 600 }}>{"\u25CF"} Buy & Hold (dashed)</span>
+                  </div>
+                )}
               </div>
+
+              {/* Simulation comparison table */}
+              {simResults && (
+                <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", overflow: "hidden", marginBottom: 16 }}>
+                  <div style={{ padding: "10px 16px", fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.04)" }}>BACKTEST COMPARISON · {compareStart} to present</div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "var(--m)" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          {["Profile", "Total Return", "Win Rate", "Max Drawdown", "Sharpe", "Total Trades", "Final Equity"].map(h => (
+                            <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: "#6b7280", fontSize: 9, fontFamily: "var(--h)", fontWeight: 600 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {simResults.map((res, i) => {
+                          const m = res.metrics || {};
+                          const p = simProfiles[i];
+                          return (
+                            <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                              <td style={{ padding: "8px 12px", color: p.color, fontWeight: 700 }}>{p.name}</td>
+                              <td style={{ padding: "8px 12px", color: m.totalReturn >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{m.totalReturn >= 0 ? "+" : ""}{m.totalReturn}%</td>
+                              <td style={{ padding: "8px 12px", color: "#94a3b8" }}>{m.winRate}%</td>
+                              <td style={{ padding: "8px 12px", color: "#ef4444" }}>{m.maxDrawdown}%</td>
+                              <td style={{ padding: "8px 12px", color: m.sharpe >= 1 ? "#22c55e" : m.sharpe >= 0 ? "#f59e0b" : "#ef4444" }}>{m.sharpe}</td>
+                              <td style={{ padding: "8px 12px", color: "#94a3b8" }}>{m.totalTrades}</td>
+                              <td style={{ padding: "8px 12px", color: "#f8fafc", fontWeight: 600 }}>${fK(m.finalEquity)}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr style={{ background: "rgba(255,255,255,0.02)" }}>
+                          <td style={{ padding: "8px 12px", color: "#6b7280", fontWeight: 600 }}>Buy & Hold</td>
+                          <td style={{ padding: "8px 12px", color: (simResults[0]?.metrics?.buyHoldReturn || 0) >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{(simResults[0]?.metrics?.buyHoldReturn || 0) >= 0 ? "+" : ""}{simResults[0]?.metrics?.buyHoldReturn || 0}%</td>
+                          <td colSpan="5" style={{ padding: "8px 12px", color: "#4b5563", fontSize: 9 }}>Equal-weight crypto basket</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Cards */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>

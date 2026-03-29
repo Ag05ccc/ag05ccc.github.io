@@ -24,11 +24,13 @@ const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
 // Cooldown per profile (ms) - increased based on backtest (1h data = all negative)
 // Fewer trades = less commission drag = better returns
+// Cooldowns very high — commission was killing all returns
+// Daily candle backtest = 1 bar = 1 day, so cooldownBars matter more than ms for backtest
 const COOLDOWNS = {
-  conservative: 600000,  // 10 minutes
-  moderate: 300000,      // 5 minutes
-  aggressive: 180000,    // 3 minutes
-  yolo: 120000,          // 2 minutes
+  conservative: 3600000, // 60 minutes (live)
+  moderate: 1800000,     // 30 minutes
+  aggressive: 900000,    // 15 minutes
+  yolo: 600000,          // 10 minutes
 };
 const STATE_FILE = path.resolve(__dirname, 'state.json');
 const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
@@ -244,7 +246,16 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
     case "dip_rsi_macd_s": if (pos && pos.qty > 0 && sd.rsi > val && sd.macd.hist < 0 && sd.prevMacdHist >= 0) return 'RSI+MACD↓'; break;
     case "breakout_high": { var n = Math.floor(val); if (candles.length >= n) { var bhi = Math.max.apply(null, candles.slice(-n - 1, -1).map(function(c2){return c2.h;})); if (sd.cur > bhi) return 'Breakout'; } break; }
     case "breakdown": if (pos && pos.qty > 0 && candles.length >= Math.floor(val)) { var blo = Math.min.apply(null, candles.slice(-Math.floor(val) - 1, -1).map(function(c2){return c2.l;})); if (sd.cur < blo) return 'Breakdown'; } break;
-    case "tp_pct": if (pos && pos.qty > 0) { var pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl >= val) return 'TP +' + pl.toFixed(1) + '%'; } break;
+    case "tp_pct": if (pos && pos.qty > 0) {
+      var pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100;
+      // Dynamic TP: in trending market, let profits run (3x TP target)
+      // In ranging market, take profits early (1x TP target)
+      var tpMult = 1.0;
+      if (sd.adx >= 25) tpMult = 3.0;  // trending: 3x TP (e.g., 2% -> 6%)
+      else if (sd.adx >= 18) tpMult = 2.0; // mixed: 2x TP
+      // else ranging: 1x TP (original value)
+      if (pl >= val * tpMult) return 'TP +' + pl.toFixed(1) + '%';
+    } break;
     case "sl_pct": if (pos && pos.qty > 0) { var pl2 = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl2 <= -val) return 'SL ' + pl2.toFixed(1) + '%'; } break;
     case "trailing": if (pos && pos.qty > 0 && peakPrice) { var dr = ((peakPrice - sd.cur) / peakPrice) * 100; if (dr >= val) return 'Trail -' + dr.toFixed(1) + '%'; } break;
     case "ema200_trend": if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { var pc = (candles[candles.length - 2] || {}).c; if (pc && pc <= sd.ema200) return 'Above EMA200'; } break;
@@ -261,56 +272,53 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 // Profiles optimized via backtest on 20 cryptos (2017-2026)
 // Key changes: sell thresholds lowered (was 1.0 everywhere - too high for sells to fire),
 // TP/SL recalibrated for commission-adjusted R:R, cooldowns increased
+// OPTIMIZED v3: Dynamic TP, loose trailing (let trends run), fewer trades
+// Previous issue: TP too tight (2-5%) + too many trades = commission kills returns
+// Fix: TP 5-15% base (3x in trends), trailing 3-8%, higher buy thresholds
 var PROFILES = [
-  // Conservative: Best risk-adjusted (Sharpe 0.378, MaxDD 14.7%, WR 52%)
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "Strict thresholds, low drawdown, steady returns",
-    assets: Object.keys(COINS), cashPct: 0.20, buyThreshold: 3.5, sellThreshold: 0.8,
+    desc: "Few high-conviction trades, tight risk control",
+    assets: Object.keys(COINS), cashPct: 0.15, buyThreshold: 4.5, sellThreshold: 1.0,
     overrides: {
-      rsi_ob: 25, rsi_os: 75, stoch_ob: 18, stoch_os: 82,
-      tp_pct: 2.0, sl_pct: 0.8, trailing: 0.6,  // Net R:R = 1.8:0.6 = 3:1
+      rsi_ob: 22, rsi_os: 78, stoch_ob: 15, stoch_os: 85,
+      tp_pct: 5.0, sl_pct: 2.0, trailing: 3.0,  // Wide trailing lets trends run
       bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
-      breakout_high: 20, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
+      breakout_high: 25, breakdown: 15, dip_rsi_macd: 28, dip_rsi_macd_s: 72,
       vwap_sell: 0.03, vwap_buy: 0.05,
-      slippage: 0.0003, // 0.03% conservative slippage
+      slippage: 0.0003,
     } },
-  // Moderate: Balanced (backtest avg +31%, WR 48%)
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "Balanced thresholds, moderate risk",
+    desc: "Balanced approach, trend-following bias",
+    assets: Object.keys(COINS), cashPct: 0.20, buyThreshold: 4.0, sellThreshold: 1.0,
+    overrides: {
+      rsi_ob: 28, rsi_os: 72, stoch_ob: 20, stoch_os: 80,
+      tp_pct: 8.0, sl_pct: 3.0, trailing: 4.0,  // Let winners run longer
+      bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 1.2,
+      breakout_high: 18, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
+      vwap_sell: 0.05, vwap_buy: 0.08,
+      slippage: 0.0005,
+    } },
+  { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
+    desc: "Trend-following, wider stops, bigger moves",
+    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3.5, sellThreshold: 1.0,
+    overrides: {
+      rsi_ob: 32, rsi_os: 68, stoch_ob: 25, stoch_os: 75,
+      tp_pct: 12.0, sl_pct: 4.0, trailing: 5.0,  // Catch big moves
+      bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.0,
+      breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
+      ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 22,
+      slippage: 0.0007,
+    } },
+  { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
+    desc: "Maximum trend capture, high volatility tolerance",
     assets: Object.keys(COINS), cashPct: 0.30, buyThreshold: 3.0, sellThreshold: 0.8,
     overrides: {
-      rsi_ob: 30, rsi_os: 70, stoch_ob: 22, stoch_os: 78,
-      tp_pct: 2.5, sl_pct: 1.0, trailing: 0.8,  // Net R:R = 2.3:0.8 = 2.9:1
-      bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 1.8, vol_spike_s: 1.2,
-      breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
-      vwap_sell: 0.05, vwap_buy: 0.08,
-      slippage: 0.0005, // 0.05% moderate slippage
-    } },
-  // Aggressive: Higher risk (backtest: bad WR 40% but good on volatile coins)
-  // Tightened thresholds to improve WR from 40% -> target 45%+
-  { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "Active trading, wider thresholds",
-    assets: Object.keys(COINS), cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 0.8,
-    overrides: {
-      rsi_ob: 35, rsi_os: 65, stoch_ob: 28, stoch_os: 72,
-      tp_pct: 3.5, sl_pct: 1.5, trailing: 1.2,  // Net R:R = 3.3:1.3 = 2.5:1
-      bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.4, vol_spike_s: 1.0,
-      breakout_high: 8, breakdown: 6, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
-      ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 20,
-      slippage: 0.0007, // 0.07% aggressive slippage
-    } },
-  // YOLO: Max risk (backtest: highest return +67% but 62% MaxDD)
-  // Keep loose but increase sell sensitivity to avoid $0 lockup
-  { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "Maximum capital deployment, high risk",
-    assets: Object.keys(COINS), cashPct: 0.40, buyThreshold: 2.0, sellThreshold: 0.5,
-    overrides: {
-      rsi_ob: 40, rsi_os: 60, stoch_ob: 35, stoch_os: 65,
-      tp_pct: 5.0, sl_pct: 2.5, trailing: 1.8,
-      bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.0, vol_spike_s: 0.8,
-      breakout_high: 5, breakdown: 4, dip_rsi_macd: 45, dip_rsi_macd_s: 55,
-      ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 16,
-      slippage: 0.001, // 0.1% yolo slippage
+      rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70,
+      tp_pct: 15.0, sl_pct: 5.0, trailing: 8.0,  // Very wide: catch full trends
+      bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.2, vol_spike_s: 0.8,
+      breakout_high: 8, breakdown: 5, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
+      ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 18,
+      slippage: 0.001,
     } },
 ];
 
@@ -1445,6 +1453,10 @@ const server = http.createServer((req, res) => {
         var buyThreshold = profile.buyThreshold || 3;
         var sellThreshold = profile.sellThreshold || 0.8;
         var cashPct = profile.cashPct || 0.10;
+        // Per-symbol cooldown (in days/bars) - prevents overtrading
+        var lastTradeDay = {}; // { BTC: dayIdx }
+        var cooldownDays = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
+        var symCooldown = cooldownDays[profileId] || 3;
 
         // Track buy & hold for comparison
         var buyHoldStart = {};
@@ -1518,6 +1530,10 @@ const server = http.createServer((req, res) => {
             var peakPrice = peaks[sym];
             var price = sd.cur;
             if (price <= 0) return;
+
+            // Per-symbol cooldown: skip scoring signals if traded too recently
+            // Risk sells (TP/SL/Trailing) still checked below via riskSellTriggered
+            var inCooldown = lastTradeDay[sym] !== undefined && (dayIdx - lastTradeDay[sym]) < symCooldown;
 
             // Detect regime
             var regime = detectRegime(sd);
@@ -1611,11 +1627,12 @@ const server = http.createServer((req, res) => {
               });
               delete holdings[sym];
               delete peaks[sym];
+              lastTradeDay[sym] = dayIdx;
               return;
             }
 
-            // Scoring-based buy
-            if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
+            // Scoring-based buy (skip if in cooldown)
+            if (!inCooldown && buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
               if (availableCash < 100) return;
               var btBuyFill = price * (1 + btSlippage);
               var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);
@@ -1642,9 +1659,10 @@ const server = http.createServer((req, res) => {
                 reason: buyReasons.join(', '), regime: regime.type,
                 commission: +commission.toFixed(2),
               });
+              lastTradeDay[sym] = dayIdx;
             }
-            // Scoring-based sell
-            else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
+            // Scoring-based sell (skip if in cooldown)
+            else if (!inCooldown && sellScore >= sellThreshold && pos && pos.qty > 0) {
               var btSellFill = price * (1 - btSlippage);
               var sq = pos.qty;
               var sellTotal = btSellFill * sq;
@@ -1663,6 +1681,7 @@ const server = http.createServer((req, res) => {
               });
               delete holdings[sym];
               delete peaks[sym];
+              lastTradeDay[sym] = dayIdx;
             }
 
             // Update peak tracking

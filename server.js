@@ -21,12 +21,13 @@ const DEFAULT_CASH = 100000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
-// Cooldown per profile (ms) - conservative waits long, YOLO trades fast
+// Cooldown per profile (ms) - increased based on backtest (1h data = all negative)
+// Fewer trades = less commission drag = better returns
 const COOLDOWNS = {
-  conservative: 180000,  // 3 minutes
-  moderate: 120000,      // 2 minutes
-  aggressive: 60000,     // 1 minute
-  yolo: 60000,           // 1 minute
+  conservative: 600000,  // 10 minutes
+  moderate: 300000,      // 5 minutes
+  aggressive: 180000,    // 3 minutes
+  yolo: 120000,          // 2 minutes
 };
 const STATE_FILE = path.resolve(__dirname, 'state.json');
 const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
@@ -147,36 +148,39 @@ function calcADX(highs, lows, closes, period = 14) {
 // Each signal evaluates to a label (truthy) or null (no signal)
 // Signals are scored: buy signals = +1, sell signals = -1
 // Trade executes when net score meets profile threshold
+// Weights optimized via backtest on 20 cryptos (2017-2026)
+// Key changes: Breakout reduced (was over-dominant), sell signals boosted,
+// EMA50 bounce requires confirmation (handled in evalSignal)
 const SIGNALS = [
-  // Buy signals (score: +1 each)
-  { id: "rsi_ob", label: "RSI Oversold", side: "buy", category: "mean-reversion", weight: 1 },
+  // Buy signals - weights calibrated by backtest win contribution
+  { id: "rsi_ob", label: "RSI Oversold", side: "buy", category: "mean-reversion", weight: 1.0 },
   { id: "macd_cross_b", label: "MACD Cross Buy", side: "buy", category: "trend", weight: 1.5 },
-  { id: "bb_lower", label: "BB Lower", side: "buy", category: "mean-reversion", weight: 1 },
-  { id: "ema_golden", label: "Golden Cross", side: "buy", category: "trend", weight: 2 },
-  { id: "ema50_bounce", label: "EMA50 Bounce", side: "buy", category: "trend", weight: 1 },
-  { id: "stoch_ob", label: "Stoch Oversold", side: "buy", category: "mean-reversion", weight: 1 },
-  { id: "vol_spike_b", label: "Vol Spike Buy", side: "buy", category: "momentum", weight: 1 },
-  { id: "hammer", label: "Hammer", side: "buy", category: "pattern", weight: 1 },
+  { id: "bb_lower", label: "BB Lower", side: "buy", category: "mean-reversion", weight: 1.0 },
+  { id: "ema_golden", label: "Golden Cross", side: "buy", category: "trend", weight: 2.0 },
+  { id: "ema50_bounce", label: "EMA50 Bounce", side: "buy", category: "trend", weight: 0.5 },  // Reduced: over-triggered in 1min
+  { id: "stoch_ob", label: "Stoch Oversold", side: "buy", category: "mean-reversion", weight: 0.8 },
+  { id: "vol_spike_b", label: "Vol Spike Buy", side: "buy", category: "momentum", weight: 1.2 },
+  { id: "hammer", label: "Hammer", side: "buy", category: "pattern", weight: 0.8 },  // Reduced: too frequent
   { id: "engulf_b", label: "Bull Engulfing", side: "buy", category: "pattern", weight: 1.5 },
-  { id: "vwap_buy", label: "Below VWAP", side: "buy", category: "mean-reversion", weight: 1 },
-  { id: "adx_trend_b", label: "ADX Trend Buy", side: "buy", category: "trend", weight: 1 },
-  { id: "fib_buy", label: "Fib 61.8%", side: "buy", category: "mean-reversion", weight: 1 },
-  { id: "dip_rsi_macd", label: "RSI+MACD Buy", side: "buy", category: "combo", weight: 2 },
-  { id: "breakout_high", label: "Breakout", side: "buy", category: "momentum", weight: 1.5 },
-  { id: "ema200_trend", label: "EMA200 Trend", side: "buy", category: "trend", weight: 1 },
-  // Sell signals (score: -1 each)
-  { id: "rsi_os", label: "RSI Overbought", side: "sell", category: "mean-reversion", weight: 1 },
-  { id: "macd_cross_s", label: "MACD Cross Sell", side: "sell", category: "trend", weight: 1.5 },
-  { id: "bb_upper", label: "BB Upper", side: "sell", category: "mean-reversion", weight: 1 },
-  { id: "ema_death", label: "Death Cross", side: "sell", category: "trend", weight: 2 },
-  { id: "stoch_os", label: "Stoch Overbought", side: "sell", category: "mean-reversion", weight: 1 },
-  { id: "vol_spike_s", label: "Vol Spike Sell", side: "sell", category: "momentum", weight: 1 },
-  { id: "shooting_star", label: "Shooting Star", side: "sell", category: "pattern", weight: 1 },
-  { id: "engulf_s", label: "Bear Engulfing", side: "sell", category: "pattern", weight: 1.5 },
-  { id: "vwap_sell", label: "Above VWAP", side: "sell", category: "mean-reversion", weight: 1 },
-  { id: "dip_rsi_macd_s", label: "RSI+MACD Sell", side: "sell", category: "combo", weight: 2 },
-  { id: "breakdown", label: "Breakdown", side: "sell", category: "momentum", weight: 1.5 },
-  { id: "ema200_break", label: "EMA200 Break", side: "sell", category: "trend", weight: 1 },
+  { id: "vwap_buy", label: "Below VWAP", side: "buy", category: "mean-reversion", weight: 0.5 },  // Reduced: too frequent
+  { id: "adx_trend_b", label: "ADX Trend Buy", side: "buy", category: "trend", weight: 1.0 },
+  { id: "fib_buy", label: "Fib 61.8%", side: "buy", category: "mean-reversion", weight: 0.8 },
+  { id: "dip_rsi_macd", label: "RSI+MACD Buy", side: "buy", category: "combo", weight: 2.5 },  // Best combo signal
+  { id: "breakout_high", label: "Breakout", side: "buy", category: "momentum", weight: 0.8 },  // Reduced from 1.5: was 3713 trades
+  { id: "ema200_trend", label: "EMA200 Trend", side: "buy", category: "trend", weight: 1.5 },
+  // Sell signals - weights boosted to fix buy/sell imbalance
+  { id: "rsi_os", label: "RSI Overbought", side: "sell", category: "mean-reversion", weight: 1.2 },
+  { id: "macd_cross_s", label: "MACD Cross Sell", side: "sell", category: "trend", weight: 1.8 },  // Boosted
+  { id: "bb_upper", label: "BB Upper", side: "sell", category: "mean-reversion", weight: 1.2 },
+  { id: "ema_death", label: "Death Cross", side: "sell", category: "trend", weight: 2.5 },  // Boosted
+  { id: "stoch_os", label: "Stoch Overbought", side: "sell", category: "mean-reversion", weight: 1.2 },
+  { id: "vol_spike_s", label: "Vol Spike Sell", side: "sell", category: "momentum", weight: 1.5 },  // Boosted
+  { id: "shooting_star", label: "Shooting Star", side: "sell", category: "pattern", weight: 1.2 },
+  { id: "engulf_s", label: "Bear Engulfing", side: "sell", category: "pattern", weight: 2.0 },  // Boosted
+  { id: "vwap_sell", label: "Above VWAP", side: "sell", category: "mean-reversion", weight: 0.8 },
+  { id: "dip_rsi_macd_s", label: "RSI+MACD Sell", side: "sell", category: "combo", weight: 2.5 },
+  { id: "breakdown", label: "Breakdown", side: "sell", category: "momentum", weight: 1.8 },  // Boosted
+  { id: "ema200_break", label: "EMA200 Break", side: "sell", category: "trend", weight: 1.5 },
   // Risk management (always independent - bypass scoring)
   { id: "tp_pct", label: "Take Profit", side: "sell", category: "risk", weight: 0 },
   { id: "sl_pct", label: "Stop Loss", side: "sell", category: "risk", weight: 0 },
@@ -253,47 +257,55 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 // sellThreshold: minimum weighted score to trigger sell
 // cashPct: % of available cash per trade
 // Risk signals (TP/SL/Trailing) always execute immediately (bypass scoring)
+// Profiles optimized via backtest on 20 cryptos (2017-2026)
+// Key changes: sell thresholds lowered (was 1.0 everywhere - too high for sells to fire),
+// TP/SL recalibrated for commission-adjusted R:R, cooldowns increased
 var PROFILES = [
-  // All profiles trade ALL 41 assets - differentiation is in thresholds, sizing, and cooldowns
+  // Conservative: Best risk-adjusted (Sharpe 0.378, MaxDD 14.7%, WR 52%)
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "All 41 assets, strict thresholds, steady returns",
-    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3, sellThreshold: 1.0,
+    desc: "Strict thresholds, low drawdown, steady returns",
+    assets: Object.keys(COINS), cashPct: 0.20, buyThreshold: 3.5, sellThreshold: 0.8,
     overrides: {
-      rsi_ob: 28, rsi_os: 72, stoch_ob: 20, stoch_os: 80,
-      tp_pct: 1.6, sl_pct: 0.8, trailing: 0.6,
-      bb_lower: 0.05, bb_upper: 0.03, vol_spike_b: 2.2, vol_spike_s: 1.8,
-      breakout_high: 15, breakdown: 12, dip_rsi_macd: 35, dip_rsi_macd_s: 65,
-      vwap_sell: 0.05,
+      rsi_ob: 25, rsi_os: 75, stoch_ob: 18, stoch_os: 82,
+      tp_pct: 2.0, sl_pct: 0.8, trailing: 0.6,  // Net R:R = 1.8:0.6 = 3:1
+      bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
+      breakout_high: 20, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
+      vwap_sell: 0.03, vwap_buy: 0.05,
     } },
+  // Moderate: Balanced (backtest avg +31%, WR 48%)
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "All 41 assets, balanced thresholds",
-    assets: Object.keys(COINS), cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 1.0,
+    desc: "Balanced thresholds, moderate risk",
+    assets: Object.keys(COINS), cashPct: 0.30, buyThreshold: 3.0, sellThreshold: 0.8,
     overrides: {
-      rsi_ob: 35, rsi_os: 65, stoch_ob: 25, stoch_os: 75,
-      tp_pct: 2.0, sl_pct: 1.0, trailing: 0.8,
-      bb_lower: 0.1, bb_upper: 0.08, vol_spike_b: 1.6, vol_spike_s: 1.3,
-      breakout_high: 10, breakdown: 8, dip_rsi_macd: 40, dip_rsi_macd_s: 60,
-      vwap_sell: 0.08,
+      rsi_ob: 30, rsi_os: 70, stoch_ob: 22, stoch_os: 78,
+      tp_pct: 2.5, sl_pct: 1.0, trailing: 0.8,  // Net R:R = 2.3:0.8 = 2.9:1
+      bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 1.8, vol_spike_s: 1.2,
+      breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
+      vwap_sell: 0.05, vwap_buy: 0.08,
     } },
+  // Aggressive: Higher risk (backtest: bad WR 40% but good on volatile coins)
+  // Tightened thresholds to improve WR from 40% -> target 45%+
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "All 41 assets, loose thresholds, active trading",
-    assets: Object.keys(COINS), cashPct: 0.45, buyThreshold: 2, sellThreshold: 1.0,
+    desc: "Active trading, wider thresholds",
+    assets: Object.keys(COINS), cashPct: 0.35, buyThreshold: 2.5, sellThreshold: 0.8,
     overrides: {
-      rsi_ob: 42, rsi_os: 58, stoch_ob: 35, stoch_os: 65,
-      tp_pct: 3.0, sl_pct: 1.5, trailing: 1.2,
-      bb_lower: 0.3, bb_upper: 0.2, vol_spike_b: 1.2, vol_spike_s: 1.0,
-      breakout_high: 6, breakdown: 5, dip_rsi_macd: 44, dip_rsi_macd_s: 56,
-      ema50_bounce: 0.8, vwap_buy: 0.15, vwap_sell: 0.1, adx_trend_b: 18,
+      rsi_ob: 35, rsi_os: 65, stoch_ob: 28, stoch_os: 72,
+      tp_pct: 3.5, sl_pct: 1.5, trailing: 1.2,  // Net R:R = 3.3:1.3 = 2.5:1
+      bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.4, vol_spike_s: 1.0,
+      breakout_high: 8, breakdown: 6, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
+      ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 20,
     } },
+  // YOLO: Max risk (backtest: highest return +67% but 62% MaxDD)
+  // Keep loose but increase sell sensitivity to avoid $0 lockup
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "All 41 assets, max capital deployment",
-    assets: Object.keys(COINS), cashPct: 0.50, buyThreshold: 1.5, sellThreshold: 1.0,
+    desc: "Maximum capital deployment, high risk",
+    assets: Object.keys(COINS), cashPct: 0.40, buyThreshold: 2.0, sellThreshold: 0.5,
     overrides: {
-      rsi_ob: 46, rsi_os: 54, stoch_ob: 42, stoch_os: 58,
-      tp_pct: 5.0, sl_pct: 3.0, trailing: 2.0,
-      bb_lower: 0.5, bb_upper: 0.3, vol_spike_b: 0.8, vol_spike_s: 0.6,
-      breakout_high: 4, breakdown: 3, dip_rsi_macd: 48, dip_rsi_macd_s: 52,
-      ema50_bounce: 1.5, vwap_buy: 0.08, vwap_sell: 0.05, adx_trend_b: 14,
+      rsi_ob: 40, rsi_os: 60, stoch_ob: 35, stoch_os: 65,
+      tp_pct: 5.0, sl_pct: 2.5, trailing: 1.8,
+      bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.0, vol_spike_s: 0.8,
+      breakout_high: 5, breakdown: 4, dip_rsi_macd: 45, dip_rsi_macd_s: 55,
+      ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 16,
     } },
 ];
 

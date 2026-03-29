@@ -39,7 +39,7 @@
     </script>
     <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid } = Recharts;
+const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid } = Recharts;
 
 const COINS_META = {
   BTC: { name: "Bitcoin", type: "crypto" }, ETH: { name: "Ethereum", type: "crypto" },
@@ -117,6 +117,7 @@ function BacktestTab({ isMobile }) {
   const [btResult, setBtResult] = useState(null);
   const [btError, setBtError] = useState(null);
   const [btTradeFilter, setBtTradeFilter] = useState("all");
+  const [btChartSym, setBtChartSym] = useState("");
 
   // Load available assets on mount
   useEffect(function() {
@@ -305,6 +306,60 @@ function BacktestTab({ isMobile }) {
               <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Not enough data for chart</div>
             )}
           </div>
+
+          {/* Historical Price Chart */}
+          {btResult && btResult.priceHistory && (function() {
+            var availSyms = Object.keys(btResult.priceHistory);
+            var activeSym = btChartSym && btResult.priceHistory[btChartSym] ? btChartSym : (availSyms[0] || "");
+            var priceData = activeSym ? (btResult.priceHistory[activeSym] || []) : [];
+            // Add buy/sell markers to price data
+            var symTrades = (btResult.trades || []).filter(function(t) { return t.symbol === activeSym; });
+            var tradesByDate = {};
+            symTrades.forEach(function(t) { tradesByDate[t.date] = t; });
+            var chartData = priceData.map(function(p) {
+              var tr = tradesByDate[p.date];
+              return {
+                date: p.date, close: p.c, high: p.h, low: p.l, open: p.o,
+                buy: tr && tr.side === 'buy' ? p.c : null,
+                sell: tr && tr.side === 'sell' ? p.c : null,
+              };
+            });
+            return (
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>PRICE CHART — {activeSym}</div>
+                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                    {availSyms.map(function(s) {
+                      var isActive = s === activeSym;
+                      return (
+                        <button key={s} onClick={function() { setBtChartSym(s); }} className="bt" style={{ padding: "2px 8px", borderRadius: 4, border: isActive ? "1px solid " + symColor(s) : "1px solid #1e293b", background: isActive ? symColor(s) + "20" : "transparent", color: isActive ? symColor(s) : "#4b5563", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)", fontWeight: isActive ? 700 : 400 }}>{s}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {chartData.length > 2 ? (
+                  <ResponsiveContainer width="100%" height={350}>
+                    <ComposedChart data={chartData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#4b5563" }} interval={Math.floor(chartData.length / 6)} />
+                      <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: "#4b5563" }} tickFormatter={function(v) { return "$" + fK(v); }} />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={function(v, name) { return ["$" + fmt(v), name === "close" ? "Price" : name === "buy" ? "BUY" : "SELL"]; }} />
+                      <Area type="monotone" dataKey="close" stroke={symColor(activeSym)} fill={symColor(activeSym)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                      <Scatter dataKey="buy" fill="#22c55e" shape="triangle" isAnimationActive={false} />
+                      <Scatter dataKey="sell" fill="#ef4444" shape="diamond" isAnimationActive={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>No price data</div>
+                )}
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#6b7280", fontFamily: "var(--m)" }}>
+                  <span><span style={{ color: "#22c55e" }}>▲</span> Buy signals</span>
+                  <span><span style={{ color: "#ef4444" }}>◆</span> Sell signals</span>
+                  <span>Trades on {activeSym}: {symTrades.length} ({symTrades.filter(function(t){return t.side==='buy';}).length}B / {symTrades.filter(function(t){return t.side==='sell';}).length}S)</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Trade List */}
           <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", overflow: "hidden" }}>

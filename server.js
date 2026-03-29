@@ -1448,6 +1448,24 @@ const server = http.createServer((req, res) => {
         }
         var sharpe = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0;
 
+        // Build price history per symbol (downsampled for chart)
+        var priceHistory = {};
+        symbols.forEach(function(sym) {
+          if (!allCandles[sym]) return;
+          var candles = allCandles[sym];
+          var step = candles.length > 500 ? Math.ceil(candles.length / 500) : 1;
+          var sampled = [];
+          for (var pi = 0; pi < candles.length; pi += step) {
+            sampled.push({ date: candles[pi].date, o: +candles[pi].open.toFixed(2), h: +candles[pi].high.toFixed(2), l: +candles[pi].low.toFixed(2), c: +candles[pi].close.toFixed(2), v: +candles[pi].volume.toFixed(2) });
+          }
+          // Always include last candle
+          if (sampled.length > 0 && sampled[sampled.length - 1].date !== candles[candles.length - 1].date) {
+            var lc = candles[candles.length - 1];
+            sampled.push({ date: lc.date, o: +lc.open.toFixed(2), h: +lc.high.toFixed(2), l: +lc.low.toFixed(2), c: +lc.close.toFixed(2), v: +lc.volume.toFixed(2) });
+          }
+          priceHistory[sym] = sampled;
+        });
+
         var result = {
           metrics: {
             totalReturn: +(totalReturn * 100).toFixed(2),
@@ -1465,6 +1483,7 @@ const server = http.createServer((req, res) => {
           },
           equityCurve: equityCurve,
           trades: trades,
+          priceHistory: priceHistory,
           profile: profileId,
           symbols: symbols,
           startDate: startDate,

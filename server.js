@@ -19,6 +19,7 @@ const CANDLE_TICKS = 30; // 30 ticks x 2s = 60 seconds = 1 minute candles
 const PRICE_FETCH_INTERVAL = 30000;
 const DEFAULT_CASH = 100000;
 const COMMISSION_RATE = 0.001; // 0.1% commission per trade
+const SLIPPAGE_PCT = 0.0005; // 0.05% default slippage
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
 // Cooldown per profile (ms) - increased based on backtest (1h data = all negative)
@@ -271,6 +272,7 @@ var PROFILES = [
       bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
       breakout_high: 20, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
       vwap_sell: 0.03, vwap_buy: 0.05,
+      slippage: 0.0003, // 0.03% conservative slippage
     } },
   // Moderate: Balanced (backtest avg +31%, WR 48%)
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
@@ -282,6 +284,7 @@ var PROFILES = [
       bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 1.8, vol_spike_s: 1.2,
       breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
       vwap_sell: 0.05, vwap_buy: 0.08,
+      slippage: 0.0005, // 0.05% moderate slippage
     } },
   // Aggressive: Higher risk (backtest: bad WR 40% but good on volatile coins)
   // Tightened thresholds to improve WR from 40% -> target 45%+
@@ -294,6 +297,7 @@ var PROFILES = [
       bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.4, vol_spike_s: 1.0,
       breakout_high: 8, breakdown: 6, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
       ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 20,
+      slippage: 0.0007, // 0.07% aggressive slippage
     } },
   // YOLO: Max risk (backtest: highest return +67% but 62% MaxDD)
   // Keep loose but increase sell sensitivity to avoid $0 lockup
@@ -306,6 +310,7 @@ var PROFILES = [
       bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.0, vol_spike_s: 0.8,
       breakout_high: 5, breakdown: 4, dip_rsi_macd: 45, dip_rsi_macd_s: 55,
       ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 16,
+      slippage: 0.001, // 0.1% yolo slippage
     } },
 ];
 
@@ -903,24 +908,27 @@ function runStrategies() {
 
       var price = sd.cur;
       if (price <= 0) return;
+      var slippagePct = (profile.overrides && profile.overrides.slippage !== undefined) ? profile.overrides.slippage : SLIPPAGE_PCT;
       var minCashReserve = pf.startCash * 0.02;
       var availableCash = Math.max(0, pf.cash - minCashReserve);
 
       // --- RISK SELL (TP/SL/Trailing) — always execute immediately ---
       if (riskSellTriggered && pos && pos.qty > 0) {
+        var riskFillPrice = price * (1 - slippagePct); // slippage: sell fills lower
         var riskQty = pos.qty;
-        var riskTotal = price * riskQty;
+        var riskTotal = riskFillPrice * riskQty;
         var riskComm = riskTotal * COMMISSION_RATE;
         pf.cash += riskTotal - riskComm;
         pf.totalCommission = (pf.totalCommission || 0) + riskComm;
-        var riskPnl = calcFifoPnl(pos, riskQty, price);
+        var riskPnl = calcFifoPnl(pos, riskQty, riskFillPrice);
         if (riskPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(riskPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL(risk) ' + sym + ' qty=' + riskQty.toFixed(4) + ' $' + riskTotal.toFixed(0) + ' pnl=$' + riskPnl.toFixed(0) + ' reason=' + riskSellTriggered);
         pf.orders = [{
-          sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: price,
+          sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: riskFillPrice,
+          signalPrice: price, slippage: slippagePct,
           commission: riskComm.toFixed(2), time: new Date().toISOString(),
           strat: 'Risk Mgmt', why: riskSellTriggered,
           score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
@@ -939,11 +947,12 @@ function runStrategies() {
       var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
       if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
         if (availableCash < 100) return;
+        var buyFillPrice = price * (1 + slippagePct); // slippage: buy fills higher
         // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
         var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);
-        var tq = +(tradeValue / price).toFixed(6);
+        var tq = +(tradeValue / buyFillPrice).toFixed(6);
         if (tq <= 0) return;
-        var total = price * tq;
+        var total = buyFillPrice * tq;
         var commission = total * COMMISSION_RATE;
         if (total + commission > availableCash) return;
 
@@ -952,15 +961,22 @@ function runStrategies() {
         var old = pf.holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
         if (!old.lots) old.lots = old.qty > 0 ? [{ qty: old.qty, cost: old.avgCost, date: new Date().toISOString() }] : [];
         var nq = +(old.qty + tq).toFixed(6);
-        var newLots = old.lots.concat([{ qty: tq, cost: price, date: new Date().toISOString() }]);
-        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price, lots: newLots };
+        var newLots = old.lots.concat([{ qty: tq, cost: buyFillPrice, date: new Date().toISOString() }]);
+        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : buyFillPrice, lots: newLots };
         pf.peaks[sym] = price;
+        // Bracket order targets
+        var tpPct = (profile.overrides && profile.overrides.tp_pct !== undefined) ? profile.overrides.tp_pct : 2.0;
+        var slPct = (profile.overrides && profile.overrides.sl_pct !== undefined) ? profile.overrides.sl_pct : 1.0;
+        var bracketTP = +(buyFillPrice * (1 + tpPct / 100)).toFixed(2);
+        var bracketSL = +(buyFillPrice * (1 - slPct / 100)).toFixed(2);
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
-        console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' BUY ' + sym + ' qty=' + tq.toFixed(4) + ' $' + total.toFixed(0) + ' score=+' + buyScore.toFixed(1) + ' regime=' + regime.type + ' [' + buyReasons.join(', ') + ']');
+        console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' BUY ' + sym + ' qty=' + tq.toFixed(4) + ' $' + total.toFixed(0) + ' score=+' + buyScore.toFixed(1) + ' regime=' + regime.type + ' [' + buyReasons.join(', ') + '] TP=$' + bracketTP + ' SL=$' + bracketSL);
         var prevHolding = (pf.holdings[sym] && pf.holdings[sym].qty) || 0;
         pf.orders = [{
-          sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: price,
+          sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: buyFillPrice,
+          signalPrice: price, slippage: slippagePct,
+          bracketTP: bracketTP, bracketSL: bracketSL,
           commission: commission.toFixed(2), time: new Date().toISOString(),
           strat: buyReasons.length + ' signals', why: buyReasons.join(', '),
           score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m,
@@ -976,19 +992,21 @@ function runStrategies() {
 
       // --- SCORING-BASED SELL ---
       else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
+        var sellFillPrice = price * (1 - slippagePct); // slippage: sell fills lower
         var sq = pos.qty;
-        var sellTotal = price * sq;
+        var sellTotal = sellFillPrice * sq;
         var sellComm = sellTotal * COMMISSION_RATE;
         pf.cash += sellTotal - sellComm;
         pf.totalCommission = (pf.totalCommission || 0) + sellComm;
-        var sellPnl = calcFifoPnl(pos, sq, price);
+        var sellPnl = calcFifoPnl(pos, sq, sellFillPrice);
         if (sellPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(sellPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL ' + sym + ' qty=' + sq.toFixed(4) + ' $' + sellTotal.toFixed(0) + ' pnl=$' + sellPnl.toFixed(0) + ' score=-' + sellScore.toFixed(1) + ' regime=' + regime.type + ' [' + sellReasons.join(', ') + ']');
         pf.orders = [{
-          sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: price,
+          sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: sellFillPrice,
+          signalPrice: price, slippage: slippagePct,
           commission: sellComm.toFixed(2), time: new Date().toISOString(),
           strat: sellReasons.length + ' signals', why: sellReasons.join(', '),
           score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
@@ -1436,20 +1454,23 @@ const server = http.createServer((req, res) => {
 
             // Volatility adjustment
             var volAdjust = regime.volatility > 3 ? 0.5 : (regime.volatility > 2 ? 0.75 : 1.0);
+            var btSlippage = (profile.overrides && profile.overrides.slippage !== undefined) ? profile.overrides.slippage : SLIPPAGE_PCT;
             var minCashReserve = startCash * 0.02;
             var availableCash = Math.max(0, cash - minCashReserve);
 
             // Risk sell (TP/SL/Trailing)
             if (riskSellTriggered && pos && pos.qty > 0) {
+              var riskFillP = price * (1 - btSlippage);
               var riskQty = pos.qty;
-              var riskTotal = price * riskQty;
+              var riskTotal = riskFillP * riskQty;
               var riskComm = riskTotal * COMMISSION_RATE;
               cash += riskTotal - riskComm;
               totalCommission += riskComm;
-              var riskPnl = (price - pos.avgCost) * riskQty;
+              var riskPnl = (riskFillP - pos.avgCost) * riskQty;
               if (riskPnl > 0) wins++; else losses++;
               trades.push({
-                date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
+                date: date, side: 'sell', symbol: sym, price: +riskFillP.toFixed(2),
+                signalPrice: +price.toFixed(2), slippage: btSlippage,
                 qty: +riskQty.toFixed(6), total: +riskTotal.toFixed(2),
                 pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
                 reason: riskSellTriggered, regime: regime.type,
@@ -1463,20 +1484,26 @@ const server = http.createServer((req, res) => {
             // Scoring-based buy
             if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
               if (availableCash < 100) return;
+              var btBuyFill = price * (1 + btSlippage);
               var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);
-              var tq = +(tradeValue / price).toFixed(6);
+              var tq = +(tradeValue / btBuyFill).toFixed(6);
               if (tq <= 0) return;
-              var total = price * tq;
+              var total = btBuyFill * tq;
               var commission = total * COMMISSION_RATE;
               if (total + commission > availableCash) return;
               cash -= total + commission;
               totalCommission += commission;
               var old = holdings[sym] || { qty: 0, avgCost: 0 };
               var nq = +(old.qty + tq).toFixed(6);
-              holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price };
+              holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : btBuyFill };
               peaks[sym] = price;
+              var btTpPct = (profile.overrides && profile.overrides.tp_pct !== undefined) ? profile.overrides.tp_pct : 2.0;
+              var btSlPct = (profile.overrides && profile.overrides.sl_pct !== undefined) ? profile.overrides.sl_pct : 1.0;
               trades.push({
-                date: date, side: 'buy', symbol: sym, price: +price.toFixed(2),
+                date: date, side: 'buy', symbol: sym, price: +btBuyFill.toFixed(2),
+                signalPrice: +price.toFixed(2), slippage: btSlippage,
+                bracketTP: +(btBuyFill * (1 + btTpPct / 100)).toFixed(2),
+                bracketSL: +(btBuyFill * (1 - btSlPct / 100)).toFixed(2),
                 qty: +tq.toFixed(6), total: +total.toFixed(2),
                 pnl: 0, pnlPct: 0,
                 reason: buyReasons.join(', '), regime: regime.type,
@@ -1485,15 +1512,17 @@ const server = http.createServer((req, res) => {
             }
             // Scoring-based sell
             else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
+              var btSellFill = price * (1 - btSlippage);
               var sq = pos.qty;
-              var sellTotal = price * sq;
+              var sellTotal = btSellFill * sq;
               var sellComm = sellTotal * COMMISSION_RATE;
               cash += sellTotal - sellComm;
               totalCommission += sellComm;
-              var sellPnl = (price - pos.avgCost) * sq;
+              var sellPnl = (btSellFill - pos.avgCost) * sq;
               if (sellPnl > 0) wins++; else losses++;
               trades.push({
-                date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
+                date: date, side: 'sell', symbol: sym, price: +btSellFill.toFixed(2),
+                signalPrice: +price.toFixed(2), slippage: btSlippage,
                 qty: +sq.toFixed(6), total: +sellTotal.toFixed(2),
                 pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
                 reason: sellReasons.join(', '), regime: regime.type,

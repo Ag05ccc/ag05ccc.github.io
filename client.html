@@ -418,6 +418,177 @@ function BacktestTab({ isMobile }) {
             )}
           </div>
 
+          {/* Drawdown Chart */}
+          {eqData.length > 2 && (function() {
+            var ddData = [];
+            var peak = 0;
+            for (var di = 0; di < eqData.length; di++) {
+              var v = eqData[di].value;
+              if (v > peak) peak = v;
+              var dd = peak > 0 ? -((peak - v) / peak) * 100 : 0;
+              ddData.push({ date: eqData[di].date, dd: +dd.toFixed(2) });
+            }
+            return (
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>DRAWDOWN</div>
+                <ZoomChart dataKey="date" dataLength={ddData.length}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={ddData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#4b5563" }} interval={Math.floor(ddData.length / 6)} />
+                    <YAxis domain={["auto", 0]} tick={{ fontSize: 9, fill: "#4b5563" }} tickFormatter={function(v) { return v.toFixed(1) + "%"; }} />
+                    <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={function(v) { return [v.toFixed(2) + "%", "Drawdown"]; }} />
+                    <Area type="monotone" dataKey="dd" stroke="#ef4444" fill="#ef4444" fillOpacity={0.25} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+                </ZoomChart>
+              </div>
+            );
+          })()}
+
+          {/* Extended Statistics */}
+          {btResult && m && (function() {
+            var allTrades = btResult.trades || [];
+            var sells = allTrades.filter(function(t) { return t.side === 'sell'; });
+            var winTrades = sells.filter(function(t) { return t.pnl > 0; });
+            var lossTrades = sells.filter(function(t) { return t.pnl < 0; });
+            var avgWin = winTrades.length > 0 ? winTrades.reduce(function(s, t) { return s + t.pnl; }, 0) / winTrades.length : 0;
+            var avgLoss = lossTrades.length > 0 ? lossTrades.reduce(function(s, t) { return s + Math.abs(t.pnl); }, 0) / lossTrades.length : 0;
+            var grossProfit = winTrades.reduce(function(s, t) { return s + t.pnl; }, 0);
+            var grossLoss = lossTrades.reduce(function(s, t) { return s + Math.abs(t.pnl); }, 0);
+            var profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
+            var bestTrade = sells.length > 0 ? Math.max.apply(null, sells.map(function(t) { return t.pnl; })) : 0;
+            var worstTrade = sells.length > 0 ? Math.min.apply(null, sells.map(function(t) { return t.pnl; })) : 0;
+
+            // Avg hold time: pair buys to sells by symbol
+            var holdTimes = [];
+            var openBuys = {}; // { sym: [dates] }
+            allTrades.forEach(function(t) {
+              if (t.side === 'buy') {
+                if (!openBuys[t.symbol]) openBuys[t.symbol] = [];
+                openBuys[t.symbol].push(t.date);
+              } else if (t.side === 'sell' && openBuys[t.symbol] && openBuys[t.symbol].length > 0) {
+                var buyDate = openBuys[t.symbol].shift();
+                var days = Math.round((new Date(t.date) - new Date(buyDate)) / 86400000);
+                if (days >= 0) holdTimes.push(days);
+              }
+            });
+            var avgHoldTime = holdTimes.length > 0 ? (holdTimes.reduce(function(a, b) { return a + b; }, 0) / holdTimes.length).toFixed(1) : "--";
+
+            // Consecutive wins/losses
+            var maxConsecWins = 0, maxConsecLosses = 0, cw = 0, cl = 0;
+            sells.forEach(function(t) {
+              if (t.pnl > 0) { cw++; cl = 0; if (cw > maxConsecWins) maxConsecWins = cw; }
+              else { cl++; cw = 0; if (cl > maxConsecLosses) maxConsecLosses = cl; }
+            });
+
+            var wr = sells.length > 0 ? winTrades.length / sells.length : 0;
+            var expectancy = (wr * avgWin) - ((1 - wr) * avgLoss);
+
+            var stats = [
+              { label: "Avg Win", value: "$" + fK(avgWin), color: "#22c55e" },
+              { label: "Avg Loss", value: "-$" + fK(avgLoss), color: "#ef4444" },
+              { label: "Profit Factor", value: profitFactor >= 999 ? "INF" : profitFactor.toFixed(2), color: profitFactor >= 1.5 ? "#22c55e" : profitFactor >= 1 ? "#f59e0b" : "#ef4444" },
+              { label: "Avg Hold Time", value: avgHoldTime + " days", color: "#a5b4fc" },
+              { label: "Best Trade", value: "+$" + fK(bestTrade), color: "#22c55e" },
+              { label: "Worst Trade", value: "-$" + fK(Math.abs(worstTrade)), color: "#ef4444" },
+              { label: "Max Consec Wins", value: "" + maxConsecWins, color: "#22c55e" },
+              { label: "Max Consec Losses", value: "" + maxConsecLosses, color: "#ef4444" },
+              { label: "Expectancy", value: (expectancy >= 0 ? "+$" : "-$") + fK(Math.abs(expectancy)), color: expectancy >= 0 ? "#22c55e" : "#ef4444" },
+            ];
+
+            return (
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 10 }}>EXTENDED STATISTICS</div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 8 }}>
+                  {stats.map(function(s, i) {
+                    return (
+                      <div key={i} style={{ background: "#0a0e17", borderRadius: 6, padding: "8px 12px", border: "1px solid rgba(255,255,255,0.03)" }}>
+                        <div style={{ fontSize: 8, color: "#4b5563", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 3 }}>{s.label}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--m)", color: s.color }}>{s.value}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Monthly Returns Heatmap */}
+          {btResult && (function() {
+            var eq = btResult.equityCurve || [];
+            if (eq.length < 30) return null;
+            // Group equity by year-month, compute monthly returns
+            var monthlyData = {}; // { "2022": { 0: pct, 1: pct, ... } }
+            var prevMonthEnd = eq[0].value;
+            var curMonth = eq[0].date.slice(0, 7);
+            for (var mi = 1; mi < eq.length; mi++) {
+              var m2 = eq[mi].date.slice(0, 7);
+              if (m2 !== curMonth) {
+                var yr = curMonth.slice(0, 4);
+                var mo = parseInt(curMonth.slice(5, 7), 10) - 1;
+                if (!monthlyData[yr]) monthlyData[yr] = {};
+                var endVal = eq[mi - 1].value;
+                monthlyData[yr][mo] = prevMonthEnd > 0 ? ((endVal - prevMonthEnd) / prevMonthEnd) * 100 : 0;
+                prevMonthEnd = endVal;
+                curMonth = m2;
+              }
+            }
+            // Last month
+            var lastYr = curMonth.slice(0, 4);
+            var lastMo = parseInt(curMonth.slice(5, 7), 10) - 1;
+            if (!monthlyData[lastYr]) monthlyData[lastYr] = {};
+            var lastEndVal = eq[eq.length - 1].value;
+            monthlyData[lastYr][lastMo] = prevMonthEnd > 0 ? ((lastEndVal - prevMonthEnd) / prevMonthEnd) * 100 : 0;
+
+            var years = Object.keys(monthlyData).sort();
+            var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+            function heatColor(val) {
+              if (val === undefined || val === null) return "transparent";
+              if (val >= 0) {
+                var g = Math.min(val / 15, 1);
+                return "rgba(34,197,94," + (0.15 + g * 0.6) + ")";
+              }
+              var r = Math.min(Math.abs(val) / 15, 1);
+              return "rgba(239,68,68," + (0.15 + r * 0.6) + ")";
+            }
+
+            return (
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 10 }}>MONTHLY RETURNS</div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 9, fontFamily: "var(--m)" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: "4px 6px", color: "#4b5563", fontWeight: 600, textAlign: "left" }}>Year</th>
+                        {months.map(function(mo) { return <th key={mo} style={{ padding: "4px 4px", color: "#4b5563", fontWeight: 600, textAlign: "center", minWidth: 36 }}>{mo}</th>; })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {years.map(function(yr) {
+                        return (
+                          <tr key={yr}>
+                            <td style={{ padding: "3px 6px", color: "#94a3b8", fontWeight: 600 }}>{yr}</td>
+                            {[0,1,2,3,4,5,6,7,8,9,10,11].map(function(mo) {
+                              var val = monthlyData[yr][mo];
+                              var hasVal = val !== undefined && val !== null;
+                              return (
+                                <td key={mo} style={{ padding: "3px 2px", textAlign: "center", background: heatColor(val), borderRadius: 3, color: hasVal ? (val >= 0 ? "#4ade80" : "#f87171") : "#1e293b", fontWeight: 600 }}>
+                                  {hasVal ? (val >= 0 ? "+" : "") + val.toFixed(1) + "%" : ""}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Historical Price Chart */}
           {btResult && btResult.priceHistory && (function() {
             var availSyms = Object.keys(btResult.priceHistory);
@@ -506,7 +677,7 @@ function BacktestTab({ isMobile }) {
                     <span style={{ color: "#94a3b8" }}>{t.qty < 1 ? t.qty.toFixed(4) : t.qty.toFixed(2)}</span>
                     <span style={{ color: "#f8fafc", fontWeight: 600 }}>${fK(t.total)}</span>
                     {!isMobile && <><span style={{ color: pnlColor, fontWeight: 600 }}>{t.pnl !== 0 ? (t.pnl > 0 ? "+" : "") + "$" + fK(t.pnl) : "--"}{t.pnlPct !== 0 ? " (" + (t.pnlPct > 0 ? "+" : "") + t.pnlPct + "%)" : ""}</span>
-                    <span style={{ color: "#a78bfa", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.reason}</span>
+                    <span style={{ color: "#a78bfa", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.reason}{t.side === "buy" && t.bracketTP && t.bracketSL ? " | TP: $" + fK(t.bracketTP) + " SL: $" + fK(t.bracketSL) : ""}</span>
                     <span style={{ fontSize: 8, color: "#4b5563" }}>{t.regime}</span></>}
                   </div>
                 );
@@ -1385,6 +1556,7 @@ function App() {
                           {o.why && !isMobile && <span style={{ color: "#a78bfa", fontWeight: 600 }}>| {o.why}</span>}
                           {o.score && <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontFamily: "var(--m)" }}>score:{o.score}</span>}
                           {o.regime && !isMobile && <span style={{ fontSize: 8, color: "#4b5563" }}>[{o.regime}]</span>}
+                          {o.side === "buy" && o.bracketTP && o.bracketSL && <span style={{ fontSize: 8, color: "#6b7280", fontFamily: "var(--m)" }}>TP: <span style={{ color: "#22c55e" }}>${fK(o.bracketTP)}</span> | SL: <span style={{ color: "#ef4444" }}>${fK(o.bracketSL)}</span></span>}
                           {isMobile && o.why && <div style={{ width: "100%", color: "#a78bfa", fontSize: 8 }}>{o.why}</div>}
                         </div>
                       ))}

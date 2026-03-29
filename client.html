@@ -11,6 +11,7 @@
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
         @keyframes fsi { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .sr:hover { background: rgba(255,255,255,0.03) !important; }
         .bt { transition: all .12s; cursor: pointer; }
         .bt:hover { transform: translateY(-1px); filter: brightness(1.15); }
@@ -416,6 +417,11 @@ function App() {
   const [showSidebar, setShowSidebar] = useState(window.innerWidth > 768);
   const isMobile = window.innerWidth <= 768;
   const [editProfile, setEditProfile] = useState(null);
+  const [compareStart, setCompareStart] = useState("");
+  const [histMode, setHistMode] = useState(false);
+  const [histData, setHistData] = useState(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histStartDate, setHistStartDate] = useState("2022-01-01");
   const wsRef = useRef(null);
 
   // WebSocket connection
@@ -452,6 +458,27 @@ function App() {
   }, []);
   const resetPf = useCallback(function(id) { sendWs({ type: 'reset', id: id }); }, [sendWs]);
 
+  function loadHistorical(sym, startDate) {
+    const s = sym || selected;
+    const sd2 = startDate || histStartDate;
+    setHistLoading(true);
+    setHistData(null);
+    fetch('/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: "moderate", symbols: [s], startDate: sd2 }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      setHistLoading(false);
+      if (data.error) { setHistData(null); return; }
+      if (data.priceHistory && data.priceHistory[s]) {
+        setHistData({ symbol: s, startDate: sd2, candles: data.priceHistory[s] });
+      }
+    })
+    .catch(function() { setHistLoading(false); });
+  }
+
   if (!state || !state.prices) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#f59e0b", fontFamily: "'Space Grotesk',sans-serif", fontSize: 18 }}>
       {connected ? "Loading data..." : "Connecting to server..."}
@@ -475,14 +502,23 @@ function App() {
     o: c.o, h: c.h, l: c.l, c: c.c, v: c.v,
   }));
 
-  // Comparison chart
-  const maxLen = Math.max(...pfStats.map(pf => (pf.history || []).length), 1);
+  // Comparison chart - filter by compareStart date
+  const filteredPfHistories = pfStats.map(pf => {
+    let hist = pf.history || [];
+    if (compareStart) {
+      const startTs = new Date(compareStart).getTime();
+      hist = hist.filter(h => h.time ? new Date(h.time).getTime() >= startTs : true);
+    }
+    return hist;
+  });
+  const maxLen = Math.max(...filteredPfHistories.map(h => h.length), 1);
   const compData = [];
   for (let i = 0; i < maxLen; i++) {
     const point = { t: i };
-    pfStats.forEach(pf => {
-      const h = (pf.history || [])[i];
-      point[pf.id] = h ? h.value : ((pf.history || [])[(pf.history || []).length - 1]?.value || pf.startCash);
+    pfStats.forEach((pf, pi) => {
+      const hist = filteredPfHistories[pi];
+      const h = hist[i];
+      point[pf.id] = h ? h.value : (hist[hist.length - 1]?.value || pf.startCash);
     });
     compData.push(point);
   }
@@ -573,7 +609,14 @@ function App() {
               <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>4 risk profiles trading on real market data · Server-side 24/7</div>
 
               <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>PORTFOLIO VALUE OVER TIME</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>PORTFOLIO VALUE OVER TIME</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>FROM</span>
+                    <input type="date" value={compareStart} onChange={e => setCompareStart(e.target.value)} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 10, fontFamily: "var(--m)", outline: "none" }} />
+                    {compareStart && <button onClick={() => setCompareStart("")} style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)" }}>Clear</button>}
+                  </div>
+                </div>
                 {compData.length > 2 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
@@ -691,16 +734,18 @@ function App() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
                   <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 24, color: symColor(selected) }}>{selected}/{COINS_META[selected]?.type === "crypto" ? "USDT" : "USD"}</span>
-                  <div style={{ display: "flex", gap: 2 }}>
+                  {!histMode && <div style={{ display: "flex", gap: 2 }}>
                     {TIMEFRAMES.map(t => (
                       <button key={t.label} onClick={() => setTf(t.label)} style={{ padding: "2px 8px", borderRadius: 4, border: tf === t.label ? "1px solid #f59e0b" : "1px solid #1e293b", background: tf === t.label ? "rgba(245,158,11,0.15)" : "transparent", color: tf === t.label ? "#f59e0b" : "#6b7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>{t.label}</button>
                     ))}
-                  </div>
+                  </div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {["candle", "line"].map(t => (
                     <button key={t} onClick={() => setChartType(t)} style={{ padding: "3px 10px", fontSize: 10, fontFamily: "var(--m)", fontWeight: 600, borderRadius: 4, border: "1px solid", borderColor: chartType === t ? "#f59e0b" : "#1e293b", background: chartType === t ? "rgba(245,158,11,0.15)" : "transparent", color: chartType === t ? "#f59e0b" : "#6b7280", cursor: "pointer" }}>{t === "candle" ? "Candle" : "Line"}</button>
                   ))}
+                  <div style={{ width: 1, background: "#1e293b", margin: "0 2px" }} />
+                  <button onClick={() => { setHistMode(!histMode); if (!histMode && !histData) { loadHistorical(); } }} style={{ padding: "3px 10px", fontSize: 10, fontFamily: "var(--m)", fontWeight: 600, borderRadius: 4, border: "1px solid", borderColor: histMode ? "#a78bfa" : "#1e293b", background: histMode ? "rgba(167,139,250,0.15)" : "transparent", color: histMode ? "#a78bfa" : "#6b7280", cursor: "pointer" }}>Historical</button>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
@@ -708,7 +753,108 @@ function App() {
                 <span style={{ fontFamily: "var(--m)", fontSize: 16, color: ch >= 0 ? "#22c55e" : "#ef4444" }}>{ch >= 0 ? "+" : ""}{fmt(ch)} ({pc(chP)})</span>
               </div>
 
-              {chartCandles.length > 2 ? (
+              {/* Historical mode controls and chart */}
+              {histMode && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>FROM</span>
+                    <input type="date" value={histStartDate} onChange={e => setHistStartDate(e.target.value)} style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 11, fontFamily: "var(--m)", outline: "none" }} />
+                    <button onClick={() => loadHistorical(selected, histStartDate)} disabled={histLoading} className="bt" style={{ padding: "4px 12px", borderRadius: 4, border: "none", background: histLoading ? "#374151" : "#a78bfa", color: histLoading ? "#9ca3af" : "#0a0e17", fontSize: 10, fontWeight: 700, fontFamily: "var(--h)", cursor: histLoading ? "not-allowed" : "pointer" }}>{histLoading ? "Loading..." : "Load"}</button>
+                    {histData && <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--m)" }}>{histData.candles.length} daily candles</span>}
+                  </div>
+                  {histLoading && (
+                    <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280" }}>
+                      <div style={{ display: "inline-block", width: 24, height: 24, border: "3px solid #1e293b", borderTop: "3px solid #a78bfa", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ marginLeft: 8, fontSize: 12, fontFamily: "var(--m)" }}>Fetching historical data for {selected}...</span>
+                    </div>
+                  )}
+                  {histData && histData.symbol === selected && histData.candles.length > 2 && !histLoading && (() => {
+                    const hCandles = histData.candles.map((c, i) => ({
+                      t: c.date || c.d || `${i}`,
+                      o: c.o, h: c.h, l: c.l, c: c.c, v: c.v || 0,
+                    }));
+                    const hMaxVol = Math.max(...hCandles.map(c => c.v || 0), 1);
+                    if (chartType === "candle") {
+                      return (
+                        <div ref={el => {
+                          if (!el) return;
+                          const W = el.offsetWidth - 16;
+                          const H = 380;
+                          const ml = 65, mr = 12, mt = 12, mb = 32;
+                          const pw = W - ml - mr, ph = H - mt - mb;
+                          const allP = hCandles.flatMap(c => [c.h, c.l]);
+                          const pad = (Math.max(...allP) - Math.min(...allP)) * 0.05 || 1;
+                          const minP = Math.min(...allP) - pad, maxP = Math.max(...allP) + pad;
+                          const range = maxP - minP || 1;
+                          const yS = v => mt + ph - ((v - minP) / range) * ph;
+                          const n = hCandles.length;
+                          const bw = Math.max(Math.min(pw / n * 0.6, 12), 1);
+                          const xS = i => ml + (i + 0.5) * (pw / n);
+                          let s = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
+                          s += `<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="#0a0e17" rx="4"/>`;
+                          for (let j = 0; j <= 5; j++) {
+                            const v = minP + range * j / 5, y = yS(v);
+                            s += `<line x1="${ml}" y1="${y}" x2="${ml + pw}" y2="${y}" stroke="#1e293b" stroke-width="0.5"/>`;
+                            s += `<text x="${ml - 6}" y="${y + 3}" fill="#64748b" font-size="9" font-family="'JetBrains Mono',monospace" text-anchor="end">$${fmt(v)}</text>`;
+                          }
+                          const step = Math.max(1, Math.floor(n / 8));
+                          for (let i = 0; i < n; i += step) {
+                            const c = hCandles[i], x = xS(i);
+                            s += `<line x1="${x}" y1="${mt + ph}" x2="${x}" y2="${mt + ph + 5}" stroke="#334155" stroke-width="0.5"/>`;
+                            s += `<text x="${x}" y="${mt + ph + 18}" fill="#64748b" font-size="8" font-family="'JetBrains Mono',monospace" text-anchor="middle">${c.t}</text>`;
+                          }
+                          hCandles.forEach((c, i) => {
+                            const x = xS(i), g = c.c >= c.o;
+                            const col = g ? "#22c55e" : "#ef4444";
+                            const colDim = g ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
+                            const oY = yS(c.o), cY = yS(c.c), hY = yS(c.h), lY = yS(c.l);
+                            const top = Math.min(oY, cY), bot = Math.max(oY, cY), bh = Math.max(bot - top, 1);
+                            s += `<line x1="${x}" y1="${hY}" x2="${x}" y2="${lY}" stroke="${col}" stroke-width="0.7" opacity="0.7"/>`;
+                            s += `<rect x="${x - bw/2}" y="${top}" width="${bw}" height="${bh}" fill="${col}" rx="0.5"/>`;
+                          });
+                          s += `</svg>`;
+                          el.innerHTML = s;
+                        }} style={{ background: "#0f172a", borderRadius: 10, padding: "8px", border: "1px solid rgba(167,139,250,0.15)" }} />
+                      );
+                    } else {
+                      return (
+                        <ResponsiveContainer width="100%" height={340}>
+                          <ComposedChart data={hCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>
+                            <XAxis dataKey="t" tick={{ fontSize: 8, fill: "#4b5563" }} interval={Math.floor(hCandles.length / 8)} />
+                            <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: "#4b5563" }} tickFormatter={v => `$${fmt(v)}`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                            <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : name === "o" ? "Open" : name]} />
+                            <Area type="monotone" dataKey="c" stroke={symColor(selected)} fill={symColor(selected)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} name="c" />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      );
+                    }
+                  })()}
+                  {histData && histData.symbol !== selected && !histLoading && (
+                    <div style={{ padding: 12, textAlign: "center", fontSize: 11, color: "#6b7280", fontFamily: "var(--m)" }}>
+                      Historical data loaded for {histData.symbol}. Click Load to fetch {selected}.
+                    </div>
+                  )}
+                  {histData && histData.candles.length > 2 && histData.symbol === selected && !histLoading && (
+                    <div style={{ marginTop: 8, background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>DAILY VOLUME</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 0, height: 36 }}>
+                        {histData.candles.map((c, i) => {
+                          const hMaxV = Math.max(...histData.candles.map(x => x.v || 0), 1);
+                          const pct = (c.v || 0) / hMaxV;
+                          return (
+                            <div key={i} style={{ flex: 1, height: `${Math.max(pct * 100, 1)}%`, background: c.c >= c.o ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)" }} />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!histMode && chartCandles.length > 2 ? (
                 chartType === "candle" ? (
                   <div ref={el => {
                     if (!el) return;
@@ -793,10 +939,10 @@ function App() {
                   </ResponsiveContainer>
                 )
               ) : (
-                <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
+                !histMode && <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
               )}
 
-              {chartCandles.length > 2 && (
+              {!histMode && chartCandles.length > 2 && (
                 <div style={{ marginTop: 8, background: "#0f172a", borderRadius: 6, padding: "8px 12px", border: "1px solid rgba(255,255,255,0.04)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                     <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600 }}>VOLUME</span>

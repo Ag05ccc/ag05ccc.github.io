@@ -42,49 +42,64 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush } = Recharts;
 
-// ZoomChart wrapper - adds mouse wheel zoom + Brush to any Recharts chart
-// Usage: <ZoomChart dataKey="date" dataLength={data.length}><AreaChart data={data}>...</AreaChart></ZoomChart>
+// ZoomChart - wraps chart container, slices data on mouse wheel zoom
+// Children receive sliced data via render prop pattern, but simpler: we slice the data prop of the chart
 function ZoomChart({ children, dataKey, dataLength }) {
   const ref = React.useRef(null);
   const [range, setRange] = React.useState(null);
   React.useEffect(() => { setRange(null); }, [dataLength]);
   React.useEffect(() => {
     const el = ref.current;
-    if (!el || dataLength < 2) return;
+    if (!el || dataLength < 10) return;
     const handler = (e) => {
       e.preventDefault();
       setRange(prev => {
-        const s = prev ? prev.start : 0;
-        const en = prev ? prev.end : dataLength - 1;
+        const s = prev ? prev[0] : 0;
+        const en = prev ? prev[1] : dataLength;
         const span = en - s;
         const mid = (s + en) / 2;
-        const factor = e.deltaY > 0 ? 1.2 : 0.8;
+        const factor = e.deltaY > 0 ? 1.25 : 0.75;
         let ns = Math.round(span * factor);
-        ns = Math.max(8, Math.min(dataLength - 1, ns));
+        ns = Math.max(8, Math.min(dataLength, ns));
         let nStart = Math.round(mid - ns / 2);
         let nEnd = nStart + ns;
-        if (nStart < 0) { nStart = 0; nEnd = ns; }
-        if (nEnd >= dataLength) { nEnd = dataLength - 1; nStart = Math.max(0, nEnd - ns); }
-        return { start: nStart, end: nEnd };
+        if (nStart < 0) { nStart = 0; nEnd = Math.min(ns, dataLength); }
+        if (nEnd > dataLength) { nEnd = dataLength; nStart = Math.max(0, dataLength - ns); }
+        if (nEnd - nStart >= dataLength) return null;
+        return [nStart, nEnd];
       });
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
   }, [dataLength]);
-  const si = range ? range.start : 0;
-  const ei = range ? range.end : Math.max(0, dataLength - 1);
+
+  // Clone chart children and replace their data prop with sliced version
+  function sliceChartData(child) {
+    if (!child || !child.props) return child;
+    // If it's ResponsiveContainer, go deeper
+    if (child.type === ResponsiveContainer) {
+      return React.cloneElement(child, {},
+        ...React.Children.map(child.props.children, sliceChartData)
+      );
+    }
+    // If it has a data prop (AreaChart, ComposedChart, LineChart), slice it
+    if (child.props.data && range) {
+      const sliced = child.props.data.slice(range[0], range[1]);
+      return React.cloneElement(child, { data: sliced });
+    }
+    return child;
+  }
+
+  const pct = range ? Math.round(((range[1] - range[0]) / dataLength) * 100) : 100;
   return (
-    <div ref={ref} style={{ cursor: "crosshair" }}>
-      {React.Children.map(children, child => {
-        if (!child || !child.props || !child.props.children) return child;
-        const kids = Array.isArray(child.props.children) ? child.props.children : [child.props.children];
-        return React.cloneElement(child, {}, ...kids.filter(Boolean),
-          <Brush dataKey={dataKey} height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8}
-            startIndex={si} endIndex={ei}
-            onChange={(r) => { if (r) setRange({ start: r.startIndex, end: r.endIndex }); }}
-            tickFormatter={d => d ? String(d).slice(5) : ""} />
-        );
-      })}
+    <div ref={ref} style={{ cursor: "crosshair", position: "relative" }}>
+      {range && (
+        <div style={{ position: "absolute", top: 4, right: 8, zIndex: 10, display: "flex", gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 9, color: "#818cf8", fontFamily: "var(--m)", background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 3 }}>{pct}%</span>
+          <span onClick={() => setRange(null)} style={{ fontSize: 9, color: "#ef4444", cursor: "pointer", fontFamily: "var(--m)", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 3 }}>Reset</span>
+        </div>
+      )}
+      {React.Children.map(children, sliceChartData)}
     </div>
   );
 }

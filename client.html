@@ -42,6 +42,53 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush } = Recharts;
 
+// ZoomChart wrapper - adds mouse wheel zoom + Brush to any Recharts chart
+// Usage: <ZoomChart dataKey="date" dataLength={data.length}><AreaChart data={data}>...</AreaChart></ZoomChart>
+function ZoomChart({ children, dataKey, dataLength }) {
+  const ref = React.useRef(null);
+  const [range, setRange] = React.useState(null);
+  React.useEffect(() => { setRange(null); }, [dataLength]);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || dataLength < 2) return;
+    const handler = (e) => {
+      e.preventDefault();
+      setRange(prev => {
+        const s = prev ? prev.start : 0;
+        const en = prev ? prev.end : dataLength - 1;
+        const span = en - s;
+        const mid = (s + en) / 2;
+        const factor = e.deltaY > 0 ? 1.2 : 0.8;
+        let ns = Math.round(span * factor);
+        ns = Math.max(8, Math.min(dataLength - 1, ns));
+        let nStart = Math.round(mid - ns / 2);
+        let nEnd = nStart + ns;
+        if (nStart < 0) { nStart = 0; nEnd = ns; }
+        if (nEnd >= dataLength) { nEnd = dataLength - 1; nStart = Math.max(0, nEnd - ns); }
+        return { start: nStart, end: nEnd };
+      });
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, [dataLength]);
+  const si = range ? range.start : 0;
+  const ei = range ? range.end : Math.max(0, dataLength - 1);
+  return (
+    <div ref={ref} style={{ cursor: "crosshair" }}>
+      {React.Children.map(children, child => {
+        if (!child || !child.props || !child.props.children) return child;
+        const kids = Array.isArray(child.props.children) ? child.props.children : [child.props.children];
+        return React.cloneElement(child, {}, ...kids.filter(Boolean),
+          <Brush dataKey={dataKey} height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8}
+            startIndex={si} endIndex={ei}
+            onChange={(r) => { if (r) setRange({ start: r.startIndex, end: r.endIndex }); }}
+            tickFormatter={d => d ? String(d).slice(5) : ""} />
+        );
+      })}
+    </div>
+  );
+}
+
 const COINS_META = {
   BTC: { name: "Bitcoin", type: "crypto" }, ETH: { name: "Ethereum", type: "crypto" },
   SOL: { name: "Solana", type: "crypto" }, BNB: { name: "BNB", type: "crypto" },
@@ -293,6 +340,7 @@ function BacktestTab({ isMobile }) {
           <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>EQUITY CURVE</div>
             {eqData.length > 2 ? (
+              <ZoomChart dataKey="date" dataLength={eqData.length}>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={eqData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -301,9 +349,9 @@ function BacktestTab({ isMobile }) {
                   <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={function(v) { return ["$" + fK(v), "Equity"]; }} />
                   <ReferenceLine y={m.startCash} stroke="#6b7280" strokeDasharray="3 3" label={{ value: "Start $" + fK(m.startCash), fill: "#6b7280", fontSize: 9 }} />
                   <Area type="monotone" dataKey="value" stroke={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fill={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                 </AreaChart>
               </ResponsiveContainer>
+              </ZoomChart>
             ) : (
               <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Not enough data for chart</div>
             )}
@@ -340,6 +388,7 @@ function BacktestTab({ isMobile }) {
                   </div>
                 </div>
                 {chartData.length > 2 ? (
+                  <ZoomChart dataKey="date" dataLength={chartData.length}>
                   <ResponsiveContainer width="100%" height={350}>
                     <ComposedChart data={chartData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -349,9 +398,9 @@ function BacktestTab({ isMobile }) {
                       <Area type="monotone" dataKey="close" stroke={symColor(activeSym)} fill={symColor(activeSym)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} />
                       <Scatter dataKey="buy" fill="#22c55e" shape="triangle" isAnimationActive={false} />
                       <Scatter dataKey="sell" fill="#ef4444" shape="diamond" isAnimationActive={false} />
-                      <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                     </ComposedChart>
                   </ResponsiveContainer>
+                  </ZoomChart>
                 ) : (
                   <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>No price data</div>
                 )}
@@ -693,6 +742,7 @@ function App() {
                     <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--m)" }}>Running 4 backtests from {compareStart}...</div>
                   </div>
                 ) : simResults && simChartData.length > 2 ? (
+                  <ZoomChart dataKey="date" dataLength={simChartData.length}>
                   <ResponsiveContainer width="100%" height={320}>
                     <LineChart data={simChartData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -703,10 +753,11 @@ function App() {
                         <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={false} isAnimationActive={false} />
                       ))}
                       <Line type="monotone" dataKey="buyHold" name="Buy & Hold" stroke="#6b7280" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
-                      <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                     </LineChart>
                   </ResponsiveContainer>
+                  </ZoomChart>
                 ) : compData.length > 2 ? (
+                  <ZoomChart dataKey="t" dataLength={compData.length}>
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -716,9 +767,9 @@ function App() {
                       {pfStats.map(pf => (
                         <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
                       ))}
-                      <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                     </AreaChart>
                   </ResponsiveContainer>
+                  </ZoomChart>
                 ) : (
                   <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Warming up... strategies trigger on candle close</div>
                 )}
@@ -956,6 +1007,7 @@ function App() {
                       );
                     } else {
                       return (
+                        <ZoomChart dataKey="t" dataLength={hCandles.length}>
                         <ResponsiveContainer width="100%" height={340}>
                           <ComposedChart data={hCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>
                             <XAxis dataKey="t" tick={{ fontSize: 8, fill: "#4b5563" }} interval={Math.floor(hCandles.length / 8)} />
@@ -963,9 +1015,9 @@ function App() {
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                             <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : name === "o" ? "Open" : name]} />
                             <Area type="monotone" dataKey="c" stroke={symColor(selected)} fill={symColor(selected)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} name="c" />
-                            <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                           </ComposedChart>
                         </ResponsiveContainer>
+                        </ZoomChart>
                       );
                     }
                   })()}
@@ -1067,6 +1119,7 @@ function App() {
                     el.innerHTML = s;
                   }} style={{ background: "#0f172a", borderRadius: 10, padding: "8px", border: "1px solid rgba(255,255,255,0.06)" }} />
                 ) : (
+                  <ZoomChart dataKey="t" dataLength={chartCandles.length}>
                   <ResponsiveContainer width="100%" height={340}>
                     <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>
                       <XAxis dataKey="t" tick={{ fontSize: 9, fill: "#4b5563" }} interval="preserveStartEnd" />
@@ -1074,9 +1127,9 @@ function App() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name]} />
                       <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} name="c" />
-                      <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                     </ComposedChart>
                   </ResponsiveContainer>
+                  </ZoomChart>
                 )
               ) : (
                 !histMode && <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>

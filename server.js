@@ -222,12 +222,7 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
   var prevCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
   switch (sigId) {
     case "rsi_ob": if (sd.rsi <= val) return 'RSI ' + sd.rsi.toFixed(0); break;
-    case "rsi_os": {
-      var rsiSellThreshold = val;
-      if (sd.adx >= 25) rsiSellThreshold = Math.min(val + 15, 95);
-      if (pos && pos.qty > 0 && sd.rsi >= rsiSellThreshold) return 'RSI ' + sd.rsi.toFixed(0);
-      break;
-    }
+    case "rsi_os": if (pos && pos.qty > 0 && sd.rsi >= val) return 'RSI ' + sd.rsi.toFixed(0); break;
     case "macd_cross_b": if (sd.macd.hist > 0 && sd.prevMacdHist <= 0) return 'MACD↑'; break;
     case "macd_cross_s": if (pos && pos.qty > 0 && sd.macd.hist < 0 && sd.prevMacdHist >= 0) return 'MACD↓'; break;
     case "bb_lower": if (sd.bb.lower > 0 && sd.cur <= sd.bb.lower * (1 - val / 100)) return 'BB lower'; break;
@@ -236,12 +231,7 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
     case "ema_death": if (pos && pos.qty > 0 && sd.ema9 < sd.ema21 && candles.length > 21) { var prevE9b = ema(candles.slice(0, -1).map(function(c){return c.c;}), 9); if (prevE9b && prevE9b >= sd.ema21) return 'Death cross'; } break;
     case "ema50_bounce": if (sd.ema50 > 0 && prevCandle) { var dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= val && lastCandle.c > lastCandle.o && prevCandle.c < prevCandle.o) return 'EMA50 bounce'; } break;
     case "stoch_ob": if (sd.stoch.k <= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
-    case "stoch_os": {
-      var stochSellThreshold = val;
-      if (sd.adx >= 25) stochSellThreshold = Math.min(val + 15, 95);
-      if (pos && pos.qty > 0 && sd.stoch.k >= stochSellThreshold) return 'Stoch K=' + sd.stoch.k.toFixed(0);
-      break;
-    }
+    case "stoch_os": if (pos && pos.qty > 0 && sd.stoch.k >= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
     case "vol_spike_b": if (candles.length >= 10) { var avgV = candles.slice(-10).reduce(function(a,c2){return a+c2.v;},0)/10; if (lastCandle.v > avgV * val && lastCandle.c > lastCandle.o) return 'Vol ' + (lastCandle.v/avgV).toFixed(1) + 'x'; } break;
     case "vol_spike_s": if (pos && pos.qty > 0 && candles.length >= 10) { var avgV2 = candles.slice(-10).reduce(function(a,c2){return a+c2.v;},0)/10; if (lastCandle.v > avgV2 * val && lastCandle.c < lastCandle.o) return 'Vol sell'; } break;
     case "hammer": if (prevCandle && lastCandle) { var body = Math.abs(lastCandle.c - lastCandle.o); var lw = Math.min(lastCandle.o, lastCandle.c) - lastCandle.l; if (lw > body * 2 && lastCandle.c > lastCandle.o) return 'Hammer'; } break;
@@ -905,7 +895,8 @@ function runStrategies() {
     }, 0);
     var totalValue = pf.cash + hVal;
     var drawdownPct = (pf.startCash - totalValue) / pf.startCash;
-    if (drawdownPct >= CIRCUIT_BREAKER_PCT) {
+    var liveCbThreshold = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 }[pf.id] || 0.20;
+    if (drawdownPct >= liveCbThreshold) {
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
       lastScores[pf.id]._circuitBreaker = true;
       portfolioStates[pf.id] = 'STOPPED';
@@ -1001,6 +992,14 @@ function runStrategies() {
 
       SIGNALS.forEach(function(sig) {
         var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
+
+        // Asset-type adjustment for TP/SL/trailing
+        if (sig.category === 'risk') {
+          var assetType = (COINS[sym] && COINS[sym].type) || 'crypto';
+          if (assetType === 'stock') val = val * 0.7;
+          else if (assetType === 'commodity') val = val * 0.5;
+        }
+
         var result = evalSignal(sig.id, val, sd, pos, peakPrice);
         if (!result) return;
 
@@ -1112,14 +1111,27 @@ function runStrategies() {
       var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
       if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
         if (availableCash < 100) return;
+        // Max position count limit
+        var openPositionCount = Object.keys(pf.holdings).filter(function(k) { return pf.holdings[k] && pf.holdings[k].qty > 0; }).length;
+        var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[pf.id] || 5;
+        if (openPositionCount >= maxPositions) return;
         var buyFillPrice = price * (1 + slippagePct); // slippage: buy fills higher
         // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
         var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
+        // Max per-position capital
+        var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[pf.id] || 0.10;
+        tradeValue = Math.min(tradeValue, pf.startCash * maxPerPosition);
         var tq = +(tradeValue / buyFillPrice).toFixed(6);
         if (tq <= 0) return;
         var total = buyFillPrice * tq;
         var commission = total * COMMISSION_RATE;
         if (total + commission > availableCash) return;
+
+        // Commission-aware trade gate: expected profit must exceed 2x trade cost
+        var expectedTpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
+        var expectedProfit = total * (expectedTpPct / 100);
+        var tradeCost = total * COMMISSION_RATE * 2; // buy + sell commission
+        if (expectedProfit < tradeCost * 2) return; // skip: not enough profit potential
 
         // Pre-trade risk check
         var buyRisk = preTradeRiskCheck(pf, 'buy', sym, tq, buyFillPrice, profile);
@@ -1498,10 +1510,12 @@ const server = http.createServer((req, res) => {
         var cooldownDays = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
         var symCooldown = cooldownDays[profileId] || 3;
         var holdUntil = {}; // { BTC: dayIdx } - minimum hold time per asset
-        var minHoldDays = { crypto: 3, stock: 5, commodity: 10 };
+        var minHoldDays = { crypto: 2, stock: 3, commodity: 5 };
         var dailyTradeLimit = { conservative: 2, moderate: 3, aggressive: 5, yolo: 8 };
         var dailyTradeCount = {}; // { "2022-01-15": 3 }
-        var circuitBroken = false;
+        var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
+        var cbCooldownDays = 10;
+        var cbTriggeredDay = -999;
 
         // Track buy & hold for comparison
         var buyHoldStart = {};
@@ -1509,7 +1523,6 @@ const server = http.createServer((req, res) => {
 
         // Process each date
         sortedDates.forEach(function(date, dayIdx) {
-          if (circuitBroken) return;
 
           // For each symbol, build up history and compute indicators
           var symData = {}; // { BTC: { sd-like object } }
@@ -1583,6 +1596,9 @@ const server = http.createServer((req, res) => {
             var price = sd.cur;
             if (price <= 0) return;
 
+            // Circuit breaker cooldown check
+            if (dayIdx - cbTriggeredDay < cbCooldownDays) return;
+
             // Per-symbol cooldown: skip scoring signals if traded too recently
             // Risk sells (TP/SL/Trailing) still checked below via riskSellTriggered
             var assetType = COINS[sym] ? COINS[sym].type : 'stock';
@@ -1620,6 +1636,14 @@ const server = http.createServer((req, res) => {
 
             SIGNALS.forEach(function(sig) {
               var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
+
+              // Asset-type adjustment for TP/SL/trailing
+              if (sig.category === 'risk') {
+                var riskAssetType = (COINS[sym] && COINS[sym].type) || 'crypto';
+                if (riskAssetType === 'stock') val = val * 0.7;
+                else if (riskAssetType === 'commodity') val = val * 0.5;
+              }
+
               var result = evalSignal(sig.id, val, sd, pos, peakPrice);
               if (!result) return;
 
@@ -1698,13 +1722,25 @@ const server = http.createServer((req, res) => {
             // Scoring-based buy (skip if in cooldown)
             if (!inCooldown && buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
               if (availableCash < 100) return;
+              // Max position count limit
+              var openPositionCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
+              var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[profileId] || 5;
+              if (openPositionCount >= maxPositions) return;
               var btBuyFill = price * (1 + btSlippage);
               var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
+              // Max per-position capital
+              var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[profileId] || 0.10;
+              tradeValue = Math.min(tradeValue, startCash * maxPerPosition);
               var tq = +(tradeValue / btBuyFill).toFixed(6);
               if (tq <= 0) return;
               var total = btBuyFill * tq;
               var commission = total * COMMISSION_RATE;
               if (total + commission > availableCash) return;
+              // Commission-aware trade gate: expected profit must exceed 2x trade cost
+              var expectedTpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
+              var expectedProfit = total * (expectedTpPct / 100);
+              var tradeCost = total * COMMISSION_RATE * 2;
+              if (expectedProfit < tradeCost * 2) return;
               cash -= total + commission;
               totalCommission += commission;
               var old = holdings[sym] || { qty: 0, avgCost: 0 };
@@ -1772,8 +1808,10 @@ const server = http.createServer((req, res) => {
           var dd = (maxEquity - equity) / maxEquity;
           if (dd > maxDrawdown) maxDrawdown = dd;
 
-          // Circuit breaker: stop trading if drawdown > 20%
-          if (maxDrawdown > 0.20) {
+          // Circuit breaker: temporary pause if drawdown exceeds profile threshold
+          var cbThreshold = cbThresholds[profileId] || 0.20;
+          if (dd > cbThreshold && dayIdx - cbTriggeredDay >= cbCooldownDays) {
+            // Close all positions and enter cooldown
             Object.keys(holdings).forEach(function(cbSym) {
               var cbPos = holdings[cbSym];
               if (!cbPos || cbPos.qty <= 0) return;
@@ -1792,12 +1830,12 @@ const server = http.createServer((req, res) => {
                 signalPrice: +cbPrice.toFixed(2), slippage: cbSlippage,
                 qty: +cbPos.qty.toFixed(6), total: +cbTotal.toFixed(2),
                 pnl: +cbPnl.toFixed(2), pnlPct: +((cbPnl / (cbPos.avgCost * cbPos.qty)) * 100).toFixed(2),
-                reason: 'Circuit Breaker - Drawdown > 20%', regime: 'circuit-break',
+                reason: 'Circuit Breaker - Drawdown > ' + (cbThreshold * 100).toFixed(0) + '% (pausing ' + cbCooldownDays + ' days)', regime: 'circuit-break',
                 commission: +cbComm.toFixed(2),
               });
             });
             holdings = {};
-            circuitBroken = true;
+            cbTriggeredDay = dayIdx;
           }
         });
 
@@ -1899,7 +1937,7 @@ const server = http.createServer((req, res) => {
             buyHoldReturn: +(buyHoldReturn * 100).toFixed(2),
             days: sortedDates.length,
             openPositionsClosed: openPositionsClosed,
-            circuitBreakerTriggered: circuitBroken,
+            circuitBreakerTriggered: cbTriggeredDay > -999,
           },
           equityCurve: equityCurve,
           trades: trades,

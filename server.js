@@ -1516,6 +1516,8 @@ const server = http.createServer((req, res) => {
         var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
         var cbCooldownDays = 10;
         var cbTriggeredDay = -999;
+        var cbTriggerCount = 0;
+        var cbMaxTriggers = 3; // After 3 circuit breaker hits, stop permanently
 
         // Track buy & hold for comparison
         var buyHoldStart = {};
@@ -1598,6 +1600,8 @@ const server = http.createServer((req, res) => {
 
             // Circuit breaker cooldown check
             if (dayIdx - cbTriggeredDay < cbCooldownDays) return;
+            // Permanent stop after 3 circuit breaker hits
+            if (cbTriggerCount >= cbMaxTriggers) return;
 
             // Per-symbol cooldown: skip scoring signals if traded too recently
             // Risk sells (TP/SL/Trailing) still checked below via riskSellTriggered
@@ -1803,6 +1807,11 @@ const server = http.createServer((req, res) => {
           var equity = cash + dayHoldingValue;
           equityCurve.push({ date: date, value: +equity.toFixed(2) });
 
+          // Reset peak after circuit breaker cooldown ends — prevents infinite re-trigger
+          if (cbTriggeredDay > 0 && dayIdx === cbTriggeredDay + cbCooldownDays) {
+            maxEquity = equity; // Fresh start, DD measured from current level
+          }
+
           // Max drawdown tracking
           if (equity > maxEquity) maxEquity = equity;
           var dd = (maxEquity - equity) / maxEquity;
@@ -1836,6 +1845,7 @@ const server = http.createServer((req, res) => {
             });
             holdings = {};
             cbTriggeredDay = dayIdx;
+            cbTriggerCount++;
           }
         });
 
@@ -1937,7 +1947,8 @@ const server = http.createServer((req, res) => {
             buyHoldReturn: +(buyHoldReturn * 100).toFixed(2),
             days: sortedDates.length,
             openPositionsClosed: openPositionsClosed,
-            circuitBreakerTriggered: cbTriggeredDay > -999,
+            circuitBreakerTriggered: cbTriggerCount > 0,
+            circuitBreakerCount: cbTriggerCount,
           },
           equityCurve: equityCurve,
           trades: trades,

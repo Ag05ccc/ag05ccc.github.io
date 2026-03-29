@@ -47,6 +47,8 @@ const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter,
 function ZoomChart({ children, dataKey, dataLength }) {
   const ref = React.useRef(null);
   const [range, setRange] = React.useState(null);
+  const rangeRef = React.useRef(null);
+  React.useEffect(() => { rangeRef.current = range; }, [range]);
   React.useEffect(() => { setRange(null); }, [dataLength]);
   React.useEffect(() => {
     const el = ref.current;
@@ -74,8 +76,47 @@ function ZoomChart({ children, dataKey, dataLength }) {
         return [nStart, nEnd];
       });
     };
+    // Mouse drag to pan left/right
+    let dragging = false, dragStartX = 0, dragStartRange = null;
+    const onDown = (e) => {
+      if (e.button !== 0) return; // left click only
+      const cur = rangeRef.current;
+      if (!cur) return; // not zoomed, nothing to pan
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartRange = [cur[0], cur[1]];
+      el.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!dragging) return;
+      const sr = dragStartRange;
+      if (!sr) return;
+      const rect = el.getBoundingClientRect();
+      const span = sr[1] - sr[0];
+      const dx = e.clientX - dragStartX;
+      // Convert pixel delta to data index delta
+      const indexDelta = Math.round((-dx / rect.width) * span);
+      let nStart = sr[0] + indexDelta;
+      let nEnd = sr[1] + indexDelta;
+      if (nStart < 0) { nStart = 0; nEnd = span; }
+      if (nEnd > dataLength) { nEnd = dataLength; nStart = dataLength - span; }
+      setRange([nStart, nEnd]);
+    };
+    const onUp = () => {
+      dragging = false;
+      el.style.cursor = 'crosshair';
+    };
     el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
+    el.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      el.removeEventListener('wheel', handler);
+      el.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
   }, [dataLength]);
 
   // Clone chart children and replace their data prop with sliced version

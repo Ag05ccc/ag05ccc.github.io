@@ -108,6 +108,249 @@ const TIMEFRAMES = [
   { label: "1D", factor: 1440 },
 ];
 
+function BacktestTab({ isMobile }) {
+  const [btAssets, setBtAssets] = useState([]);
+  const [btProfile, setBtProfile] = useState("moderate");
+  const [btSymbols, setBtSymbols] = useState([]);
+  const [btStartDate, setBtStartDate] = useState("2022-01-01");
+  const [btLoading, setBtLoading] = useState(false);
+  const [btResult, setBtResult] = useState(null);
+  const [btError, setBtError] = useState(null);
+  const [btTradeFilter, setBtTradeFilter] = useState("all");
+
+  // Load available assets on mount
+  useEffect(function() {
+    fetch('/api/backtest/assets')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        setBtAssets(data || []);
+        // Default select all
+        setBtSymbols((data || []).map(function(a) { return a.symbol; }));
+      })
+      .catch(function() {});
+  }, []);
+
+  function toggleSymbol(sym) {
+    setBtSymbols(function(prev) {
+      if (prev.indexOf(sym) >= 0) return prev.filter(function(s) { return s !== sym; });
+      return prev.concat([sym]);
+    });
+  }
+
+  function selectAll() { setBtSymbols(btAssets.map(function(a) { return a.symbol; })); }
+  function selectNone() { setBtSymbols([]); }
+
+  function runBacktest() {
+    if (btSymbols.length === 0) { setBtError("Select at least one asset"); return; }
+    setBtLoading(true);
+    setBtError(null);
+    setBtResult(null);
+    fetch('/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: btProfile, symbols: btSymbols, startDate: btStartDate }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      setBtLoading(false);
+      if (data.error) { setBtError(data.error); return; }
+      setBtResult(data);
+    })
+    .catch(function(e) { setBtLoading(false); setBtError(e.message || 'Backtest failed'); });
+  }
+
+  var m = btResult && btResult.metrics;
+  var filteredTrades = btResult ? (btResult.trades || []) : [];
+  if (btTradeFilter === "buy") filteredTrades = filteredTrades.filter(function(t) { return t.side === 'buy'; });
+  else if (btTradeFilter === "sell") filteredTrades = filteredTrades.filter(function(t) { return t.side === 'sell'; });
+  else if (btTradeFilter === "wins") filteredTrades = filteredTrades.filter(function(t) { return t.pnl > 0; });
+  else if (btTradeFilter === "losses") filteredTrades = filteredTrades.filter(function(t) { return t.pnl < 0; });
+
+  // Downsample equity curve for chart (max 500 points)
+  var eqData = btResult ? (btResult.equityCurve || []) : [];
+  if (eqData.length > 500) {
+    var step = Math.ceil(eqData.length / 500);
+    var sampled = [];
+    for (var si = 0; si < eqData.length; si += step) sampled.push(eqData[si]);
+    if (sampled[sampled.length - 1] !== eqData[eqData.length - 1]) sampled.push(eqData[eqData.length - 1]);
+    eqData = sampled;
+  }
+
+  var profileColors = { conservative: "#3b82f6", moderate: "#22c55e", aggressive: "#f59e0b", yolo: "#ef4444" };
+  var profileNames = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive", yolo: "YOLO" };
+
+  return (
+    <div style={{ padding: isMobile ? "12px 8px" : "20px 24px" }}>
+      <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>Backtest Engine</div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>Test strategies against historical daily data using the same signals and scoring system as live trading.</div>
+
+      {/* Configuration Panel */}
+      <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 10 }}>CONFIGURATION</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+          {/* Profile selector */}
+          <div>
+            <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 4, fontFamily: "var(--h)", fontWeight: 600 }}>PROFILE</div>
+            <select value={btProfile} onChange={function(e) { setBtProfile(e.target.value); }} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 12, fontFamily: "var(--m)", outline: "none", cursor: "pointer" }}>
+              <option value="conservative">Conservative</option>
+              <option value="moderate">Moderate</option>
+              <option value="aggressive">Aggressive</option>
+              <option value="yolo">YOLO</option>
+            </select>
+          </div>
+          {/* Start date */}
+          <div>
+            <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 4, fontFamily: "var(--h)", fontWeight: 600 }}>START DATE</div>
+            <input type="date" value={btStartDate} onChange={function(e) { setBtStartDate(e.target.value); }} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #1e293b", background: "#0a0e17", color: "#f8fafc", fontSize: 12, fontFamily: "var(--m)", outline: "none" }} />
+          </div>
+          {/* Run button */}
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button onClick={runBacktest} disabled={btLoading} className="bt" style={{ width: "100%", padding: "8px 16px", borderRadius: 6, border: "none", background: btLoading ? "#374151" : (profileColors[btProfile] || "#22c55e"), color: btLoading ? "#9ca3af" : "#0a0e17", fontSize: 13, fontWeight: 700, fontFamily: "var(--h)", cursor: btLoading ? "not-allowed" : "pointer" }}>
+              {btLoading ? "Running..." : "Run Backtest"}
+            </button>
+          </div>
+        </div>
+
+        {/* Asset selection */}
+        <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 4, fontFamily: "var(--h)", fontWeight: 600 }}>ASSETS ({btSymbols.length}/{btAssets.length} selected)</div>
+        <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+          <button onClick={selectAll} className="bt" style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #1e293b", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontSize: 9, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>ALL</button>
+          <button onClick={selectNone} className="bt" style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #1e293b", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 9, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>NONE</button>
+        </div>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {btAssets.map(function(a) {
+            var active = btSymbols.indexOf(a.symbol) >= 0;
+            var col = symColor(a.symbol);
+            return (
+              <button key={a.symbol} onClick={function() { toggleSymbol(a.symbol); }} className="bt" style={{ padding: "4px 8px", borderRadius: 4, border: active ? "1px solid " + col : "1px solid #1e293b", background: active ? col + "15" : "transparent", color: active ? col : "#4b5563", fontSize: 10, cursor: "pointer", fontFamily: "var(--m)", fontWeight: active ? 600 : 400, opacity: active ? 1 : 0.5 }}>
+                {a.symbol}
+                <span style={{ fontSize: 7, color: "#4b5563", marginLeft: 3 }}>{a.rows}d</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Loading spinner */}
+      {btLoading && (
+        <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ display: "inline-block", width: 32, height: 32, border: "3px solid #1e293b", borderTop: "3px solid " + (profileColors[btProfile] || "#f59e0b"), borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8, fontFamily: "var(--m)" }}>Running backtest on {btSymbols.length} assets...</div>
+        </div>
+      )}
+
+      {/* Error */}
+      {btError && (
+        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "12px 16px", color: "#ef4444", fontSize: 12, fontFamily: "var(--m)", marginBottom: 16 }}>{btError}</div>
+      )}
+
+      {/* No results yet */}
+      {!btResult && !btLoading && !btError && (
+        <div style={{ textAlign: "center", padding: 60, color: "#374151" }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>&#x1f4ca;</div>
+          <div style={{ fontSize: 14, fontFamily: "var(--h)", fontWeight: 600 }}>Select assets and click Run Backtest</div>
+          <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4 }}>Historical daily data available for {btAssets.length} crypto assets</div>
+        </div>
+      )}
+
+      {/* Results */}
+      {btResult && m && (
+        <div>
+          {/* Metrics Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
+            {[
+              { label: "TOTAL RETURN", value: (m.totalReturn >= 0 ? "+" : "") + m.totalReturn + "%", color: m.totalReturn >= 0 ? "#22c55e" : "#ef4444" },
+              { label: "WIN RATE", value: m.winRate + "%", color: m.winRate >= 50 ? "#22c55e" : "#ef4444" },
+              { label: "MAX DRAWDOWN", value: "-" + m.maxDrawdown + "%", color: m.maxDrawdown > 30 ? "#ef4444" : m.maxDrawdown > 15 ? "#f59e0b" : "#22c55e" },
+              { label: "SHARPE RATIO", value: m.sharpe.toFixed(2), color: m.sharpe > 1 ? "#22c55e" : m.sharpe > 0 ? "#f59e0b" : "#ef4444" },
+              { label: "TOTAL TRADES", value: m.totalTrades + " (" + m.wins + "W / " + m.losses + "L)", color: "#a5b4fc" },
+              { label: "BUY & HOLD", value: (m.buyHoldReturn >= 0 ? "+" : "") + m.buyHoldReturn + "%", color: m.totalReturn > m.buyHoldReturn ? "#22c55e" : "#ef4444" },
+            ].map(function(card, i) {
+              return (
+                <div key={i} style={{ background: "#0f172a", borderRadius: 8, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 4 }}>{card.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--m)", color: card.color }}>{card.value}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Summary bar */}
+          <div style={{ background: "#0f172a", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.04)", marginBottom: 16, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 11, fontFamily: "var(--m)" }}>
+            <span style={{ color: "#6b7280" }}>Profile: <span style={{ color: profileColors[btResult.profile] || "#f8fafc", fontWeight: 600 }}>{profileNames[btResult.profile] || btResult.profile}</span></span>
+            <span style={{ color: "#6b7280" }}>Period: <span style={{ color: "#f8fafc" }}>{btResult.startDate} to {eqData.length > 0 ? eqData[eqData.length - 1].date : "?"}</span></span>
+            <span style={{ color: "#6b7280" }}>Days: <span style={{ color: "#f8fafc" }}>{m.days}</span></span>
+            <span style={{ color: "#6b7280" }}>Assets: <span style={{ color: "#f8fafc" }}>{(btResult.symbols || []).length}</span></span>
+            <span style={{ color: "#6b7280" }}>Commission: <span style={{ color: "#f59e0b" }}>${fK(m.totalCommission)}</span></span>
+            <span style={{ color: "#6b7280" }}>Final: <span style={{ color: m.finalEquity >= m.startCash ? "#22c55e" : "#ef4444", fontWeight: 700 }}>${fK(m.finalEquity)}</span></span>
+          </div>
+
+          {/* Equity Curve Chart */}
+          <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, marginBottom: 8 }}>EQUITY CURVE</div>
+            {eqData.length > 2 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={eqData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#4b5563" }} interval={Math.floor(eqData.length / 6)} />
+                  <YAxis domain={["auto", "auto"]} tick={{ fontSize: 9, fill: "#4b5563" }} tickFormatter={function(v) { return "$" + fK(v); }} />
+                  <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={function(v) { return ["$" + fK(v), "Equity"]; }} />
+                  <ReferenceLine y={m.startCash} stroke="#6b7280" strokeDasharray="3 3" label={{ value: "Start $" + fK(m.startCash), fill: "#6b7280", fontSize: 9 }} />
+                  <Area type="monotone" dataKey="value" stroke={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fill={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Not enough data for chart</div>
+            )}
+          </div>
+
+          {/* Trade List */}
+          <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", overflow: "hidden" }}>
+            <div style={{ padding: "10px 16px", fontSize: 11, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+              <span>TRADES ({filteredTrades.length})</span>
+              <div style={{ display: "flex", gap: 3 }}>
+                {[["all", "All"], ["buy", "Buys"], ["sell", "Sells"], ["wins", "Wins"], ["losses", "Losses"]].map(function(f) {
+                  var active = btTradeFilter === f[0];
+                  return (
+                    <button key={f[0]} onClick={function() { setBtTradeFilter(f[0]); }} style={{ padding: "2px 8px", borderRadius: 3, border: active ? "1px solid #f59e0b" : "1px solid #1e293b", background: active ? "rgba(245,158,11,0.15)" : "transparent", color: active ? "#f59e0b" : "#6b7280", fontSize: 9, cursor: "pointer", fontFamily: "var(--m)", fontWeight: 600 }}>{f[1]}</button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Table header */}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "65px 35px 40px 55px 55px 50px" : "80px 45px 50px 70px 50px 70px 65px 1fr 60px", padding: "6px 12px", fontSize: 8, color: "#4b5563", fontFamily: "var(--h)", fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+              <span>DATE</span><span>SIDE</span><span>SYM</span><span>PRICE</span><span>QTY</span><span>TOTAL</span>{!isMobile && <><span>P&L</span><span>REASON</span><span>REGIME</span></>}
+            </div>
+            <div style={{ maxHeight: 400, overflowY: "auto" }}>
+              {filteredTrades.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: "#374151", fontSize: 11 }}>No trades match filter</div>
+              )}
+              {filteredTrades.slice(0, 200).map(function(t, i) {
+                var pnlColor = t.pnl > 0 ? "#22c55e" : t.pnl < 0 ? "#ef4444" : "#6b7280";
+                return (
+                  <div key={i} className="sr" style={{ display: "grid", gridTemplateColumns: isMobile ? "65px 35px 40px 55px 55px 50px" : "80px 45px 50px 70px 50px 70px 65px 1fr 60px", padding: "5px 12px", fontSize: isMobile ? 9 : 10, fontFamily: "var(--m)", borderBottom: "1px solid rgba(255,255,255,0.02)", background: t.pnl > 0 ? "rgba(34,197,94,0.02)" : t.pnl < 0 ? "rgba(239,68,68,0.02)" : "transparent" }}>
+                    <span style={{ color: "#6b7280" }}>{t.date}</span>
+                    <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: t.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 700, textAlign: "center", alignSelf: "center" }}>{t.side === "buy" ? "BUY" : "SELL"}</span>
+                    <span style={{ color: symColor(t.symbol), fontWeight: 600 }}>{t.symbol}</span>
+                    <span style={{ color: "#e2e8f0" }}>${fmt(t.price)}</span>
+                    <span style={{ color: "#94a3b8" }}>{t.qty < 1 ? t.qty.toFixed(4) : t.qty.toFixed(2)}</span>
+                    <span style={{ color: "#f8fafc", fontWeight: 600 }}>${fK(t.total)}</span>
+                    {!isMobile && <><span style={{ color: pnlColor, fontWeight: 600 }}>{t.pnl !== 0 ? (t.pnl > 0 ? "+" : "") + "$" + fK(t.pnl) : "--"}{t.pnlPct !== 0 ? " (" + (t.pnlPct > 0 ? "+" : "") + t.pnlPct + "%)" : ""}</span>
+                    <span style={{ color: "#a78bfa", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.reason}</span>
+                    <span style={{ fontSize: 8, color: "#4b5563" }}>{t.regime}</span></>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -212,7 +455,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -614,6 +857,11 @@ function App() {
               ))}
             </div>
           )}
+
+          {/* BACKTEST */}
+          {tab === "backtest" && (() => {
+            return <BacktestTab isMobile={isMobile} />;
+          })()}
 
           {/* SETTINGS */}
           {tab === "settings" && (

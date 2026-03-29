@@ -1089,6 +1089,396 @@ const server = http.createServer((req, res) => {
       'Access-Control-Allow-Origin': '*'
     });
     res.end(JSON.stringify(logs, null, 2));
+  } else if (req.url === '/api/backtest/assets') {
+    // Return available historical data files with date ranges
+    var dataDir = path.join(__dirname, 'backtest', 'data');
+    var assets = [];
+    try {
+      var files = fs.readdirSync(dataDir).filter(function(f) { return f.endsWith('_daily.csv'); });
+      files.forEach(function(f) {
+        try {
+          var symbol = f.replace('_daily.csv', '');
+          var content = fs.readFileSync(path.join(dataDir, f), 'utf8');
+          var lines = content.split('\n').filter(function(l) { return l.trim().length > 0; });
+          // Skip header URL line and column header line
+          var dataLines = lines.slice(2);
+          if (dataLines.length < 2) return;
+          // CSV is sorted descending (newest first), so last data line is oldest
+          var newest = dataLines[0].split(',')[1] || '';
+          var oldest = dataLines[dataLines.length - 1].split(',')[1] || '';
+          assets.push({ symbol: symbol, file: f, rows: dataLines.length, startDate: oldest.trim(), endDate: newest.trim() });
+        } catch(e2) {}
+      });
+    } catch(e) {}
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify(assets));
+  } else if (req.method === 'POST' && req.url === '/api/backtest') {
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', function() {
+      try {
+        var params = JSON.parse(body);
+        var profileId = params.profile || 'moderate';
+        var symbols = params.symbols || [];
+        var startDate = params.startDate || '2020-01-01';
+        var startCash = params.startCash || 100000;
+
+        var profile = PROFILES.find(function(p) { return p.id === profileId; });
+        if (!profile) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown profile' })); return; }
+        if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
+
+        // Load CSV data for all symbols
+        var dataDir = path.join(__dirname, 'backtest', 'data');
+        var allCandles = {}; // { BTC: [ {date, open, high, low, close, volume}, ... ] }
+        var allDates = {};
+        symbols.forEach(function(sym) {
+          var csvPath = path.join(dataDir, sym + '_daily.csv');
+          if (!fs.existsSync(csvPath)) return;
+          var content = fs.readFileSync(csvPath, 'utf8');
+          var lines = content.split('\n').filter(function(l) { return l.trim().length > 0; });
+          var dataLines = lines.slice(2); // skip header URL + column headers
+          var candles = [];
+          dataLines.forEach(function(line) {
+            var parts = line.split(',');
+            if (parts.length < 7) return;
+            var date = (parts[1] || '').trim();
+            if (date < startDate) return;
+            candles.push({
+              date: date,
+              open: parseFloat(parts[3]) || 0,
+              high: parseFloat(parts[4]) || 0,
+              low: parseFloat(parts[5]) || 0,
+              close: parseFloat(parts[6]) || 0,
+              volume: parseFloat(parts[7]) || 0,
+            });
+            allDates[date] = true;
+          });
+          // Sort ascending by date
+          candles.sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+          if (candles.length > 0) allCandles[sym] = candles;
+        });
+
+        var sortedDates = Object.keys(allDates).sort();
+        if (sortedDates.length < 30) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not enough data (need 30+ days)' })); return; }
+
+        // Build cumulative candle history per symbol for TA calculation
+        var symHistory = {}; // { BTC: { closes:[], highs:[], lows:[], candles:[] } }
+        var symDateIndex = {}; // { BTC: { "2022-01-01": 0, ... } }
+        symbols.forEach(function(sym) {
+          if (!allCandles[sym]) return;
+          symHistory[sym] = { closes: [], highs: [], lows: [], candles: [] };
+          symDateIndex[sym] = {};
+          allCandles[sym].forEach(function(c, i) {
+            symDateIndex[sym][c.date] = i;
+          });
+        });
+
+        // Backtest state
+        var cash = startCash;
+        var holdings = {}; // { BTC: { qty, avgCost } }
+        var peaks = {}; // { BTC: peakPrice }
+        var trades = [];
+        var equityCurve = [];
+        var wins = 0, losses = 0;
+        var totalCommission = 0;
+        var maxEquity = startCash;
+        var maxDrawdown = 0;
+        var buyThreshold = profile.buyThreshold || 3;
+        var sellThreshold = profile.sellThreshold || 0.8;
+        var cashPct = profile.cashPct || 0.10;
+
+        // Track buy & hold for comparison
+        var buyHoldStart = {};
+        var buyHoldStartCash = startCash;
+
+        // Process each date
+        sortedDates.forEach(function(date, dayIdx) {
+          // For each symbol, build up history and compute indicators
+          var symData = {}; // { BTC: { sd-like object } }
+          symbols.forEach(function(sym) {
+            if (!allCandles[sym] || symDateIndex[sym][date] === undefined) return;
+            var idx = symDateIndex[sym][date];
+            var c = allCandles[sym][idx];
+            var sh = symHistory[sym];
+            sh.closes.push(c.close);
+            sh.highs.push(c.high);
+            sh.lows.push(c.low);
+            sh.candles.push({ o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume, t: date });
+
+            if (sh.closes.length < 5) return;
+
+            var closes = sh.closes;
+            var highs = sh.highs;
+            var lows = sh.lows;
+            var rsi = calcRSI(closes);
+            var macd = calcMACD(closes);
+            var bb = calcBB(closes);
+            var ema9val = ema(closes, 9) || c.close;
+            var ema21val = ema(closes, 21) || c.close;
+            var ema50val = ema(closes, 50) || c.close;
+            var ema200val = ema(closes, 200) || c.close;
+            var stoch = calcStoch(highs, lows, closes);
+            var adx = calcADX(highs, lows, closes);
+            var vwap = closes.length > 0 ? closes.reduce(function(a, b) { return a + b; }, 0) / closes.length : c.close;
+
+            // Previous MACD hist (for cross detection)
+            var prevMacdHist = 0;
+            if (sh.closes.length > 26) {
+              var prevCloses = sh.closes.slice(0, -1);
+              var prevMacd = calcMACD(prevCloses);
+              prevMacdHist = prevMacd.hist || 0;
+            }
+
+            symData[sym] = {
+              cur: c.close,
+              candles: sh.candles,
+              rsi: rsi,
+              macd: macd,
+              bb: bb,
+              ema9: ema9val,
+              ema21: ema21val,
+              ema50: ema50val,
+              ema200: ema200val,
+              stoch: stoch,
+              adx: adx,
+              vwap: vwap,
+              prevMacdHist: prevMacdHist,
+            };
+
+            // Store buy & hold start prices
+            if (!buyHoldStart[sym] && c.close > 0) {
+              buyHoldStart[sym] = c.close;
+            }
+          });
+
+          // Now run signal evaluation for each symbol
+          symbols.forEach(function(sym) {
+            var sd = symData[sym];
+            if (!sd || sd.candles.length < 15) return;
+            var pos = holdings[sym];
+            var peakPrice = peaks[sym];
+            var price = sd.cur;
+            if (price <= 0) return;
+
+            // Detect regime
+            var regime = detectRegime(sd);
+
+            // Regime-based weight multipliers (same as live)
+            var rangingDowntrend = regime.type === 'ranging' && sd.ema21 > 0 && sd.cur < sd.ema21;
+            var trendMult = regime.type === 'trending' ? 1.5 : (regime.type === 'ranging' ? 0.5 : 1.0);
+            var meanRevMult = regime.type === 'ranging' ? (rangingDowntrend ? 0.5 : 1.5) : (regime.type === 'trending' ? 0.5 : 1.0);
+            var regimeMultipliers = {
+              'trend': trendMult, 'momentum': trendMult,
+              'mean-reversion': meanRevMult,
+              'pattern': 1.0, 'combo': 1.2, 'risk': 0,
+            };
+
+            // Score signals with category cap (same as live)
+            var buyScore = 0, sellScore = 0;
+            var buyReasons = [], sellReasons = [];
+            var riskSellTriggered = null;
+            var buyCatScores = {};
+            var sellCatScores = {};
+
+            SIGNALS.forEach(function(sig) {
+              var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
+              var result = evalSignal(sig.id, val, sd, pos, peakPrice);
+              if (!result) return;
+
+              if (sig.category === 'risk') {
+                if (pos && pos.qty > 0) riskSellTriggered = result;
+                return;
+              }
+
+              var regimeMult = regimeMultipliers[sig.category] || 1.0;
+              var weightedScore = sig.weight * regimeMult;
+
+              if (sig.side === 'buy') {
+                var catKey = sig.category;
+                buyCatScores[catKey] = (buyCatScores[catKey] || 0) + weightedScore;
+                if (buyCatScores[catKey] <= CATEGORY_CAP) {
+                  buyScore += weightedScore;
+                }
+                buyReasons.push(result);
+              } else {
+                var catKey2 = sig.category;
+                sellCatScores[catKey2] = (sellCatScores[catKey2] || 0) + weightedScore;
+                if (sellCatScores[catKey2] <= CATEGORY_CAP) {
+                  sellScore += weightedScore;
+                }
+                sellReasons.push(result);
+              }
+            });
+
+            // Exposure calculation
+            var holdingValue = Object.keys(holdings).reduce(function(s, hs) {
+              var h = holdings[hs];
+              var hPrice = (symData[hs] && symData[hs].cur) || 0;
+              return s + ((h && h.qty) || 0) * hPrice;
+            }, 0);
+            var totalValue = cash + holdingValue;
+            var exposurePct = totalValue > 0 ? holdingValue / totalValue : 0;
+            var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[profile.id] || 0.80;
+
+            if (exposurePct >= maxExposure) {
+              buyScore = 0;
+              sellScore += 1.5;
+              sellReasons.push('Over-exposed');
+            }
+
+            // Volatility adjustment
+            var volAdjust = regime.volatility > 3 ? 0.5 : (regime.volatility > 2 ? 0.75 : 1.0);
+            var minCashReserve = startCash * 0.02;
+            var availableCash = Math.max(0, cash - minCashReserve);
+
+            // Risk sell (TP/SL/Trailing)
+            if (riskSellTriggered && pos && pos.qty > 0) {
+              var riskQty = pos.qty;
+              var riskTotal = price * riskQty;
+              var riskComm = riskTotal * COMMISSION_RATE;
+              cash += riskTotal - riskComm;
+              totalCommission += riskComm;
+              var riskPnl = (price - pos.avgCost) * riskQty;
+              if (riskPnl > 0) wins++; else losses++;
+              trades.push({
+                date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
+                qty: +riskQty.toFixed(6), total: +riskTotal.toFixed(2),
+                pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
+                reason: riskSellTriggered, regime: regime.type,
+                commission: +riskComm.toFixed(2),
+              });
+              delete holdings[sym];
+              delete peaks[sym];
+              return;
+            }
+
+            // Scoring-based buy
+            if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
+              if (availableCash < 100) return;
+              var tradeValue = Math.min(totalValue * cashPct * volAdjust, availableCash * 0.95);
+              var tq = +(tradeValue / price).toFixed(6);
+              if (tq <= 0) return;
+              var total = price * tq;
+              var commission = total * COMMISSION_RATE;
+              if (total + commission > availableCash) return;
+              cash -= total + commission;
+              totalCommission += commission;
+              var old = holdings[sym] || { qty: 0, avgCost: 0 };
+              var nq = +(old.qty + tq).toFixed(6);
+              holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price };
+              peaks[sym] = price;
+              trades.push({
+                date: date, side: 'buy', symbol: sym, price: +price.toFixed(2),
+                qty: +tq.toFixed(6), total: +total.toFixed(2),
+                pnl: 0, pnlPct: 0,
+                reason: buyReasons.join(', '), regime: regime.type,
+                commission: +commission.toFixed(2),
+              });
+            }
+            // Scoring-based sell
+            else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
+              var sq = pos.qty;
+              var sellTotal = price * sq;
+              var sellComm = sellTotal * COMMISSION_RATE;
+              cash += sellTotal - sellComm;
+              totalCommission += sellComm;
+              var sellPnl = (price - pos.avgCost) * sq;
+              if (sellPnl > 0) wins++; else losses++;
+              trades.push({
+                date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
+                qty: +sq.toFixed(6), total: +sellTotal.toFixed(2),
+                pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
+                reason: sellReasons.join(', '), regime: regime.type,
+                commission: +sellComm.toFixed(2),
+              });
+              delete holdings[sym];
+              delete peaks[sym];
+            }
+
+            // Update peak tracking
+            if (holdings[sym] && price > (peaks[sym] || 0)) {
+              peaks[sym] = price;
+            }
+          });
+
+          // Calculate equity at end of day
+          var dayHoldingValue = Object.keys(holdings).reduce(function(s, hs) {
+            var h = holdings[hs];
+            var hPrice = (symData[hs] && symData[hs].cur) || 0;
+            return s + ((h && h.qty) || 0) * hPrice;
+          }, 0);
+          var equity = cash + dayHoldingValue;
+          equityCurve.push({ date: date, value: +equity.toFixed(2) });
+
+          // Max drawdown tracking
+          if (equity > maxEquity) maxEquity = equity;
+          var dd = (maxEquity - equity) / maxEquity;
+          if (dd > maxDrawdown) maxDrawdown = dd;
+        });
+
+        // Final equity
+        var finalEquity = equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].value : startCash;
+        var totalReturn = (finalEquity - startCash) / startCash;
+
+        // Buy & hold comparison
+        var buyHoldValue = 0;
+        var buyHoldSymCount = Object.keys(buyHoldStart).length;
+        if (buyHoldSymCount > 0) {
+          var perSymCash = buyHoldStartCash / buyHoldSymCount;
+          Object.keys(buyHoldStart).forEach(function(sym) {
+            var startPrice = buyHoldStart[sym];
+            var endCandles = allCandles[sym];
+            var endPrice = endCandles && endCandles.length > 0 ? endCandles[endCandles.length - 1].close : startPrice;
+            buyHoldValue += perSymCash * (endPrice / startPrice);
+          });
+        }
+        var buyHoldReturn = buyHoldSymCount > 0 ? (buyHoldValue - buyHoldStartCash) / buyHoldStartCash : 0;
+
+        // Sharpe ratio (annualized from daily returns)
+        var dailyReturns = [];
+        for (var di = 1; di < equityCurve.length; di++) {
+          var prevVal = equityCurve[di - 1].value;
+          if (prevVal > 0) dailyReturns.push((equityCurve[di].value - prevVal) / prevVal);
+        }
+        var avgReturn = dailyReturns.length > 0 ? dailyReturns.reduce(function(a, b) { return a + b; }, 0) / dailyReturns.length : 0;
+        var stdReturn = 0;
+        if (dailyReturns.length > 1) {
+          var variance = dailyReturns.reduce(function(a, b) { return a + Math.pow(b - avgReturn, 2); }, 0) / (dailyReturns.length - 1);
+          stdReturn = Math.sqrt(variance);
+        }
+        var sharpe = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0;
+
+        var result = {
+          metrics: {
+            totalReturn: +(totalReturn * 100).toFixed(2),
+            winRate: wins + losses > 0 ? +((wins / (wins + losses)) * 100).toFixed(1) : 0,
+            maxDrawdown: +(maxDrawdown * 100).toFixed(2),
+            sharpe: +sharpe.toFixed(3),
+            totalTrades: trades.length,
+            wins: wins,
+            losses: losses,
+            totalCommission: +totalCommission.toFixed(2),
+            finalEquity: +finalEquity.toFixed(2),
+            startCash: startCash,
+            buyHoldReturn: +(buyHoldReturn * 100).toFixed(2),
+            days: sortedDates.length,
+          },
+          equityCurve: equityCurve,
+          trades: trades,
+          profile: profileId,
+          symbols: symbols,
+          startDate: startDate,
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(result));
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+  } else if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
+    res.end();
   } else {
     res.writeHead(404);
     res.end('Not found');

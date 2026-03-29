@@ -1,0 +1,42 @@
+{
+  "conservative": {
+    "totalReturn": 8.79,
+    "winRate": 55.6,
+    "maxDrawdown": 1.38,
+    "sharpe": 0.742,
+    "totalTrades": 18,
+    "totalOrders": 36,
+    "buys": 18,
+    "sells": 18,
+    "wins": 10,
+    "losses": 8,
+    "totalCommission": 534.4,
+    "finalEquity": 108787.79,
+    "startCash": 100000,
+    "buyHoldReturn": 4.56,
+    "days": 1541,
+    "openPositionsClosed": 0,
+    "circuitBreakerTriggered": false,
+    "circuitBreakerCount": 0
+  },
+  "yolo": {
+    "totalReturn": 12.12,
+    "winRate": 47.9,
+    "maxDrawdown": 5.11,
+    "sharpe": 0.555,
+    "totalTrades": 190,
+    "totalOrders": 411,
+    "buys": 221,
+    "sells": 190,
+    "wins": 91,
+    "losses": 99,
+    "totalCommission": 3551.67,
+    "finalEquity": 112119.39,
+    "startCash": 100000,
+    "buyHoldReturn": 4.56,
+    "days": 1541,
+    "openPositionsClosed": 0,
+    "circuitBreakerTriggered": false,
+    "circuitBreakerCount": 0
+  }
+}

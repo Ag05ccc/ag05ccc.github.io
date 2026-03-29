@@ -1,0 +1,128 @@
+{
+  "date": "2026-03-29T20:33:13.146Z",
+  "passed": 17,
+  "failed": 0,
+  "total": 17,
+  "duration": "2.4s",
+  "tests": [
+    {
+      "test": "GOLD Conservative: should not lose > 5%",
+      "passed": true,
+      "actual": "0.75%",
+      "expected": "> -5%",
+      "details": "B&H: 137.41%, Trades: 8"
+    },
+    {
+      "test": "GOLD Conservative: Sharpe should be > -1",
+      "passed": true,
+      "actual": 0.243,
+      "expected": "> -1",
+      "details": ""
+    },
+    {
+      "test": "GOLD Conservative: Max DD < 10%",
+      "passed": true,
+      "actual": "1.29%",
+      "expected": "< 10%",
+      "details": ""
+    },
+    {
+      "test": "GOLD Moderate: should not lose > 5%",
+      "passed": true,
+      "actual": "1.19%",
+      "expected": "> -5%",
+      "details": ""
+    },
+    {
+      "test": "BTC Bull Moderate: should be profitable (> 0%)",
+      "passed": true,
+      "actual": "1.63%",
+      "expected": "> 0%",
+      "details": "B&H: 294.53%"
+    },
+    {
+      "test": "BTC Bull Moderate: Max DD < 30%",
+      "passed": true,
+      "actual": "0.43%",
+      "expected": "< 30%",
+      "details": ""
+    },
+    {
+      "test": "BTC+ETH Bull Conservative: should not lose > 10%",
+      "passed": true,
+      "actual": "8.67%",
+      "expected": "> -10%",
+      "details": ""
+    },
+    {
+      "test": "totalTrades = wins + losses",
+      "passed": true,
+      "actual": "399 vs 399",
+      "expected": "Equal",
+      "details": ""
+    },
+    {
+      "test": "buys >= sells",
+      "passed": true,
+      "actual": "buys: 459, sells: 399",
+      "expected": "buys >= sells",
+      "details": ""
+    },
+    {
+      "test": "Commission > 0",
+      "passed": true,
+      "actual": "$7396.54",
+      "expected": "> 0",
+      "details": ""
+    },
+    {
+      "test": "Final equity matches return (within 5%)",
+      "passed": true,
+      "actual": "$145148.24 vs expected $145150",
+      "expected": "Within 5% of startCash * (1 + return)",
+      "details": ""
+    },
+    {
+      "test": "Conservative Max DD < 35%",
+      "passed": true,
+      "actual": "8.06%",
+      "expected": "< 35%",
+      "details": ""
+    },
+    {
+      "test": "Aggressive Max DD < 70%",
+      "passed": true,
+      "actual": "8.08%",
+      "expected": "< 70%",
+      "details": ""
+    },
+    {
+      "test": "No single BUY order > $8400 (8% YOLO cap + tolerance)",
+      "passed": true,
+      "actual": "$8000",
+      "expected": "<= $8400",
+      "details": ""
+    },
+    {
+      "test": "YOLO max simultaneous positions <= 12",
+      "passed": true,
+      "actual": 8,
+      "expected": "<= 12",
+      "details": ""
+    },
+    {
+      "test": "Conservative DD < YOLO DD",
+      "passed": true,
+      "actual": "Cons DD: 1.38% vs YOLO DD: 5.11%",
+      "expected": "Conservative should have lower drawdown",
+      "details": ""
+    },
+    {
+      "test": "Conservative fewer trades than YOLO",
+      "passed": true,
+      "actual": "Cons: 36 vs YOLO: 411",
+      "expected": "Conservative should trade less",
+      "details": ""
+    }
+  ]
+}

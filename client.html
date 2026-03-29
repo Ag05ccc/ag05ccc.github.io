@@ -40,7 +40,7 @@
     </script>
     <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend } = Recharts;
+const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush } = Recharts;
 
 const COINS_META = {
   BTC: { name: "Bitcoin", type: "crypto" }, ETH: { name: "Ethereum", type: "crypto" },
@@ -301,6 +301,7 @@ function BacktestTab({ isMobile }) {
                   <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={function(v) { return ["$" + fK(v), "Equity"]; }} />
                   <ReferenceLine y={m.startCash} stroke="#6b7280" strokeDasharray="3 3" label={{ value: "Start $" + fK(m.startCash), fill: "#6b7280", fontSize: 9 }} />
                   <Area type="monotone" dataKey="value" stroke={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fill={m.totalReturn >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -348,6 +349,7 @@ function BacktestTab({ isMobile }) {
                       <Area type="monotone" dataKey="close" stroke={symColor(activeSym)} fill={symColor(activeSym)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} />
                       <Scatter dataKey="buy" fill="#22c55e" shape="triangle" isAnimationActive={false} />
                       <Scatter dataKey="sell" fill="#ef4444" shape="diamond" isAnimationActive={false} />
+                      <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
@@ -701,6 +703,7 @@ function App() {
                         <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2} dot={false} isAnimationActive={false} />
                       ))}
                       <Line type="monotone" dataKey="buyHold" name="Buy & Hold" stroke="#6b7280" strokeWidth={1.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+                      <Brush dataKey="date" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? d.slice(5) : ""} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : compData.length > 2 ? (
@@ -713,6 +716,7 @@ function App() {
                       {pfStats.map(pf => (
                         <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
                       ))}
+                      <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
@@ -959,6 +963,7 @@ function App() {
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                             <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name === "h" ? "High" : name === "l" ? "Low" : name === "o" ? "Open" : name]} />
                             <Area type="monotone" dataKey="c" stroke={symColor(selected)} fill={symColor(selected)} fillOpacity={0.05} strokeWidth={1.5} dot={false} isAnimationActive={false} name="c" />
+                            <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       );
@@ -1069,6 +1074,7 @@ function App() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => [`$${fmt(v)}`, name === "c" ? "Close" : name]} />
                       <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} name="c" />
+                      <Brush dataKey="t" height={25} stroke="#334155" fill="#0a0e17" travellerWidth={8} tickFormatter={d => d ? String(d).slice(5) : ""} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )

@@ -53,15 +53,20 @@ function ZoomChart({ children, dataKey, dataLength }) {
     if (!el || dataLength < 10) return;
     const handler = (e) => {
       e.preventDefault();
+      // Mouse X position relative to chart container (0.0 = left, 1.0 = right)
+      const rect = el.getBoundingClientRect();
+      const mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       setRange(prev => {
         const s = prev ? prev[0] : 0;
         const en = prev ? prev[1] : dataLength;
         const span = en - s;
-        const mid = (s + en) / 2;
+        // Zoom anchor = data index under mouse cursor
+        const anchor = s + span * mouseX;
         const factor = e.deltaY > 0 ? 1.25 : 0.75;
         let ns = Math.round(span * factor);
         ns = Math.max(8, Math.min(dataLength, ns));
-        let nStart = Math.round(mid - ns / 2);
+        // Keep anchor at same mouse position after zoom
+        let nStart = Math.round(anchor - ns * mouseX);
         let nEnd = nStart + ns;
         if (nStart < 0) { nStart = 0; nEnd = Math.min(ns, dataLength); }
         if (nEnd > dataLength) { nEnd = dataLength; nStart = Math.max(0, dataLength - ns); }

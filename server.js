@@ -395,6 +395,13 @@ function loadState() {
       pf.cash = saved.cash;
       pf.startCash = saved.startCash;
       pf.holdings = saved.holdings || {};
+      // Backward compat: ensure all holdings have lots array
+      Object.keys(pf.holdings).forEach(function(sym) {
+        var h = pf.holdings[sym];
+        if (h && h.qty > 0 && !h.lots) {
+          h.lots = [{ qty: h.qty, cost: h.avgCost, date: new Date().toISOString() }];
+        }
+      });
       pf.orders = saved.orders || [];
       pf.peaks = saved.peaks || {};
       pf.history = saved.history || [{ t: 0, value: DEFAULT_CASH }];
@@ -708,6 +715,44 @@ function isBlackSwan(sd, sym) {
   return false;
 }
 
+// FIFO P&L calculation using lots
+function calcFifoPnl(pos, sellQty, sellPrice) {
+  if (!pos || !pos.lots || pos.lots.length === 0) {
+    // Fallback: use avgCost if no lots
+    return (sellPrice - (pos && pos.avgCost || sellPrice)) * sellQty;
+  }
+  var remaining = sellQty;
+  var totalPnl = 0;
+  for (var i = 0; i < pos.lots.length && remaining > 0; i++) {
+    var lot = pos.lots[i];
+    var used = Math.min(lot.qty, remaining);
+    totalPnl += (sellPrice - lot.cost) * used;
+    remaining -= used;
+  }
+  return totalPnl;
+}
+
+// Consume lots FIFO style (modifies array in place, returns remaining lots)
+function consumeLotsFifo(lots, sellQty) {
+  if (!lots) return [];
+  var remaining = sellQty;
+  var newLots = [];
+  for (var i = 0; i < lots.length; i++) {
+    if (remaining <= 0) {
+      newLots.push(lots[i]);
+      continue;
+    }
+    if (lots[i].qty <= remaining) {
+      remaining -= lots[i].qty;
+      // lot fully consumed
+    } else {
+      newLots.push({ qty: +(lots[i].qty - remaining).toFixed(6), cost: lots[i].cost, date: lots[i].date });
+      remaining = 0;
+    }
+  }
+  return newLots;
+}
+
 function runStrategies() {
   var now = Date.now();
   var today = new Date().toISOString().slice(0, 10);
@@ -868,7 +913,7 @@ function runStrategies() {
         var riskComm = riskTotal * COMMISSION_RATE;
         pf.cash += riskTotal - riskComm;
         pf.totalCommission = (pf.totalCommission || 0) + riskComm;
-        var riskPnl = (price - pos.avgCost) * riskQty;
+        var riskPnl = calcFifoPnl(pos, riskQty, price);
         if (riskPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(riskPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
@@ -904,9 +949,11 @@ function runStrategies() {
 
         pf.cash -= total + commission;
         pf.totalCommission = (pf.totalCommission || 0) + commission;
-        var old = pf.holdings[sym] || { qty: 0, avgCost: 0 };
+        var old = pf.holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
+        if (!old.lots) old.lots = old.qty > 0 ? [{ qty: old.qty, cost: old.avgCost, date: new Date().toISOString() }] : [];
         var nq = +(old.qty + tq).toFixed(6);
-        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price };
+        var newLots = old.lots.concat([{ qty: tq, cost: price, date: new Date().toISOString() }]);
+        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : price, lots: newLots };
         pf.peaks[sym] = price;
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
@@ -934,7 +981,7 @@ function runStrategies() {
         var sellComm = sellTotal * COMMISSION_RATE;
         pf.cash += sellTotal - sellComm;
         pf.totalCommission = (pf.totalCommission || 0) + sellComm;
-        var sellPnl = (price - pos.avgCost) * sq;
+        var sellPnl = calcFifoPnl(pos, sq, price);
         if (sellPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(sellPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
@@ -1048,6 +1095,67 @@ const server = http.createServer((req, res) => {
     var resetId = req.url.replace('/api/reset/', '');
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ ok: resetPortfolio(resetId) }));
+  } else if (req.url && req.url.match && req.url.match(/^\/api\/portfolio\/[^/]+\/export\/(csv|json)$/)) {
+    // Portfolio export endpoints
+    var urlParts = req.url.split('/');
+    var exportPfId = urlParts[3];
+    var exportFormat = urlParts[5];
+    var exportPf = portfolios.find(function(p) { return p.id === exportPfId; });
+    if (!exportPf) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Portfolio not found' }));
+    } else if (exportFormat === 'json') {
+      var hVal = Object.entries(exportPf.holdings).reduce(function(s, entry) {
+        return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
+      }, 0);
+      var exportData = {
+        id: exportPf.id, name: exportPf.name,
+        cash: exportPf.cash, startCash: exportPf.startCash,
+        totalValue: exportPf.cash + hVal,
+        pnl: exportPf.cash + hVal - exportPf.startCash,
+        tradeCount: exportPf.tradeCount, wins: exportPf.wins, losses: exportPf.losses,
+        totalCommission: exportPf.totalCommission || 0,
+        holdings: exportPf.holdings,
+        orders: exportPf.orders,
+        history: exportPf.history,
+        exportedAt: new Date().toISOString(),
+      };
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Content-Disposition': 'attachment; filename="portfolio-' + exportPfId + '-' + new Date().toISOString().slice(0,10) + '.json"',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(JSON.stringify(exportData, null, 2));
+    } else {
+      // CSV export
+      var csvOut = 'section,symbol,side,time,qty,price,total,avgCost,pnl,pnlPct,commission,strategy,reason,score,regime\n';
+      // Holdings section
+      Object.entries(exportPf.holdings).forEach(function(entry) {
+        var sym = entry[0], h = entry[1];
+        if (!h || h.qty <= 0) return;
+        var curPrice = (marketData[sym] || {}).cur || 0;
+        var val = h.qty * curPrice;
+        var uPnl = (curPrice - h.avgCost) * h.qty;
+        csvOut += ['holding', sym, '', '', h.qty.toFixed(6), curPrice.toFixed(2), val.toFixed(2), h.avgCost.toFixed(2), uPnl.toFixed(2), ((uPnl / (h.avgCost * h.qty)) * 100).toFixed(2), '', '', '', '', ''].join(',') + '\n';
+        // Lots
+        if (h.lots) {
+          h.lots.forEach(function(lot) {
+            var lotPnl = (curPrice - lot.cost) * lot.qty;
+            csvOut += ['lot', sym, 'buy', lot.date || '', lot.qty.toFixed(6), lot.cost.toFixed(2), (lot.qty * lot.cost).toFixed(2), '', lotPnl.toFixed(2), ((lotPnl / (lot.cost * lot.qty)) * 100).toFixed(2), '', '', '', '', ''].join(',') + '\n';
+          });
+        }
+      });
+      // Trades section
+      (exportPf.orders || []).forEach(function(o) {
+        csvOut += ['trade', o.sym || '', o.side || '', o.time || '', (o.qty || 0).toFixed(6), (o.price || 0).toFixed(2), (o.total || 0).toFixed(2), o.avgCost || 0, o.pnl || 0, o.pnlPct || 0, o.commission || 0, '"' + (o.strat || '').replace(/"/g, '""') + '"', '"' + (o.why || '').replace(/"/g, '""') + '"', o.score || '', o.regime || ''].join(',') + '\n';
+      });
+      res.writeHead(200, {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': 'attachment; filename="portfolio-' + exportPfId + '-' + new Date().toISOString().slice(0,10) + '.csv"',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(csvOut);
+    }
   } else if (req.url === '/api/logs') {
     // Download all trade logs as CSV
     var csv = 'time,portfolio,symbol,side,qty,price,total,commission,pnl,pnlPct,avgCost,strategy,reason,score,regime,trend15m,exposure,volatility,rsi,macdHist,adx,cashBefore,cashAfter,holdingBefore,candleCount,blackSwan\n';

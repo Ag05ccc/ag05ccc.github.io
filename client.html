@@ -40,7 +40,7 @@
     </script>
     <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush } = Recharts;
+const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush, PieChart, Pie, Cell } = Recharts;
 
 // ZoomChart - wraps chart container, slices data on mouse wheel zoom
 // Children receive sliced data via render prop pattern, but simpler: we slice the data prop of the chart
@@ -537,6 +537,7 @@ function App() {
   const [histData, setHistData] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
   const [histStartDate, setHistStartDate] = useState("2022-01-01");
+  const [assetFilter, setAssetFilter] = useState("ALL");
   const wsRef = useRef(null);
 
   // WebSocket connection
@@ -731,10 +732,26 @@ function App() {
         {isMobile && <button onClick={() => setShowSidebar(!showSidebar)} style={{ position: "fixed", bottom: 16, right: 16, zIndex: 100, width: 44, height: 44, borderRadius: "50%", background: "#f59e0b", color: "#0a0e17", border: "none", fontSize: 20, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(245,158,11,0.4)" }}>{showSidebar ? "✕" : "☰"}</button>}
         {/* SIDEBAR */}
         <div style={{ width: isMobile ? (showSidebar ? "100%" : 0) : 210, borderRight: showSidebar ? "1px solid rgba(255,255,255,0.06)" : "none", overflow: showSidebar ? "auto" : "hidden", background: "#0d1117", flexShrink: 0, transition: "width 0.2s", position: isMobile ? "fixed" : "relative", zIndex: isMobile ? 50 : "auto", height: isMobile ? "calc(100vh - 85px)" : "auto", top: isMobile ? 85 : "auto", left: 0 }}>
-          {[{ label: "CRYPTO", filter: "crypto" }, { label: "COMMODITIES", filter: "commodity" }, { label: "STOCKS", filter: "stock" }].map(section => (
+          {/* Asset filter tabs */}
+          <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+            {[["ALL", "#f8fafc"], ["CRYPTO", "#f59e0b"], ["STOCKS", "#a5b4fc"], ["GOLD", "#ffd700"]].map(([f, c]) => (
+              <button key={f} onClick={() => setAssetFilter(f)} style={{ flex: 1, padding: "6px 0", fontSize: 8, fontWeight: 700, fontFamily: "var(--h)", letterSpacing: "0.05em", background: "none", border: "none", cursor: "pointer", color: assetFilter === f ? c : "#4b5563", borderBottom: assetFilter === f ? "2px solid " + c : "2px solid transparent" }}>{f}</button>
+            ))}
+          </div>
+          {[{ label: "CRYPTO", filter: "crypto" }, { label: "COMMODITIES", filter: "commodity" }, { label: "STOCKS", filter: "stock" }].filter(section => {
+            if (assetFilter === "ALL") return true;
+            if (assetFilter === "CRYPTO") return section.filter === "crypto";
+            if (assetFilter === "STOCKS") return section.filter === "stock";
+            if (assetFilter === "GOLD") return section.filter === "commodity";
+            return true;
+          }).map(section => (
             <div key={section.filter}>
               <div style={{ padding: "8px 14px", fontSize: 9, color: "#6b7280", fontFamily: "var(--h)", fontWeight: 700, letterSpacing: "0.1em", borderBottom: "1px solid rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.02)" }}>{section.label}</div>
-              {Object.entries(COINS_META).filter(([, c]) => c.type === section.filter).sort(([symA], [symB]) => {
+              {Object.entries(COINS_META).filter(([sym, c]) => {
+                if (c.type !== section.filter) return false;
+                if (assetFilter === "GOLD" && section.filter === "commodity") return sym === "GOLD";
+                return true;
+              }).sort(([symA], [symB]) => {
                 const tradesA = pfStats.reduce((s, pf) => s + (pf.orders || []).filter(o => o.sym === symA).length, 0);
                 const tradesB = pfStats.reduce((s, pf) => s + (pf.orders || []).filter(o => o.sym === symB).length, 0);
                 return tradesB - tradesA;
@@ -916,7 +933,11 @@ function App() {
                           })}
                         </div>
                       )}
-                      <button onClick={() => { if (confirm('Reset ' + pf.name + '?')) resetPf(pf.id); }} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", cursor: "pointer" }}>RESET</button>
+                      <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                        <a href={"/api/portfolio/" + pf.id + "/export/csv"} download className="bt" style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #22c55e", background: "transparent", color: "#22c55e", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", textAlign: "center", textDecoration: "none" }}>CSV</a>
+                        <a href={"/api/portfolio/" + pf.id + "/export/json"} download className="bt" style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #6366f1", background: "transparent", color: "#6366f1", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", textAlign: "center", textDecoration: "none" }}>JSON</a>
+                        <button onClick={() => { if (confirm('Reset ' + pf.name + '?')) resetPf(pf.id); }} style={{ flex: 1, padding: "5px 0", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontWeight: 600, fontFamily: "var(--h)", cursor: "pointer" }}>RESET</button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1231,43 +1252,104 @@ function App() {
           {tab === "portfolios" && (
             <div style={{ padding: 20 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Portfolio Details</div>
-              {pfStats.map(pf => (
+              {pfStats.map(pf => {
+                // Build allocation data for donut chart
+                const holdingEntries = Object.entries(pf.holdings || {}).filter(([,h]) => h && h.qty > 0);
+                const allocData = holdingEntries.map(([sym, h]) => {
+                  const p = prices[sym]?.cur || 0;
+                  return { name: sym, value: +(h.qty * p).toFixed(2), color: symColor(sym) };
+                }).sort((a, b) => b.value - a.value);
+                if (pf.cash > 0) allocData.push({ name: 'Cash', value: +pf.cash.toFixed(2), color: '#4b5563' });
+                const allocTotal = allocData.reduce((s, d) => s + d.value, 0);
+                return (
                 <div key={pf.id} style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 18 }}>{pf.icon}</span>
                       <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: pf.color }}>{pf.name}</span>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "var(--m)", fontSize: 18, fontWeight: 600, color: "#f8fafc" }}>${fK(pf.totalValue)}</div>
-                      <div style={{ fontFamily: "var(--m)", fontSize: 12, color: pf.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <a href={"/api/portfolio/" + pf.id + "/export/csv"} download className="bt" style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #22c55e", background: "transparent", color: "#22c55e", fontSize: 9, fontWeight: 600, fontFamily: "var(--m)", textDecoration: "none" }}>CSV</a>
+                      <a href={"/api/portfolio/" + pf.id + "/export/json"} download className="bt" style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #6366f1", background: "transparent", color: "#6366f1", fontSize: 9, fontWeight: 600, fontFamily: "var(--m)", textDecoration: "none" }}>JSON</a>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 18, fontWeight: 600, color: "#f8fafc" }}>${fK(pf.totalValue)}</div>
+                        <div style={{ fontFamily: "var(--m)", fontSize: 12, color: pf.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{pf.pnl >= 0 ? "+" : ""}${fK(pf.pnl)}</div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Donut Chart - Asset Allocation */}
+                  {allocData.length > 1 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
+                      <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={allocData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={1} isAnimationActive={false}>
+                              {allocData.map((entry, idx) => (
+                                <Cell key={idx} fill={entry.color} stroke="none" />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v, name) => ["$" + fK(v) + " (" + (allocTotal > 0 ? ((v / allocTotal) * 100).toFixed(1) : 0) + "%)", name]} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                        {allocData.slice(0, 10).map(d => (
+                          <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "var(--m)" }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+                            <span style={{ color: d.color, fontWeight: 600, minWidth: 36 }}>{d.name}</span>
+                            <span style={{ color: "#94a3b8" }}>${fK(d.value)}</span>
+                            <span style={{ color: "#6b7280", fontSize: 9 }}>{allocTotal > 0 ? ((d.value / allocTotal) * 100).toFixed(1) : 0}%</span>
+                          </div>
+                        ))}
+                        {allocData.length > 10 && <span style={{ fontSize: 9, color: "#4b5563" }}>+{allocData.length - 10} more</span>}
+                      </div>
+                    </div>
+                  )}
+
                   {!pf.holdings || Object.keys(pf.holdings).length === 0 ? (
                     <div style={{ fontSize: 11, color: "#374151", textAlign: "center", padding: 8 }}>No positions yet</div>
                   ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 }}>
-                      {Object.entries(pf.holdings).filter(([,h]) => h && h.qty > 0).map(([sym, h]) => {
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 6 }}>
+                      {holdingEntries.map(([sym, h]) => {
                         const p = prices[sym]?.cur || 0;
                         const v = h.qty * p;
                         const pl = (p - h.avgCost) * h.qty;
+                        const lots = h.lots || [];
                         return (
-                          <div key={sym} style={{ background: "#0a0e17", borderRadius: 6, padding: "8px 10px", display: "flex", justifyContent: "space-between" }}>
-                            <div>
-                              <span style={{ fontFamily: "var(--m)", fontWeight: 600, fontSize: 12, color: symColor(sym) }}>{sym}</span>
-                              <span style={{ fontSize: 9, color: "#6b7280", marginLeft: 4 }}>{h.qty < 1 ? h.qty.toFixed(4) : h.qty.toFixed(2)}</span>
+                          <div key={sym} style={{ background: "#0a0e17", borderRadius: 6, padding: "8px 10px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: lots.length > 0 ? 4 : 0 }}>
+                              <div>
+                                <span style={{ fontFamily: "var(--m)", fontWeight: 600, fontSize: 12, color: symColor(sym) }}>{sym}</span>
+                                <span style={{ fontSize: 9, color: "#6b7280", marginLeft: 4 }}>{h.qty < 1 ? h.qty.toFixed(4) : h.qty.toFixed(2)}</span>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontFamily: "var(--m)", fontSize: 10, color: "#f8fafc" }}>${fmt(v)}</div>
+                                <div style={{ fontFamily: "var(--m)", fontSize: 9, color: pl >= 0 ? "#22c55e" : "#ef4444" }}>{pl >= 0 ? "+" : ""}${fmt(pl)}</div>
+                              </div>
                             </div>
-                            <div style={{ textAlign: "right" }}>
-                              <div style={{ fontFamily: "var(--m)", fontSize: 10, color: "#f8fafc" }}>${fmt(v)}</div>
-                              <div style={{ fontFamily: "var(--m)", fontSize: 9, color: pl >= 0 ? "#22c55e" : "#ef4444" }}>{pl >= 0 ? "+" : ""}${fmt(pl)}</div>
-                            </div>
+                            {lots.length > 0 && (
+                              <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 3, marginTop: 2 }}>
+                                {lots.map((lot, li) => {
+                                  const lotPnl = (p - lot.cost) * lot.qty;
+                                  const lotPnlPct = lot.cost > 0 ? ((p - lot.cost) / lot.cost) * 100 : 0;
+                                  return (
+                                    <div key={li} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 8, fontFamily: "var(--m)", color: "#6b7280", padding: "1px 0" }}>
+                                      <span>Lot {li + 1}: {lot.qty < 1 ? lot.qty.toFixed(4) : lot.qty.toFixed(2)} @ ${fmt(lot.cost)}</span>
+                                      <span style={{ color: lotPnl >= 0 ? "#22c55e" : "#ef4444" }}>{lotPnl >= 0 ? "+" : ""}${fmt(lotPnl)} ({lotPnlPct >= 0 ? "+" : ""}{lotPnlPct.toFixed(1)}%)</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

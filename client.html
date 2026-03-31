@@ -286,8 +286,8 @@ function BacktestTab({ isMobile }) {
     eqData = sampled;
   }
 
-  var profileColors = { conservative: "#3b82f6", moderate: "#22c55e", aggressive: "#f59e0b", yolo: "#ef4444" };
-  var profileNames = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive", yolo: "YOLO" };
+  var profileColors = { conservative: "#3b82f6", moderate: "#22c55e", aggressive: "#f59e0b", yolo: "#ef4444", dma: "#8b5cf6" };
+  var profileNames = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive", yolo: "YOLO", dma: "DMA Trend" };
 
   return (
     <div style={{ padding: isMobile ? "12px 8px" : "20px 24px" }}>
@@ -307,6 +307,7 @@ function BacktestTab({ isMobile }) {
               <option value="moderate">Moderate</option>
               <option value="aggressive">Aggressive</option>
               <option value="yolo">YOLO</option>
+              <option value="dma">DMA Trend (EMA Crossover)</option>
             </select>
           </div>
           {/* Start date */}
@@ -908,7 +909,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1587,6 +1588,98 @@ function App() {
           {tab === "backtest" && (() => {
             return <BacktestTab isMobile={isMobile} />;
           })()}
+
+          {/* DOCS / STRATEGY GUIDE */}
+          {tab === "docs" && (
+            <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 760 }}>
+              <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 22, color: "#f8fafc", marginBottom: 4 }}>Trading Strategies</div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 20 }}>Two independent trading modules run in parallel, each with its own portfolio and logic.</div>
+
+              {/* Module 1: Signal Scoring */}
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: isMobile ? 14 : 20, marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 18 }}>&#x1F9E0;</span>
+                  <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f59e0b" }}>Module 1: Signal Scoring System</span>
+                  <span style={{ fontSize: 9, color: "#6b7280", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>30 signals</span>
+                </div>
+
+                <div style={{ fontSize: 12, color: "#94a3b8", fontFamily: "var(--m)", lineHeight: 1.7 }}>
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>How it works</div>
+                  <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(245,158,11,0.2)", marginBottom: 12 }}>
+                    <div style={{ marginBottom: 4 }}>30 technical analysis signals each produce a weighted score</div>
+                    <div style={{ marginBottom: 4 }}>Signals categorized: <span style={{ color: "#818cf8" }}>trend</span>, <span style={{ color: "#22c55e" }}>mean-reversion</span>, <span style={{ color: "#f59e0b" }}>momentum</span>, <span style={{ color: "#fb923c" }}>pattern</span>, <span style={{ color: "#e879f9" }}>combo</span></div>
+                    <div style={{ marginBottom: 4 }}>Market regime (ADX) adjusts weights: trending boosts trend signals, ranging boosts mean-reversion</div>
+                    <div style={{ marginBottom: 4 }}>Buy when total score &gt;= threshold, sell when sell score &gt;= threshold</div>
+                    <div>Risk signals (TP/SL/Trailing) execute immediately regardless of score</div>
+                  </div>
+
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Profiles</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                    {[
+                      { name: "Conservative", color: "#3b82f6", icon: "\u{1F6E1}\u{FE0F}", desc: "Few trades, tight risk" },
+                      { name: "Moderate", color: "#22c55e", icon: "\u2696\u{FE0F}", desc: "Balanced, trend-following" },
+                      { name: "Aggressive", color: "#f59e0b", icon: "\u{1F525}", desc: "Wide stops, big moves" },
+                      { name: "YOLO", color: "#ef4444", icon: "\u{1F680}", desc: "Max trend capture" },
+                    ].map(function(p) {
+                      return (
+                        <div key={p.name} style={{ background: "rgba(255,255,255,0.02)", borderRadius: 6, padding: "8px 10px", border: "1px solid " + p.color + "22" }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: p.color, fontFamily: "var(--h)" }}>{p.icon} {p.name}</div>
+                          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>{p.desc}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Risk Controls</div>
+                  <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(239,68,68,0.2)" }}>
+                    <div style={{ marginBottom: 4 }}>Circuit breaker: stops trading at 10-30% drawdown (profile-dependent)</div>
+                    <div style={{ marginBottom: 4 }}>Daily trade limits and 5% daily loss cap</div>
+                    <div style={{ marginBottom: 4 }}>Black swan filter: blocks buys during 3%+ crashes</div>
+                    <div>Multi-timeframe gate: 15min trend filters 1min signals</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Module 2: DMA Trend Follower */}
+              <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(139,92,246,0.3)", padding: isMobile ? 14 : 20, marginBottom: 16, position: "relative" }}>
+                <div style={{ position: "absolute", top: 10, right: 12, fontSize: 8, fontWeight: 700, color: "#8b5cf6", background: "rgba(139,92,246,0.15)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--h)", letterSpacing: "0.05em" }}>NEW</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 18 }}>&#x1F4C8;</span>
+                  <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#8b5cf6" }}>Module 2: DMA Trend Follower</span>
+                </div>
+
+                <div style={{ fontSize: 12, color: "#94a3b8", fontFamily: "var(--m)", lineHeight: 1.7 }}>
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>How it works</div>
+                  <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(139,92,246,0.3)", marginBottom: 12 }}>
+                    <div style={{ marginBottom: 4 }}>Watches <span style={{ color: "#8b5cf6", fontWeight: 600 }}>EMA21</span> and <span style={{ color: "#8b5cf6", fontWeight: 600 }}>EMA50</span> for each asset</div>
+                    <div style={{ marginBottom: 4 }}>When EMA21 crosses <span style={{ color: "#22c55e", fontWeight: 600 }}>ABOVE</span> EMA50 &rarr; BUY (uptrend confirmed)</div>
+                    <div style={{ marginBottom: 4 }}>When EMA21 crosses <span style={{ color: "#ef4444", fontWeight: 600 }}>BELOW</span> EMA50 &rarr; SELL (downtrend over)</div>
+                    <div style={{ marginBottom: 4 }}>No other indicators. Pure trend following.</div>
+                    <div>Max 8 simultaneous positions, 15% capital per position</div>
+                  </div>
+
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Why it works</div>
+                  <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(34,197,94,0.2)", marginBottom: 12 }}>
+                    <div style={{ marginBottom: 4 }}>Catches big trends (crypto rallies of 100%+)</div>
+                    <div style={{ marginBottom: 4 }}>Exits before major crashes</div>
+                    <div style={{ marginBottom: 4 }}>Very few trades = minimal commission drag</div>
+                    <div>Backtest: +504% average across 41 assets (50% capital deployment)</div>
+                  </div>
+
+                  <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>When it fails</div>
+                  <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(239,68,68,0.2)" }}>
+                    <div style={{ marginBottom: 4 }}>Choppy/sideways markets &rarr; frequent false crossovers</div>
+                    <div>Assets with low volatility &rarr; small gains eaten by commission</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Commission note */}
+              <div style={{ background: "rgba(245,158,11,0.05)", borderRadius: 8, border: "1px solid rgba(245,158,11,0.15)", padding: "12px 16px", fontSize: 11, color: "#d4a574", fontFamily: "var(--m)", lineHeight: 1.6 }}>
+                <span style={{ fontWeight: 700 }}>Commission:</span> Both modules charge 0.1% per trade (buy and sell). This matches typical crypto exchange fees. Slippage is modeled at 0.05% for scoring profiles but not applied to DMA (which trades on daily candle closes).
+              </div>
+            </div>
+          )}
 
           {/* SETTINGS */}
           {tab === "settings" && (

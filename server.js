@@ -361,6 +361,15 @@ portfolios = PROFILES.map(p => ({
   tradeCount: 0, wins: 0, losses: 0,
 }));
 
+// ─── DMA TREND FOLLOWER PORTFOLIO (independent module) ───
+portfolios.push({
+  id: 'dma', name: 'DMA Trend', color: '#8b5cf6', icon: '\u{1F4C8}', desc: 'Simple EMA21/EMA50 crossover - buys uptrends, sells downtrends',
+  cash: DEFAULT_CASH, startCash: DEFAULT_CASH, holdings: {}, orders: [],
+  actives: [], peaks: {},
+  history: [{ t: 0, value: DEFAULT_CASH }],
+  tradeCount: 0, wins: 0, losses: 0, totalCommission: 0,
+});
+
 // ─── STATE PERSISTENCE ───
 function saveState() {
   try {
@@ -1227,12 +1236,69 @@ function runStrategies() {
     pf.history.push({ t: pf.history.length, value: pf.cash + hVal });
     if (pf.history.length > 1000) pf.history = pf.history.slice(-1000);
   });
+
+  // ─── DMA TREND FOLLOWER (independent module) ───
+  var dmaPf = portfolios.find(function(p) { return p.id === 'dma'; });
+  if (dmaPf) {
+    Object.keys(COINS).forEach(function(sym) {
+      var sd = marketData[sym];
+      if (!sd || sd.candles.length < 51) return;
+      var closes = sd.candles.map(function(c) { return c.c; });
+      var ema21 = ema(closes, 21);
+      var ema50 = ema(closes, 50);
+      var prevCloses = closes.slice(0, -1);
+      var prevEma21 = ema(prevCloses, 21);
+      var prevEma50 = ema(prevCloses, 50);
+      if (!ema21 || !ema50 || !prevEma21 || !prevEma50) return;
+
+      var price = sd.cur;
+      var pos = dmaPf.holdings[sym];
+
+      // Golden cross: BUY
+      if (prevEma21 <= prevEma50 && ema21 > ema50 && (!pos || pos.qty <= 0)) {
+        // Check max positions (max 8 simultaneous)
+        var openCount = Object.keys(dmaPf.holdings).filter(function(k) { return dmaPf.holdings[k] && dmaPf.holdings[k].qty > 0; }).length;
+        if (openCount >= 8) return;
+        var cashAvail = dmaPf.cash * 0.95;
+        var tradeVal = Math.min(cashAvail * 0.15, cashAvail); // 15% per position
+        if (tradeVal < 100) return;
+        var qty = tradeVal / price;
+        var comm = tradeVal * 0.001;
+        dmaPf.cash -= tradeVal + comm;
+        dmaPf.holdings[sym] = { qty: qty, avgCost: price, lots: [{ qty: qty, cost: price, date: new Date().toISOString() }] };
+        dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+        dmaPf.tradeCount++;
+        dmaPf.orders = [{ sym: sym, side: 'buy', qty: qty, price: price, total: tradeVal, time: new Date().toISOString(), strat: 'DMA', why: 'EMA21 > EMA50 (Golden Cross)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+      }
+      // Death cross: SELL
+      else if (prevEma21 >= prevEma50 && ema21 < ema50 && pos && pos.qty > 0) {
+        var sellVal = pos.qty * price;
+        var comm = sellVal * 0.001;
+        dmaPf.cash += sellVal - comm;
+        var pnl = (price - pos.avgCost) * pos.qty;
+        if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
+        dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+        dmaPf.tradeCount++;
+        dmaPf.orders = [{ sym: sym, side: 'sell', qty: pos.qty, price: price, total: sellVal, pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'DMA', why: 'EMA21 < EMA50 (Death Cross)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+        delete dmaPf.holdings[sym];
+      }
+    });
+
+    // Record DMA history
+    var dmaHVal = Object.entries(dmaPf.holdings).reduce(function(s, entry) {
+      var sym = entry[0], h = entry[1];
+      return s + ((h && h.qty) || 0) * ((marketData[sym] || {}).cur || 0);
+    }, 0);
+    dmaPf.history.push({ t: dmaPf.history.length, value: dmaPf.cash + dmaHVal });
+    if (dmaPf.history.length > 1000) dmaPf.history = dmaPf.history.slice(-1000);
+  }
 }
 
 // ─── RESET PORTFOLIO ───
 function resetPortfolio(id) {
   var profile = PROFILES.find(function(p) { return p.id === id; });
-  if (!profile) return false;
+  // Allow reset for DMA portfolio too (no PROFILES entry)
+  if (!profile && id !== 'dma') return false;
   var pf = portfolios.find(function(p) { return p.id === id; });
   if (!pf) return false;
   pf.cash = DEFAULT_CASH;
@@ -1282,6 +1348,8 @@ function getState() {
   var profileConfigs = PROFILES.map(function(p) {
     return { id: p.id, buyThreshold: p.buyThreshold, sellThreshold: p.sellThreshold, cashPct: p.cashPct, assets: p.assets, overrides: p.overrides };
   });
+  // Add DMA profile config for UI
+  profileConfigs.push({ id: 'dma', buyThreshold: 0, sellThreshold: 0, cashPct: 0.15, assets: Object.keys(COINS), overrides: {} });
 
   return { prices: prices, portfolios: pfs, scores: lastScores, profiles: profileConfigs, signals: SIGNALS.map(function(s) { return { id: s.id, label: s.label, side: s.side, category: s.category, weight: s.weight }; }), tick: tickCount, serverTime: new Date().toISOString() };
 }
@@ -1442,8 +1510,12 @@ const server = http.createServer((req, res) => {
         var startDate = params.startDate || '2020-01-01';
         var startCash = params.startCash || 100000;
 
+        var isDmaBacktest = profileId === 'dma';
         var profile = PROFILES.find(function(p) { return p.id === profileId; });
-        if (!profile) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown profile' })); return; }
+        if (!profile && !isDmaBacktest) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown profile' })); return; }
+        if (isDmaBacktest) {
+          profile = { id: 'dma', buyThreshold: 0, sellThreshold: 0, cashPct: 0.15, assets: Object.keys(COINS), overrides: { slippage: 0.0005 } };
+        }
         if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
 
         // Load CSV data for all symbols
@@ -1584,7 +1656,68 @@ const server = http.createServer((req, res) => {
             }
           });
 
-          // Now run signal evaluation for each symbol
+          // ─── DMA BACKTEST: simple EMA21/EMA50 crossover ───
+          if (isDmaBacktest) {
+            symbols.forEach(function(sym) {
+              var sd = symData[sym];
+              if (!sd || sd.candles.length < 51) return;
+              var closes = sd.candles.map(function(c) { return c.c; });
+              var ema21val = ema(closes, 21);
+              var ema50val = ema(closes, 50);
+              // Previous bar EMAs
+              var prevCloses = closes.slice(0, -1);
+              if (prevCloses.length < 50) return;
+              var prevEma21 = ema(prevCloses, 21);
+              var prevEma50 = ema(prevCloses, 50);
+              if (!ema21val || !ema50val || !prevEma21 || !prevEma50) return;
+
+              var price = sd.cur;
+              if (price <= 0) return;
+              var pos = holdings[sym];
+
+              // Golden cross: BUY
+              if (prevEma21 <= prevEma50 && ema21val > ema50val && (!pos || pos.qty <= 0)) {
+                var openCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
+                if (openCount >= 8) return;
+                var minCashReserve = startCash * 0.02;
+                var cashAvail = Math.max(0, cash - minCashReserve) * 0.95;
+                var tradeVal = Math.min(cashAvail * 0.15, cashAvail);
+                if (tradeVal < 100) return;
+                var qty = tradeVal / price;
+                var comm = tradeVal * 0.001;
+                cash -= tradeVal + comm;
+                totalCommission += comm;
+                holdings[sym] = { qty: qty, avgCost: price };
+                trades.push({
+                  date: date, side: 'buy', symbol: sym, price: +price.toFixed(2),
+                  signalPrice: +price.toFixed(2), slippage: 0,
+                  qty: +qty.toFixed(6), total: +tradeVal.toFixed(2),
+                  pnl: 0, pnlPct: 0,
+                  reason: 'EMA21 > EMA50 (Golden Cross)', regime: 'dma',
+                  commission: +comm.toFixed(2),
+                });
+              }
+              // Death cross: SELL
+              else if (prevEma21 >= prevEma50 && ema21val < ema50val && pos && pos.qty > 0) {
+                var sellVal = pos.qty * price;
+                var comm = sellVal * 0.001;
+                cash += sellVal - comm;
+                totalCommission += comm;
+                var pnl = (price - pos.avgCost) * pos.qty;
+                if (pnl > 0) wins++; else losses++;
+                trades.push({
+                  date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
+                  signalPrice: +price.toFixed(2), slippage: 0,
+                  qty: +pos.qty.toFixed(6), total: +sellVal.toFixed(2),
+                  pnl: +pnl.toFixed(2), pnlPct: +((pnl / (pos.avgCost * pos.qty)) * 100).toFixed(2),
+                  reason: 'EMA21 < EMA50 (Death Cross)', regime: 'dma',
+                  commission: +comm.toFixed(2),
+                });
+                delete holdings[sym];
+              }
+            });
+          } else {
+          // Now run signal evaluation for each symbol (scoring system)
           symbols.forEach(function(sym) {
             // Daily trade limit check
             if ((dailyTradeCount[date] || 0) >= (dailyTradeLimit[profileId] || 3)) return;
@@ -1797,6 +1930,7 @@ const server = http.createServer((req, res) => {
               peaks[sym] = price;
             }
           });
+          } // end else (scoring system)
 
           // Calculate equity at end of day
           var dayHoldingValue = Object.keys(holdings).reduce(function(s, hs) {
@@ -2036,10 +2170,13 @@ async function start() {
   });
 
   // Rebuild strategies with real prices for proper qty sizing
+  var dmaPfSaved = portfolios.find(function(p) { return p.id === 'dma'; });
   portfolios = PROFILES.map(p => ({
     ...portfolios.find(pf => pf.id === p.id),
     actives: buildStrategies(p),
   }));
+  // Re-add DMA portfolio (not in PROFILES)
+  if (dmaPfSaved) portfolios.push(dmaPfSaved);
 
   // Restore saved state (portfolios, candles, indicators)
   const restored = loadState();
@@ -2049,7 +2186,7 @@ async function start() {
     var cryptoCount = Object.values(COINS).filter(function(c) { return c.type === 'crypto'; }).length;
     var stockCount = Object.values(COINS).filter(function(c) { return c.type === 'stock'; }).length;
     console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
-    console.log('  4 portfolios | ' + cryptoCount + ' crypto + ' + stockCount + ' stocks | 1min candles');
+    console.log('  5 portfolios (4 scoring + 1 DMA) | ' + cryptoCount + ' crypto + ' + stockCount + ' stocks | 1min candles');
     if (restored) console.log('  State restored from disk');
     console.log('');
   });

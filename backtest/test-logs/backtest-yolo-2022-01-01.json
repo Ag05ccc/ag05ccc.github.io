@@ -1,0 +1,6431 @@
+{
+  "metrics": {
+    "totalReturn": -2.41,
+    "winRate": 47.2,
+    "maxDrawdown": 7.31,
+    "sharpe": -0.282,
+    "totalTrades": 150,
+    "wins": 34,
+    "losses": 38,
+    "totalCommission": 4137.44,
+    "finalEquity": 97585.57,
+    "startCash": 100000,
+    "buyHoldReturn": 137.41,
+    "days": 1000
+  },
+  "trades": [
+    {
+      "date": "2023-08-13",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1907.91,
+      "signalPrice": 1906,
+      "slippage": 0.001,
+      "bracketTP": 2194.09,
+      "bracketSL": 1812.51,
+      "qty": 15.724045,
+      "total": 30000,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 28, EMA50 bounce, Stoch K=23, Hammer, Below VWAP",
+      "regime": "ranging",
+      "commission": 30
+    },
+    {
+      "date": "2023-08-15",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1897.1,
+      "signalPrice": 1899,
+      "slippage": 0.001,
+      "qty": 15.724045,
+      "total": 29830.1,
+      "pnl": -169.9,
+      "pnlPct": -0.57,
+      "reason": "Shooting star",
+      "regime": "ranging",
+      "commission": 29.83
+    },
+    {
+      "date": "2023-08-18",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1875.87,
+      "signalPrice": 1874,
+      "slippage": 0.001,
+      "bracketTP": 2157.26,
+      "bracketSL": 1782.08,
+      "qty": 15.955806,
+      "total": 29931.08,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 9, EMA50 bounce, Stoch K=11, Vol 1.5x, Hammer, Below VWAP",
+      "regime": "ranging",
+      "commission": 29.93
+    },
+    {
+      "date": "2023-08-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1908.09,
+      "signalPrice": 1910,
+      "slippage": 0.001,
+      "qty": 15.955806,
+      "total": 30445.11,
+      "pnl": 514.03,
+      "pnlPct": 1.72,
+      "reason": "Stoch K=70",
+      "regime": "ranging",
+      "commission": 30.45
+    },
+    {
+      "date": "2023-08-30",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1924.92,
+      "signalPrice": 1923,
+      "slippage": 0.001,
+      "bracketTP": 2213.66,
+      "bracketSL": 1828.68,
+      "qty": 15.619938,
+      "total": 30067.18,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, ADX 19, Breakout",
+      "regime": "mixed",
+      "commission": 30.07
+    },
+    {
+      "date": "2023-09-01",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1915.08,
+      "signalPrice": 1917,
+      "slippage": 0.001,
+      "qty": 15.619938,
+      "total": 29913.48,
+      "pnl": -153.7,
+      "pnlPct": -0.51,
+      "reason": "RSI 77, Stoch K=74, Vol sell, Shooting star",
+      "regime": "mixed",
+      "commission": 29.91
+    },
+    {
+      "date": "2023-09-14",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1895.89,
+      "signalPrice": 1894,
+      "slippage": 0.001,
+      "bracketTP": 2180.28,
+      "bracketSL": 1801.1,
+      "qty": 15.825291,
+      "total": 30003.07,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 34, Stoch K=23, Bull engulf, Below VWAP",
+      "regime": "ranging",
+      "commission": 30
+    },
+    {
+      "date": "2023-09-18",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1922.92,
+      "signalPrice": 1921,
+      "slippage": 0.001,
+      "bracketTP": 2211.36,
+      "bracketSL": 1826.77,
+      "qty": 15.660168,
+      "total": 30113.27,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.5x, Breakout",
+      "regime": "ranging",
+      "commission": 30.11
+    },
+    {
+      "date": "2023-09-20",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1918.08,
+      "signalPrice": 1920,
+      "slippage": 0.001,
+      "qty": 31.485459,
+      "total": 60391.63,
+      "pnl": 275.29,
+      "pnlPct": 0.46,
+      "reason": "RSI 64, Stoch K=73, Above VWAP",
+      "regime": "mixed",
+      "commission": 60.39
+    },
+    {
+      "date": "2023-10-09",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1869.87,
+      "signalPrice": 1868,
+      "slippage": 0.001,
+      "bracketTP": 2150.35,
+      "bracketSL": 1776.37,
+      "qty": 16.07039,
+      "total": 30049.51,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 36, MACD↑, Vol 2.0x, Hammer, Below VWAP, RSI+MACD↑",
+      "regime": "ranging",
+      "commission": 30.05
+    },
+    {
+      "date": "2023-10-11",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1874.12,
+      "signalPrice": 1876,
+      "slippage": 0.001,
+      "qty": 16.07039,
+      "total": 30117.9,
+      "pnl": 68.4,
+      "pnlPct": 0.23,
+      "reason": "Stoch K=87",
+      "regime": "ranging",
+      "commission": 30.12
+    },
+    {
+      "date": "2023-10-13",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1918.92,
+      "signalPrice": 1917,
+      "slippage": 0.001,
+      "bracketTP": 2206.75,
+      "bracketSL": 1822.97,
+      "qty": 15.660905,
+      "total": 30051.98,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.6x, ADX 21, Breakout",
+      "regime": "mixed",
+      "commission": 30.05
+    },
+    {
+      "date": "2023-10-15",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1914.08,
+      "signalPrice": 1916,
+      "slippage": 0.001,
+      "qty": 15.660905,
+      "total": 29976.29,
+      "pnl": -75.69,
+      "pnlPct": -0.25,
+      "reason": "RSI 66, Stoch K=83, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 29.98
+    },
+    {
+      "date": "2023-10-18",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1942.94,
+      "signalPrice": 1941,
+      "slippage": 0.001,
+      "bracketTP": 2234.38,
+      "bracketSL": 1845.79,
+      "qty": 15.446306,
+      "total": 30011.26,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 32, Breakout",
+      "regime": "trending",
+      "commission": 30.01
+    },
+    {
+      "date": "2023-10-20",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1966.96,
+      "signalPrice": 1965,
+      "slippage": 0.001,
+      "bracketTP": 2262.01,
+      "bracketSL": 1868.62,
+      "qty": 11.47878,
+      "total": 22578.36,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.8x, Hammer, ADX 40, Breakout",
+      "regime": "trending",
+      "commission": 22.58
+    },
+    {
+      "date": "2023-10-22",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1963.04,
+      "signalPrice": 1965,
+      "slippage": 0.001,
+      "qty": 26.925086,
+      "total": 52854.89,
+      "pnl": 265.27,
+      "pnlPct": 0.5,
+      "reason": "RSI 86, Stoch K=89, Above VWAP",
+      "regime": "trending",
+      "commission": 52.85
+    },
+    {
+      "date": "2023-10-27",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 1988.99,
+      "signalPrice": 1987,
+      "slippage": 0.001,
+      "bracketTP": 2287.34,
+      "bracketSL": 1889.54,
+      "qty": 11.334617,
+      "total": 22544.41,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.2x, ADX 29, Breakout",
+      "regime": "trending",
+      "commission": 22.54
+    },
+    {
+      "date": "2023-10-29",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1981.02,
+      "signalPrice": 1983,
+      "slippage": 0.001,
+      "qty": 11.334617,
+      "total": 22454.07,
+      "pnl": -90.34,
+      "pnlPct": -0.4,
+      "reason": "RSI 79, Stoch K=90, Vol sell, Above VWAP",
+      "regime": "mixed",
+      "commission": 22.45
+    },
+    {
+      "date": "2023-11-28",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2025.02,
+      "signalPrice": 2023,
+      "slippage": 0.001,
+      "bracketTP": 2328.78,
+      "bracketSL": 1923.77,
+      "qty": 14.823835,
+      "total": 30018.61,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.7x, ADX 24, Breakout",
+      "regime": "mixed",
+      "commission": 30.02
+    },
+    {
+      "date": "2023-11-30",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2020.98,
+      "signalPrice": 2023,
+      "slippage": 0.001,
+      "qty": 14.823835,
+      "total": 29958.63,
+      "pnl": -59.98,
+      "pnlPct": -0.2,
+      "reason": "RSI 83, Stoch K=90, Shooting star, Above VWAP",
+      "regime": "mixed",
+      "commission": 29.96
+    },
+    {
+      "date": "2023-12-03",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2090.09,
+      "signalPrice": 2088,
+      "slippage": 0.001,
+      "bracketTP": 2403.6,
+      "bracketSL": 1985.58,
+      "qty": 14.345148,
+      "total": 29982.62,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.5x, ADX 27, Breakout",
+      "regime": "trending",
+      "commission": 29.98
+    },
+    {
+      "date": "2023-12-05",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2009.99,
+      "signalPrice": 2012,
+      "slippage": 0.001,
+      "qty": 14.345148,
+      "total": 28833.58,
+      "pnl": -1149.05,
+      "pnlPct": -3.83,
+      "reason": "Vol sell, Above VWAP, Breakdown",
+      "regime": "mixed",
+      "commission": 28.83
+    },
+    {
+      "date": "2023-12-14",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2019.02,
+      "signalPrice": 2017,
+      "slippage": 0.001,
+      "bracketTP": 2321.87,
+      "bracketSL": 1918.07,
+      "qty": 14.670635,
+      "total": 29620.26,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.2x, Hammer, ADX 21",
+      "regime": "mixed",
+      "commission": 29.62
+    },
+    {
+      "date": "2023-12-16",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 1993.01,
+      "signalPrice": 1995,
+      "slippage": 0.001,
+      "qty": 14.670635,
+      "total": 29238.65,
+      "pnl": -381.61,
+      "pnlPct": -1.29,
+      "reason": "Above VWAP",
+      "regime": "ranging",
+      "commission": 29.24
+    },
+    {
+      "date": "2023-12-21",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2032.03,
+      "signalPrice": 2030,
+      "slippage": 0.001,
+      "bracketTP": 2336.83,
+      "bracketSL": 1930.43,
+      "qty": 14.511656,
+      "total": 29488.12,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.5x, Bull engulf, ADX 18, Breakout",
+      "regime": "mixed",
+      "commission": 29.49
+    },
+    {
+      "date": "2023-12-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2023.97,
+      "signalPrice": 2026,
+      "slippage": 0.001,
+      "qty": 14.511656,
+      "total": 29371.21,
+      "pnl": -116.91,
+      "pnlPct": -0.4,
+      "reason": "Stoch K=78, Shooting star, Above VWAP",
+      "regime": "mixed",
+      "commission": 29.37
+    },
+    {
+      "date": "2023-12-27",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2055.05,
+      "signalPrice": 2053,
+      "slippage": 0.001,
+      "bracketTP": 2363.31,
+      "bracketSL": 1952.3,
+      "qty": 14.323422,
+      "total": 29435.39,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.2x, ADX 28, Breakout",
+      "regime": "trending",
+      "commission": 29.44
+    },
+    {
+      "date": "2023-12-29",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2032.96,
+      "signalPrice": 2035,
+      "slippage": 0.001,
+      "qty": 14.323422,
+      "total": 29119.02,
+      "pnl": -316.38,
+      "pnlPct": -1.07,
+      "reason": "RSI 65, Vol sell, Above VWAP",
+      "regime": "trending",
+      "commission": 29.12
+    },
+    {
+      "date": "2024-01-15",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2042.04,
+      "signalPrice": 2040,
+      "slippage": 0.001,
+      "bracketTP": 2348.35,
+      "bracketSL": 1939.94,
+      "qty": 14.359617,
+      "total": 29322.91,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Golden cross, Breakout",
+      "regime": "ranging",
+      "commission": 29.32
+    },
+    {
+      "date": "2024-01-17",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2002.99,
+      "signalPrice": 2005,
+      "slippage": 0.001,
+      "qty": 14.359617,
+      "total": 28762.24,
+      "pnl": -560.67,
+      "pnlPct": -1.91,
+      "reason": "MACD↓, Death cross, Above VWAP",
+      "regime": "ranging",
+      "commission": 28.76
+    },
+    {
+      "date": "2024-01-29",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2011.01,
+      "signalPrice": 2009,
+      "slippage": 0.001,
+      "bracketTP": 2312.66,
+      "bracketSL": 1910.46,
+      "qty": 14.488889,
+      "total": 29137.29,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 34, Stoch K=30, Vol 2.0x, Hammer",
+      "regime": "ranging",
+      "commission": 29.14
+    },
+    {
+      "date": "2024-01-31",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2020.98,
+      "signalPrice": 2023,
+      "slippage": 0.001,
+      "qty": 14.488889,
+      "total": 29281.71,
+      "pnl": 144.43,
+      "pnlPct": 0.5,
+      "reason": "Above VWAP",
+      "regime": "ranging",
+      "commission": 29.28
+    },
+    {
+      "date": "2024-02-21",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2004,
+      "signalPrice": 2002,
+      "slippage": 0.001,
+      "bracketTP": 2304.6,
+      "bracketSL": 1903.8,
+      "qty": 14.552424,
+      "total": 29163.09,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, RSI+MACD↑",
+      "regime": "ranging",
+      "commission": 29.16
+    },
+    {
+      "date": "2024-02-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2005.99,
+      "signalPrice": 2008,
+      "slippage": 0.001,
+      "qty": 14.552424,
+      "total": 29192.05,
+      "pnl": 28.96,
+      "pnlPct": 0.1,
+      "reason": "Stoch K=85, Above VWAP",
+      "regime": "ranging",
+      "commission": 29.19
+    },
+    {
+      "date": "2024-02-28",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2021.02,
+      "signalPrice": 2019,
+      "slippage": 0.001,
+      "bracketTP": 2324.17,
+      "bracketSL": 1919.97,
+      "qty": 14.425529,
+      "total": 29154.27,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 2.4x, Breakout",
+      "regime": "ranging",
+      "commission": 29.15
+    },
+    {
+      "date": "2024-03-01",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2016.98,
+      "signalPrice": 2019,
+      "slippage": 0.001,
+      "qty": 14.425529,
+      "total": 29096.02,
+      "pnl": -58.25,
+      "pnlPct": -0.2,
+      "reason": "RSI 67, Above VWAP",
+      "regime": "ranging",
+      "commission": 29.1
+    },
+    {
+      "date": "2024-03-20",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2187.18,
+      "signalPrice": 2185,
+      "slippage": 0.001,
+      "bracketTP": 2515.26,
+      "bracketSL": 2077.83,
+      "qty": 9.985204,
+      "total": 21839.49,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.5x, ADX 24, Breakout",
+      "regime": "mixed",
+      "commission": 21.84
+    },
+    {
+      "date": "2024-03-22",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2147.85,
+      "signalPrice": 2150,
+      "slippage": 0.001,
+      "qty": 9.985204,
+      "total": 21446.72,
+      "pnl": -392.77,
+      "pnlPct": -1.8,
+      "reason": "MACD↓, Above VWAP",
+      "regime": "ranging",
+      "commission": 21.45
+    },
+    {
+      "date": "2024-03-28",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2214.21,
+      "signalPrice": 2212,
+      "slippage": 0.001,
+      "bracketTP": 2546.34,
+      "bracketSL": 2103.5,
+      "qty": 13.092017,
+      "total": 28988.5,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, ADX 20, Breakout",
+      "regime": "mixed",
+      "commission": 28.99
+    },
+    {
+      "date": "2024-03-30",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2202.8,
+      "signalPrice": 2205,
+      "slippage": 0.001,
+      "qty": 13.092017,
+      "total": 28839.03,
+      "pnl": -149.47,
+      "pnlPct": -0.52,
+      "reason": "RSI 70, Stoch K=81, Bear engulf, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.84
+    },
+    {
+      "date": "2024-04-01",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2232.23,
+      "signalPrice": 2230,
+      "slippage": 0.001,
+      "bracketTP": 2567.06,
+      "bracketSL": 2120.62,
+      "qty": 12.958482,
+      "total": 28926.31,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.4x, ADX 24, Breakout",
+      "regime": "mixed",
+      "commission": 28.93
+    },
+    {
+      "date": "2024-04-03",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2297.7,
+      "signalPrice": 2300,
+      "slippage": 0.001,
+      "qty": 12.958482,
+      "total": 29774.7,
+      "pnl": 848.39,
+      "pnlPct": 2.93,
+      "reason": "RSI 75, BB upper, Stoch K=84, Above VWAP",
+      "regime": "trending",
+      "commission": 29.77
+    },
+    {
+      "date": "2024-04-05",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2319.32,
+      "signalPrice": 2317,
+      "slippage": 0.001,
+      "bracketTP": 2667.21,
+      "bracketSL": 2203.35,
+      "qty": 9.430541,
+      "total": 21872.41,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, Bull engulf, ADX 29",
+      "regime": "trending",
+      "commission": 21.87
+    },
+    {
+      "date": "2024-04-07",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2288.71,
+      "signalPrice": 2291,
+      "slippage": 0.001,
+      "qty": 9.430541,
+      "total": 21583.76,
+      "pnl": -288.65,
+      "pnlPct": -1.32,
+      "reason": "RSI 73, Stoch K=78, Vol sell, Above VWAP",
+      "regime": "trending",
+      "commission": 21.58
+    },
+    {
+      "date": "2024-04-13",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2454.45,
+      "signalPrice": 2452,
+      "slippage": 0.001,
+      "bracketTP": 2822.62,
+      "bracketSL": 2331.73,
+      "qty": 5.920586,
+      "total": 14531.79,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Stoch K=23, Vol 6.0x, Bull engulf, ADX 36, Breakout",
+      "regime": "trending",
+      "commission": 14.53
+    },
+    {
+      "date": "2024-04-15",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2434.43,
+      "signalPrice": 2432,
+      "slippage": 0.001,
+      "bracketTP": 2799.6,
+      "bracketSL": 2312.71,
+      "qty": 5.960189,
+      "total": 14509.67,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Stoch K=19, Vol 1.3x, ADX 31",
+      "regime": "trending",
+      "commission": 14.51
+    },
+    {
+      "date": "2024-04-17",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2393.6,
+      "signalPrice": 2396,
+      "slippage": 0.001,
+      "qty": 11.880775,
+      "total": 28437.87,
+      "pnl": -603.6,
+      "pnlPct": -2.08,
+      "reason": "Shooting star, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.44
+    },
+    {
+      "date": "2024-05-01",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2312.31,
+      "signalPrice": 2310,
+      "slippage": 0.001,
+      "bracketTP": 2659.16,
+      "bracketSL": 2196.69,
+      "qty": 12.483302,
+      "total": 28865.26,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 32, Stoch K=15, Vol 1.6x, Hammer",
+      "regime": "ranging",
+      "commission": 28.87
+    },
+    {
+      "date": "2024-05-03",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2286.71,
+      "signalPrice": 2289,
+      "slippage": 0.001,
+      "qty": 12.483302,
+      "total": 28545.7,
+      "pnl": -319.56,
+      "pnlPct": -1.11,
+      "reason": "Vol sell, Shooting star, Above VWAP",
+      "regime": "ranging",
+      "commission": 28.55
+    },
+    {
+      "date": "2024-05-15",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2382.38,
+      "signalPrice": 2380,
+      "slippage": 0.001,
+      "bracketTP": 2739.74,
+      "bracketSL": 2263.26,
+      "qty": 12.068676,
+      "total": 28752.17,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.4x, ADX 19, Breakout",
+      "regime": "mixed",
+      "commission": 28.75
+    },
+    {
+      "date": "2024-05-17",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2387.61,
+      "signalPrice": 2390,
+      "slippage": 0.001,
+      "qty": 12.068676,
+      "total": 28815.29,
+      "pnl": 63.12,
+      "pnlPct": 0.22,
+      "reason": "RSI 71, Stoch K=95, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.82
+    },
+    {
+      "date": "2024-05-19",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2407.4,
+      "signalPrice": 2405,
+      "slippage": 0.001,
+      "bracketTP": 2768.52,
+      "bracketSL": 2287.03,
+      "qty": 11.943914,
+      "total": 28753.84,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 25, Breakout",
+      "regime": "trending",
+      "commission": 28.75
+    },
+    {
+      "date": "2024-05-21",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2410.59,
+      "signalPrice": 2413,
+      "slippage": 0.001,
+      "qty": 11.943914,
+      "total": 28791.84,
+      "pnl": 38.01,
+      "pnlPct": 0.13,
+      "reason": "RSI 76, Stoch K=90, Vol sell, Shooting star, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.79
+    },
+    {
+      "date": "2024-06-19",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2318.32,
+      "signalPrice": 2316,
+      "slippage": 0.001,
+      "bracketTP": 2666.06,
+      "bracketSL": 2202.4,
+      "qty": 12.40037,
+      "total": 28747.98,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 37, MACD↑, RSI+MACD↑",
+      "regime": "mixed",
+      "commission": 28.75
+    },
+    {
+      "date": "2024-06-21",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2318.68,
+      "signalPrice": 2321,
+      "slippage": 0.001,
+      "qty": 12.40037,
+      "total": 28752.48,
+      "pnl": 4.5,
+      "pnlPct": 0.02,
+      "reason": "Vol sell, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.75
+    },
+    {
+      "date": "2024-07-03",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2343.34,
+      "signalPrice": 2341,
+      "slippage": 0.001,
+      "bracketTP": 2694.84,
+      "bracketSL": 2226.17,
+      "qty": 12.261159,
+      "total": 28732.08,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.6x, ADX 21, Breakout",
+      "regime": "mixed",
+      "commission": 28.73
+    },
+    {
+      "date": "2024-07-05",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2356.35,
+      "signalPrice": 2354,
+      "slippage": 0.001,
+      "bracketTP": 2709.81,
+      "bracketSL": 2238.54,
+      "qty": 12.206428,
+      "total": 28762.67,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 3.1x, ADX 19, Breakout",
+      "regime": "mixed",
+      "commission": 28.76
+    },
+    {
+      "date": "2024-07-07",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2352.64,
+      "signalPrice": 2355,
+      "slippage": 0.001,
+      "qty": 24.467587,
+      "total": 57563.55,
+      "pnl": 68.8,
+      "pnlPct": 0.12,
+      "reason": "RSI 68, Stoch K=84, Above VWAP",
+      "regime": "mixed",
+      "commission": 57.56
+    },
+    {
+      "date": "2024-07-16",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2448.45,
+      "signalPrice": 2446,
+      "slippage": 0.001,
+      "bracketTP": 2815.71,
+      "bracketSL": 2326.02,
+      "qty": 11.729154,
+      "total": 28718.2,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.0x, ADX 26, Breakout",
+      "regime": "trending",
+      "commission": 28.72
+    },
+    {
+      "date": "2024-07-18",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2422.57,
+      "signalPrice": 2425,
+      "slippage": 0.001,
+      "qty": 11.729154,
+      "total": 28414.76,
+      "pnl": -303.44,
+      "pnlPct": -1.06,
+      "reason": "RSI 80, Stoch K=73, Vol sell, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.41
+    },
+    {
+      "date": "2024-08-12",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2467.46,
+      "signalPrice": 2465,
+      "slippage": 0.001,
+      "bracketTP": 2837.58,
+      "bracketSL": 2344.09,
+      "qty": 11.594907,
+      "total": 28610.03,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, ADX 27",
+      "regime": "trending",
+      "commission": 28.61
+    },
+    {
+      "date": "2024-08-14",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2440.56,
+      "signalPrice": 2443,
+      "slippage": 0.001,
+      "qty": 11.594907,
+      "total": 28298.03,
+      "pnl": -312,
+      "pnlPct": -1.09,
+      "reason": "Above VWAP",
+      "regime": "mixed",
+      "commission": 28.3
+    },
+    {
+      "date": "2024-09-12",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2555.55,
+      "signalPrice": 2553,
+      "slippage": 0.001,
+      "bracketTP": 2938.89,
+      "bracketSL": 2427.78,
+      "qty": 11.151933,
+      "total": 28499.36,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.6x, ADX 21, Breakout",
+      "regime": "mixed",
+      "commission": 28.5
+    },
+    {
+      "date": "2024-09-14",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2574.42,
+      "signalPrice": 2577,
+      "slippage": 0.001,
+      "qty": 11.151933,
+      "total": 28709.79,
+      "pnl": 210.44,
+      "pnlPct": 0.74,
+      "reason": "RSI 79, BB upper, Stoch K=93, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 28.71
+    },
+    {
+      "date": "2024-09-19",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2592.59,
+      "signalPrice": 2590,
+      "slippage": 0.001,
+      "bracketTP": 2981.48,
+      "bracketSL": 2462.96,
+      "qty": 11.01035,
+      "total": 28545.32,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.4x, Bull engulf, ADX 28",
+      "regime": "trending",
+      "commission": 28.55
+    },
+    {
+      "date": "2024-09-21",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2628.37,
+      "signalPrice": 2631,
+      "slippage": 0.001,
+      "qty": 11.01035,
+      "total": 28939.26,
+      "pnl": 393.94,
+      "pnlPct": 1.38,
+      "reason": "RSI 89, Stoch K=99, Above VWAP",
+      "regime": "trending",
+      "commission": 28.94
+    },
+    {
+      "date": "2024-10-01",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2680.68,
+      "signalPrice": 2678,
+      "slippage": 0.001,
+      "bracketTP": 3082.78,
+      "bracketSL": 2546.64,
+      "qty": 10.6862,
+      "total": 28646.26,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 3.1x, ADX 24",
+      "regime": "mixed",
+      "commission": 28.65
+    },
+    {
+      "date": "2024-10-03",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2663.33,
+      "signalPrice": 2666,
+      "slippage": 0.001,
+      "qty": 10.6862,
+      "total": 28460.92,
+      "pnl": -185.34,
+      "pnlPct": -0.65,
+      "reason": "RSI 70, MACD↓, Vol sell, Shooting star, Above VWAP, RSI+MACD↓",
+      "regime": "mixed",
+      "commission": 28.46
+    },
+    {
+      "date": "2024-10-17",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2707.7,
+      "signalPrice": 2705,
+      "slippage": 0.001,
+      "bracketTP": 3113.86,
+      "bracketSL": 2572.32,
+      "qty": 10.552673,
+      "total": 28573.53,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.5x, ADX 24, Breakout",
+      "regime": "mixed",
+      "commission": 28.57
+    },
+    {
+      "date": "2024-10-19",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2735.26,
+      "signalPrice": 2738,
+      "slippage": 0.001,
+      "qty": 10.552673,
+      "total": 28864.33,
+      "pnl": 290.8,
+      "pnlPct": 1.02,
+      "reason": "RSI 63, BB upper, Stoch K=92, Above VWAP",
+      "regime": "trending",
+      "commission": 28.86
+    },
+    {
+      "date": "2024-10-22",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2762.76,
+      "signalPrice": 2760,
+      "slippage": 0.001,
+      "bracketTP": 3177.17,
+      "bracketSL": 2624.62,
+      "qty": 10.367725,
+      "total": 28643.54,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.4x, ADX 31, Breakout",
+      "regime": "trending",
+      "commission": 28.64
+    },
+    {
+      "date": "2024-10-24",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2753.24,
+      "signalPrice": 2756,
+      "slippage": 0.001,
+      "qty": 10.367725,
+      "total": 28544.88,
+      "pnl": -98.66,
+      "pnlPct": -0.34,
+      "reason": "RSI 80, Stoch K=81, Above VWAP",
+      "regime": "trending",
+      "commission": 28.54
+    },
+    {
+      "date": "2025-01-21",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2741.74,
+      "signalPrice": 2739,
+      "slippage": 0.001,
+      "bracketTP": 3153,
+      "bracketSL": 2604.65,
+      "qty": 10.430162,
+      "total": 28596.78,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.2x, ADX 27, Breakout",
+      "regime": "trending",
+      "commission": 28.6
+    },
+    {
+      "date": "2025-01-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2746.25,
+      "signalPrice": 2749,
+      "slippage": 0.001,
+      "qty": 10.430162,
+      "total": 28643.84,
+      "pnl": 47.06,
+      "pnlPct": 0.16,
+      "reason": "RSI 69, Stoch K=76, Above VWAP",
+      "regime": "trending",
+      "commission": 28.64
+    },
+    {
+      "date": "2025-01-31",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2807.8,
+      "signalPrice": 2805,
+      "slippage": 0.001,
+      "bracketTP": 3228.98,
+      "bracketSL": 2667.41,
+      "qty": 10.183658,
+      "total": 28593.73,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.5x, ADX 26, Breakout",
+      "regime": "trending",
+      "commission": 28.59
+    },
+    {
+      "date": "2025-02-02",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2815.18,
+      "signalPrice": 2818,
+      "slippage": 0.001,
+      "qty": 10.183658,
+      "total": 28668.85,
+      "pnl": 75.12,
+      "pnlPct": 0.26,
+      "reason": "RSI 83, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 28.67
+    },
+    {
+      "date": "2025-02-24",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 2990.99,
+      "signalPrice": 2988,
+      "slippage": 0.001,
+      "bracketTP": 3439.64,
+      "bracketSL": 2841.44,
+      "qty": 9.561752,
+      "total": 28599.09,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.7x, ADX 25, Breakout",
+      "regime": "trending",
+      "commission": 28.6
+    },
+    {
+      "date": "2025-02-26",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2931.07,
+      "signalPrice": 2934,
+      "slippage": 0.001,
+      "qty": 9.561752,
+      "total": 28026.13,
+      "pnl": -572.96,
+      "pnlPct": -2,
+      "reason": "Vol sell, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.03
+    },
+    {
+      "date": "2025-03-13",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3006,
+      "signalPrice": 3003,
+      "slippage": 0.001,
+      "bracketTP": 3456.9,
+      "bracketSL": 2855.7,
+      "qty": 9.451158,
+      "total": 28410.21,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Golden cross, Breakout",
+      "regime": "ranging",
+      "commission": 28.41
+    },
+    {
+      "date": "2025-03-15",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 2999,
+      "signalPrice": 3002,
+      "slippage": 0.001,
+      "qty": 9.451158,
+      "total": 28344,
+      "pnl": -66.21,
+      "pnlPct": -0.23,
+      "reason": "RSI 78, Stoch K=84, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.34
+    },
+    {
+      "date": "2025-03-18",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3070.07,
+      "signalPrice": 3067,
+      "slippage": 0.001,
+      "bracketTP": 3530.58,
+      "bracketSL": 2916.56,
+      "qty": 9.241923,
+      "total": 28373.32,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.1x, ADX 27, Breakout",
+      "regime": "trending",
+      "commission": 28.37
+    },
+    {
+      "date": "2025-03-20",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3053.94,
+      "signalPrice": 3057,
+      "slippage": 0.001,
+      "qty": 9.241923,
+      "total": 28224.31,
+      "pnl": -149.02,
+      "pnlPct": -0.53,
+      "reason": "RSI 76, Above VWAP",
+      "regime": "trending",
+      "commission": 28.22
+    },
+    {
+      "date": "2025-03-28",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3096.09,
+      "signalPrice": 3093,
+      "slippage": 0.001,
+      "bracketTP": 3560.51,
+      "bracketSL": 2941.29,
+      "qty": 9.144311,
+      "total": 28311.64,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.7x, ADX 28",
+      "regime": "trending",
+      "commission": 28.31
+    },
+    {
+      "date": "2025-03-30",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3105.89,
+      "signalPrice": 3109,
+      "slippage": 0.001,
+      "qty": 9.144311,
+      "total": 28401.23,
+      "pnl": 89.6,
+      "pnlPct": 0.32,
+      "reason": "RSI 70, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 28.4
+    },
+    {
+      "date": "2025-04-02",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3195.19,
+      "signalPrice": 3192,
+      "slippage": 0.001,
+      "bracketTP": 3674.47,
+      "bracketSL": 3035.43,
+      "qty": 8.863787,
+      "total": 28321.5,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.5x, ADX 33, Breakout",
+      "regime": "trending",
+      "commission": 28.32
+    },
+    {
+      "date": "2025-04-04",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3051.95,
+      "signalPrice": 3055,
+      "slippage": 0.001,
+      "qty": 8.863787,
+      "total": 27051.79,
+      "pnl": -1269.71,
+      "pnlPct": -4.48,
+      "reason": "MACD↓, Vol sell, Above VWAP, Breakdown",
+      "regime": "trending",
+      "commission": 27.05
+    },
+    {
+      "date": "2025-04-07",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3008,
+      "signalPrice": 3005,
+      "slippage": 0.001,
+      "bracketTP": 3459.21,
+      "bracketSL": 2857.6,
+      "qty": 9.283222,
+      "total": 27923.98,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "EMA50 bounce, Stoch K=9, Vol 1.9x, Hammer",
+      "regime": "trending",
+      "commission": 27.92
+    },
+    {
+      "date": "2025-04-09",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3102.1,
+      "signalPrice": 3099,
+      "slippage": 0.001,
+      "bracketTP": 3567.41,
+      "bracketSL": 2946.99,
+      "qty": 9.080632,
+      "total": 28169.02,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.4x, Bull engulf, ADX 30",
+      "regime": "trending",
+      "commission": 28.17
+    },
+    {
+      "date": "2025-04-11",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3268.26,
+      "signalPrice": 3265,
+      "slippage": 0.001,
+      "bracketTP": 3758.5,
+      "bracketSL": 3104.85,
+      "qty": 6.670201,
+      "total": 21799.98,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.7x, ADX 32, Breakout",
+      "regime": "trending",
+      "commission": 21.8
+    },
+    {
+      "date": "2025-04-13",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3243.75,
+      "signalPrice": 3247,
+      "slippage": 0.001,
+      "qty": 25.034055,
+      "total": 81204.29,
+      "pnl": 3311.31,
+      "pnlPct": 4.25,
+      "reason": "Stoch K=83, Above VWAP",
+      "regime": "trending",
+      "commission": 81.2
+    },
+    {
+      "date": "2025-04-16",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3381.38,
+      "signalPrice": 3378,
+      "slippage": 0.001,
+      "bracketTP": 3888.58,
+      "bracketSL": 3212.31,
+      "qty": 4.268917,
+      "total": 14434.82,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 27, Breakout",
+      "regime": "trending",
+      "commission": 14.43
+    },
+    {
+      "date": "2025-04-18",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3349.65,
+      "signalPrice": 3353,
+      "slippage": 0.001,
+      "qty": 4.268917,
+      "total": 14299.37,
+      "pnl": -135.46,
+      "pnlPct": -0.94,
+      "reason": "RSI 77, Stoch K=92, Above VWAP",
+      "regime": "trending",
+      "commission": 14.3
+    },
+    {
+      "date": "2025-04-21",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3465.46,
+      "signalPrice": 3462,
+      "slippage": 0.001,
+      "bracketTP": 3985.28,
+      "bracketSL": 3292.19,
+      "qty": 4.158231,
+      "total": 14410.19,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.9x, ADX 38, Breakout",
+      "regime": "trending",
+      "commission": 14.41
+    },
+    {
+      "date": "2025-04-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3331.66,
+      "signalPrice": 3335,
+      "slippage": 0.001,
+      "qty": 4.158231,
+      "total": 13853.83,
+      "pnl": -556.36,
+      "pnlPct": -3.86,
+      "reason": "RSI 69, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 13.85
+    },
+    {
+      "date": "2025-05-05",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3351.35,
+      "signalPrice": 3348,
+      "slippage": 0.001,
+      "bracketTP": 3854.05,
+      "bracketSL": 3183.78,
+      "qty": 8.547306,
+      "total": 28645,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "RSI 37, Golden cross, Vol 1.4x",
+      "regime": "ranging",
+      "commission": 28.64
+    },
+    {
+      "date": "2025-05-07",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3379.62,
+      "signalPrice": 3383,
+      "slippage": 0.001,
+      "qty": 8.547306,
+      "total": 28886.62,
+      "pnl": 241.62,
+      "pnlPct": 0.84,
+      "reason": "Vol sell, Above VWAP",
+      "regime": "ranging",
+      "commission": 28.89
+    },
+    {
+      "date": "2025-05-20",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3306.32,
+      "signalPrice": 3303.02,
+      "slippage": 0.001,
+      "bracketTP": 3802.27,
+      "bracketSL": 3141.01,
+      "qty": 8.680405,
+      "total": 28700.22,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, Bull engulf, Breakout",
+      "regime": "ranging",
+      "commission": 28.7
+    },
+    {
+      "date": "2025-05-22",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3305.47,
+      "signalPrice": 3308.78,
+      "slippage": 0.001,
+      "qty": 8.680405,
+      "total": 28692.83,
+      "pnl": -7.39,
+      "pnlPct": -0.03,
+      "reason": "Stoch K=79, Vol sell, Above VWAP",
+      "regime": "ranging",
+      "commission": 28.69
+    },
+    {
+      "date": "2025-06-02",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3400.38,
+      "signalPrice": 3396.98,
+      "slippage": 0.001,
+      "bracketTP": 3910.43,
+      "bracketSL": 3230.36,
+      "qty": 8.434591,
+      "total": 28680.79,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Golden cross, Vol 1.7x, ADX 22, Breakout",
+      "regime": "mixed",
+      "commission": 28.68
+    },
+    {
+      "date": "2025-06-04",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3387.81,
+      "signalPrice": 3391.2,
+      "slippage": 0.001,
+      "qty": 8.434591,
+      "total": 28574.78,
+      "pnl": -106.01,
+      "pnlPct": -0.37,
+      "reason": "Stoch K=91, Above VWAP",
+      "regime": "ranging",
+      "commission": 28.57
+    },
+    {
+      "date": "2025-06-12",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3411.83,
+      "signalPrice": 3408.42,
+      "slippage": 0.001,
+      "bracketTP": 3923.6,
+      "bracketSL": 3241.24,
+      "qty": 8.391925,
+      "total": 28631.81,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.9x, ADX 26",
+      "regime": "trending",
+      "commission": 28.63
+    },
+    {
+      "date": "2025-06-14",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3484.11,
+      "signalPrice": 3487.6,
+      "slippage": 0.001,
+      "qty": 8.391925,
+      "total": 29238.41,
+      "pnl": 606.6,
+      "pnlPct": 2.12,
+      "reason": "RSI 75, BB upper, Above VWAP",
+      "regime": "trending",
+      "commission": 29.24
+    },
+    {
+      "date": "2025-07-11",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3351.84,
+      "signalPrice": 3348.49,
+      "slippage": 0.001,
+      "bracketTP": 3854.61,
+      "bracketSL": 3184.25,
+      "qty": 8.591234,
+      "total": 28796.43,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.7x, ADX 21",
+      "regime": "mixed",
+      "commission": 28.8
+    },
+    {
+      "date": "2025-07-13",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3350.83,
+      "signalPrice": 3354.18,
+      "slippage": 0.001,
+      "qty": 8.591234,
+      "total": 28787.73,
+      "pnl": -8.7,
+      "pnlPct": -0.03,
+      "reason": "RSI 71, Stoch K=89, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.79
+    },
+    {
+      "date": "2025-07-21",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3398.8,
+      "signalPrice": 3395.4,
+      "slippage": 0.001,
+      "bracketTP": 3908.61,
+      "bracketSL": 3228.86,
+      "qty": 8.466689,
+      "total": 28776.54,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, ADX 24, Breakout",
+      "regime": "mixed",
+      "commission": 28.78
+    },
+    {
+      "date": "2025-07-23",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3390.4,
+      "signalPrice": 3393.79,
+      "slippage": 0.001,
+      "qty": 8.466689,
+      "total": 28705.43,
+      "pnl": -71.11,
+      "pnlPct": -0.25,
+      "reason": "RSI 69, Above VWAP",
+      "regime": "trending",
+      "commission": 28.71
+    },
+    {
+      "date": "2025-08-26",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3381.38,
+      "signalPrice": 3378,
+      "slippage": 0.001,
+      "bracketTP": 3888.58,
+      "bracketSL": 3212.31,
+      "qty": 8.498892,
+      "total": 28737.97,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, EMA50 bounce, Bull engulf",
+      "regime": "ranging",
+      "commission": 28.74
+    },
+    {
+      "date": "2025-08-28",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3412.38,
+      "signalPrice": 3415.8,
+      "slippage": 0.001,
+      "qty": 8.498892,
+      "total": 29001.48,
+      "pnl": 263.52,
+      "pnlPct": 0.92,
+      "reason": "RSI 72, BB upper, Stoch K=94, Above VWAP",
+      "regime": "mixed",
+      "commission": 29
+    },
+    {
+      "date": "2025-09-01",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3506.69,
+      "signalPrice": 3503.19,
+      "slippage": 0.001,
+      "bracketTP": 4032.7,
+      "bracketSL": 3331.36,
+      "qty": 8.21278,
+      "total": 28799.7,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.5x, ADX 28, Breakout",
+      "regime": "trending",
+      "commission": 28.8
+    },
+    {
+      "date": "2025-09-03",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3571.42,
+      "signalPrice": 3574.99,
+      "slippage": 0.001,
+      "qty": 8.21278,
+      "total": 29331.25,
+      "pnl": 531.55,
+      "pnlPct": 1.85,
+      "reason": "RSI 89, BB upper, Stoch K=95, Above VWAP",
+      "regime": "trending",
+      "commission": 29.33
+    },
+    {
+      "date": "2025-09-08",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3644.44,
+      "signalPrice": 3640.8,
+      "slippage": 0.001,
+      "bracketTP": 4191.11,
+      "bracketSL": 3462.22,
+      "qty": 3.970667,
+      "total": 14470.86,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 45, Breakout",
+      "regime": "trending",
+      "commission": 14.47
+    },
+    {
+      "date": "2025-09-10",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3638.62,
+      "signalPrice": 3642.26,
+      "slippage": 0.001,
+      "qty": 3.970667,
+      "total": 14447.74,
+      "pnl": -23.12,
+      "pnlPct": -0.16,
+      "reason": "RSI 87, Stoch K=87, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 14.45
+    },
+    {
+      "date": "2025-09-16",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3708.75,
+      "signalPrice": 3705.04,
+      "slippage": 0.001,
+      "bracketTP": 4265.06,
+      "bracketSL": 3523.31,
+      "qty": 5.849575,
+      "total": 21694.58,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 36, Breakout",
+      "regime": "trending",
+      "commission": 21.69
+    },
+    {
+      "date": "2025-09-18",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3641.59,
+      "signalPrice": 3645.24,
+      "slippage": 0.001,
+      "qty": 5.849575,
+      "total": 21301.78,
+      "pnl": -392.8,
+      "pnlPct": -1.81,
+      "reason": "RSI 65, MACD↓, Vol sell, Above VWAP, RSI+MACD↓",
+      "regime": "trending",
+      "commission": 21.3
+    },
+    {
+      "date": "2025-09-22",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3761.47,
+      "signalPrice": 3757.71,
+      "slippage": 0.001,
+      "bracketTP": 4325.69,
+      "bracketSL": 3573.39,
+      "qty": 7.655355,
+      "total": 28795.37,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.0x, ADX 29, Breakout",
+      "regime": "trending",
+      "commission": 28.8
+    },
+    {
+      "date": "2025-09-24",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3751.13,
+      "signalPrice": 3754.88,
+      "slippage": 0.001,
+      "qty": 7.655355,
+      "total": 28716.19,
+      "pnl": -79.18,
+      "pnlPct": -0.27,
+      "reason": "RSI 68, Stoch K=76, Vol sell, Bear engulf, Above VWAP",
+      "regime": "trending",
+      "commission": 28.72
+    },
+    {
+      "date": "2025-09-29",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3851.48,
+      "signalPrice": 3847.63,
+      "slippage": 0.001,
+      "bracketTP": 4429.2,
+      "bracketSL": 3658.9,
+      "qty": 7.465801,
+      "total": 28754.37,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Vol 1.5x, ADX 29, Breakout",
+      "regime": "trending",
+      "commission": 28.75
+    },
+    {
+      "date": "2025-10-01",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3866.14,
+      "signalPrice": 3870.01,
+      "slippage": 0.001,
+      "qty": 7.465801,
+      "total": 28863.83,
+      "pnl": 109.47,
+      "pnlPct": 0.38,
+      "reason": "RSI 82, Stoch K=87, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 28.86
+    },
+    {
+      "date": "2025-10-07",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4004.88,
+      "signalPrice": 4000.88,
+      "slippage": 0.001,
+      "bracketTP": 4605.61,
+      "bracketSL": 3804.64,
+      "qty": 5.387786,
+      "total": 21577.44,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.6x, ADX 32, Breakout",
+      "regime": "trending",
+      "commission": 21.58
+    },
+    {
+      "date": "2025-10-09",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 3996.27,
+      "signalPrice": 4000.27,
+      "slippage": 0.001,
+      "qty": 5.387786,
+      "total": 21531.05,
+      "pnl": -46.4,
+      "pnlPct": -0.22,
+      "reason": "RSI 87, Stoch K=77, Vol sell, Bear engulf, Above VWAP",
+      "regime": "trending",
+      "commission": 21.53
+    },
+    {
+      "date": "2025-10-11",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 3996.14,
+      "signalPrice": 3992.15,
+      "slippage": 0.001,
+      "bracketTP": 4595.56,
+      "bracketSL": 3796.34,
+      "qty": 5.394528,
+      "total": 21557.3,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.4x, Hammer, ADX 35",
+      "regime": "trending",
+      "commission": 21.56
+    },
+    {
+      "date": "2025-10-13",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4137.55,
+      "signalPrice": 4141.69,
+      "slippage": 0.001,
+      "qty": 5.394528,
+      "total": 22320.12,
+      "pnl": 762.82,
+      "pnlPct": 3.54,
+      "reason": "RSI 86, BB upper, Stoch K=100, Above VWAP",
+      "regime": "trending",
+      "commission": 22.32
+    },
+    {
+      "date": "2025-10-15",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4242.66,
+      "signalPrice": 4238.42,
+      "slippage": 0.001,
+      "bracketTP": 4879.06,
+      "bracketSL": 4030.53,
+      "qty": 3.412807,
+      "total": 14479.37,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, ADX 41, Breakout",
+      "regime": "trending",
+      "commission": 14.48
+    },
+    {
+      "date": "2025-10-17",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4234.69,
+      "signalPrice": 4238.93,
+      "slippage": 0.001,
+      "qty": 3.412807,
+      "total": 14452.18,
+      "pnl": -27.19,
+      "pnlPct": -0.19,
+      "reason": "RSI 71, Vol sell, Above VWAP",
+      "regime": "trending",
+      "commission": 14.45
+    },
+    {
+      "date": "2025-11-11",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4132.12,
+      "signalPrice": 4127.99,
+      "slippage": 0.001,
+      "bracketTP": 4751.94,
+      "bracketSL": 3925.51,
+      "qty": 7.004136,
+      "total": 28941.92,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Golden cross, Vol 1.3x, Hammer, Breakout",
+      "regime": "ranging",
+      "commission": 28.94
+    },
+    {
+      "date": "2025-11-13",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4171.77,
+      "signalPrice": 4175.95,
+      "slippage": 0.001,
+      "qty": 7.004136,
+      "total": 29219.67,
+      "pnl": 277.76,
+      "pnlPct": 0.96,
+      "reason": "RSI 68, Stoch K=81, Vol sell, Shooting star, Above VWAP",
+      "regime": "mixed",
+      "commission": 29.22
+    },
+    {
+      "date": "2025-11-24",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4147.74,
+      "signalPrice": 4143.6,
+      "slippage": 0.001,
+      "bracketTP": 4769.91,
+      "bracketSL": 3940.36,
+      "qty": 6.993632,
+      "total": 29007.79,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, Golden cross, Vol 1.3x, ADX 22, Breakout",
+      "regime": "mixed",
+      "commission": 29.01
+    },
+    {
+      "date": "2025-11-26",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4161.04,
+      "signalPrice": 4165.21,
+      "slippage": 0.001,
+      "qty": 6.993632,
+      "total": 29100.82,
+      "pnl": 93.02,
+      "pnlPct": 0.32,
+      "reason": "Above VWAP",
+      "regime": "mixed",
+      "commission": 29.1
+    },
+    {
+      "date": "2025-12-01",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4248.11,
+      "signalPrice": 4243.87,
+      "slippage": 0.001,
+      "bracketTP": 4885.33,
+      "bracketSL": 4035.71,
+      "qty": 6.830859,
+      "total": 29018.27,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.5x, Hammer, ADX 29",
+      "regime": "trending",
+      "commission": 29.02
+    },
+    {
+      "date": "2025-12-03",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4210.67,
+      "signalPrice": 4214.88,
+      "slippage": 0.001,
+      "qty": 6.830859,
+      "total": 28762.46,
+      "pnl": -255.81,
+      "pnlPct": -0.88,
+      "reason": "RSI 69, Stoch K=75, Above VWAP",
+      "regime": "mixed",
+      "commission": 28.76
+    },
+    {
+      "date": "2025-12-11",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4289.66,
+      "signalPrice": 4285.37,
+      "slippage": 0.001,
+      "bracketTP": 4933.1,
+      "bracketSL": 4075.17,
+      "qty": 6.742777,
+      "total": 28924.19,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "MACD↑, ADX 26, Breakout",
+      "regime": "trending",
+      "commission": 28.92
+    },
+    {
+      "date": "2025-12-13",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4312.47,
+      "signalPrice": 4316.79,
+      "slippage": 0.001,
+      "qty": 6.742777,
+      "total": 29078.05,
+      "pnl": 153.86,
+      "pnlPct": 0.53,
+      "reason": "RSI 69, Stoch K=76, Above VWAP",
+      "regime": "mixed",
+      "commission": 29.08
+    },
+    {
+      "date": "2025-12-16",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4326.43,
+      "signalPrice": 4322.11,
+      "slippage": 0.001,
+      "bracketTP": 4975.4,
+      "bracketSL": 4110.11,
+      "qty": 6.692107,
+      "total": 28952.95,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, Hammer, ADX 22",
+      "regime": "mixed",
+      "commission": 28.95
+    },
+    {
+      "date": "2025-12-18",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4343.84,
+      "signalPrice": 4348.19,
+      "slippage": 0.001,
+      "qty": 6.692107,
+      "total": 29069.45,
+      "pnl": 116.51,
+      "pnlPct": 0.4,
+      "reason": "RSI 87, Stoch K=82, Vol sell, Shooting star, Above VWAP",
+      "regime": "trending",
+      "commission": 29.07
+    },
+    {
+      "date": "2025-12-22",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4489.46,
+      "signalPrice": 4484.98,
+      "slippage": 0.001,
+      "bracketTP": 5162.88,
+      "bracketSL": 4264.99,
+      "qty": 6.452995,
+      "total": 28970.5,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.5x, ADX 33, Breakout",
+      "regime": "trending",
+      "commission": 28.97
+    },
+    {
+      "date": "2025-12-24",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4492.34,
+      "signalPrice": 4496.84,
+      "slippage": 0.001,
+      "qty": 6.452995,
+      "total": 28989.07,
+      "pnl": 18.57,
+      "pnlPct": 0.06,
+      "reason": "RSI 87, Stoch K=86, Vol sell, Above VWAP",
+      "regime": "trending",
+      "commission": 28.99
+    },
+    {
+      "date": "2025-12-26",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4561.9,
+      "signalPrice": 4557.34,
+      "slippage": 0.001,
+      "bracketTP": 5246.18,
+      "bracketSL": 4333.8,
+      "qty": 4.760959,
+      "total": 21719.01,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.6x, ADX 31, Breakout",
+      "regime": "trending",
+      "commission": 21.72
+    },
+    {
+      "date": "2025-12-28",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4544.99,
+      "signalPrice": 4549.54,
+      "slippage": 0.001,
+      "qty": 4.760959,
+      "total": 21638.51,
+      "pnl": -80.49,
+      "pnlPct": -0.37,
+      "reason": "RSI 82, Stoch K=90, Bear engulf, Above VWAP",
+      "regime": "trending",
+      "commission": 21.64
+    },
+    {
+      "date": "2026-01-12",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4619.93,
+      "signalPrice": 4615.31,
+      "slippage": 0.001,
+      "bracketTP": 5312.91,
+      "bracketSL": 4388.93,
+      "qty": 6.260171,
+      "total": 28921.52,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.4x, ADX 33, Breakout",
+      "regime": "trending",
+      "commission": 28.92
+    },
+    {
+      "date": "2026-01-14",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4623.78,
+      "signalPrice": 4628.41,
+      "slippage": 0.001,
+      "qty": 6.260171,
+      "total": 28945.66,
+      "pnl": 24.14,
+      "pnlPct": 0.08,
+      "reason": "RSI 85, Stoch K=94, Above VWAP",
+      "regime": "trending",
+      "commission": 28.95
+    },
+    {
+      "date": "2026-01-20",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 4811.51,
+      "signalPrice": 4806.7,
+      "slippage": 0.001,
+      "bracketTP": 5533.23,
+      "bracketSL": 4570.93,
+      "qty": 4.506604,
+      "total": 21683.56,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.6x, ADX 30, Breakout",
+      "regime": "trending",
+      "commission": 21.68
+    },
+    {
+      "date": "2026-01-22",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 4975,
+      "signalPrice": 4979.98,
+      "slippage": 0.001,
+      "qty": 4.506604,
+      "total": 22420.35,
+      "pnl": 736.8,
+      "pnlPct": 3.4,
+      "reason": "RSI 93, BB upper, Stoch K=100, Above VWAP",
+      "regime": "trending",
+      "commission": 22.42
+    },
+    {
+      "date": "2026-01-25",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 5075.42,
+      "signalPrice": 5070.35,
+      "slippage": 0.001,
+      "bracketTP": 5836.73,
+      "bracketSL": 4821.65,
+      "qty": 2.86865,
+      "total": 14559.6,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.3x, Hammer, ADX 37",
+      "regime": "trending",
+      "commission": 14.56
+    },
+    {
+      "date": "2026-01-27",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 5187.8,
+      "signalPrice": 5192.99,
+      "slippage": 0.001,
+      "qty": 2.86865,
+      "total": 14881.97,
+      "pnl": 322.37,
+      "pnlPct": 2.21,
+      "reason": "RSI 93, Stoch K=94, Above VWAP",
+      "regime": "trending",
+      "commission": 14.88
+    },
+    {
+      "date": "2026-02-20",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 5121.2,
+      "signalPrice": 5116.08,
+      "slippage": 0.001,
+      "bracketTP": 5889.38,
+      "bracketSL": 4865.14,
+      "qty": 4.277383,
+      "total": 21905.32,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 2.3x, ADX 22, Breakout",
+      "regime": "mixed",
+      "commission": 21.91
+    },
+    {
+      "date": "2026-02-22",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 5181.5,
+      "signalPrice": 5186.69,
+      "slippage": 0.001,
+      "qty": 4.277383,
+      "total": 22163.27,
+      "pnl": 257.96,
+      "pnlPct": 1.18,
+      "reason": "Stoch K=98, Above VWAP",
+      "regime": "mixed",
+      "commission": 22.16
+    },
+    {
+      "date": "2026-02-27",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 5295.95,
+      "signalPrice": 5290.66,
+      "slippage": 0.001,
+      "bracketTP": 6090.34,
+      "bracketSL": 5031.15,
+      "qty": 4.145326,
+      "total": 21953.44,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Vol 1.2x, ADX 27, Breakout",
+      "regime": "trending",
+      "commission": 21.95
+    },
+    {
+      "date": "2026-03-01",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 5431.01,
+      "signalPrice": 5436.45,
+      "slippage": 0.001,
+      "qty": 4.145326,
+      "total": 22513.32,
+      "pnl": 559.88,
+      "pnlPct": 2.55,
+      "reason": "RSI 73, BB upper, Stoch K=80, Above VWAP",
+      "regime": "trending",
+      "commission": 22.51
+    },
+    {
+      "date": "2026-03-06",
+      "side": "buy",
+      "symbol": "GOLD",
+      "price": 5187.63,
+      "signalPrice": 5182.45,
+      "slippage": 0.001,
+      "bracketTP": 5965.78,
+      "bracketSL": 4928.25,
+      "qty": 4.254236,
+      "total": 22069.41,
+      "pnl": 0,
+      "pnlPct": 0,
+      "reason": "Stoch K=27, Bull engulf, ADX 26",
+      "regime": "trending",
+      "commission": 22.07
+    },
+    {
+      "date": "2026-03-08",
+      "side": "sell",
+      "symbol": "GOLD",
+      "price": 5080.2,
+      "signalPrice": 5085.29,
+      "slippage": 0.001,
+      "qty": 4.254236,
+      "total": 21612.39,
+      "pnl": -457.02,
+      "pnlPct": -2.07,
+      "reason": "Above VWAP",
+      "regime": "ranging",
+      "commission": 21.61
+    }
+  ],
+  "equityCurve": [
+    {
+      "date": "2023-07-04",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-05",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-06",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-07",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-08",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-09",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-10",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-11",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-12",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-13",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-14",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-15",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-16",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-17",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-18",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-19",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-20",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-21",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-22",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-23",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-24",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-25",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-26",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-27",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-28",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-29",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-30",
+      "value": 100000
+    },
+    {
+      "date": "2023-07-31",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-01",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-02",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-03",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-04",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-05",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-06",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-07",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-08",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-09",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-10",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-11",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-12",
+      "value": 100000
+    },
+    {
+      "date": "2023-08-13",
+      "value": 99940.03
+    },
+    {
+      "date": "2023-08-14",
+      "value": 99877.13
+    },
+    {
+      "date": "2023-08-15",
+      "value": 99770.27
+    },
+    {
+      "date": "2023-08-16",
+      "value": 99770.27
+    },
+    {
+      "date": "2023-08-17",
+      "value": 99770.27
+    },
+    {
+      "date": "2023-08-18",
+      "value": 99710.44
+    },
+    {
+      "date": "2023-08-19",
+      "value": 99726.4
+    },
+    {
+      "date": "2023-08-20",
+      "value": 99742.35
+    },
+    {
+      "date": "2023-08-21",
+      "value": 99790.22
+    },
+    {
+      "date": "2023-08-22",
+      "value": 99933.82
+    },
+    {
+      "date": "2023-08-23",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-24",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-25",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-26",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-27",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-28",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-29",
+      "value": 100223.93
+    },
+    {
+      "date": "2023-08-30",
+      "value": 100163.82
+    },
+    {
+      "date": "2023-08-31",
+      "value": 100085.72
+    },
+    {
+      "date": "2023-09-01",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-02",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-03",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-04",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-05",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-06",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-07",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-08",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-09",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-10",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-11",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-12",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-13",
+      "value": 100010.25
+    },
+    {
+      "date": "2023-09-14",
+      "value": 99950.27
+    },
+    {
+      "date": "2023-09-15",
+      "value": 100203.48
+    },
+    {
+      "date": "2023-09-16",
+      "value": 100140.17
+    },
+    {
+      "date": "2023-09-17",
+      "value": 100187.65
+    },
+    {
+      "date": "2023-09-18",
+      "value": 100317.36
+    },
+    {
+      "date": "2023-09-19",
+      "value": 100317.36
+    },
+    {
+      "date": "2023-09-20",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-21",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-22",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-23",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-24",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-25",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-26",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-27",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-28",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-29",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-09-30",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-01",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-02",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-03",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-04",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-05",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-06",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-07",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-08",
+      "value": 100165.03
+    },
+    {
+      "date": "2023-10-09",
+      "value": 100104.96
+    },
+    {
+      "date": "2023-10-10",
+      "value": 100024.61
+    },
+    {
+      "date": "2023-10-11",
+      "value": 100173.26
+    },
+    {
+      "date": "2023-10-12",
+      "value": 100173.26
+    },
+    {
+      "date": "2023-10-13",
+      "value": 100113.18
+    },
+    {
+      "date": "2023-10-14",
+      "value": 100144.5
+    },
+    {
+      "date": "2023-10-15",
+      "value": 100037.54
+    },
+    {
+      "date": "2023-10-16",
+      "value": 100037.54
+    },
+    {
+      "date": "2023-10-17",
+      "value": 100037.54
+    },
+    {
+      "date": "2023-10-18",
+      "value": 99977.55
+    },
+    {
+      "date": "2023-10-19",
+      "value": 100301.92
+    },
+    {
+      "date": "2023-10-20",
+      "value": 100303.12
+    },
+    {
+      "date": "2023-10-21",
+      "value": 100303.12
+    },
+    {
+      "date": "2023-10-22",
+      "value": 100197.36
+    },
+    {
+      "date": "2023-10-23",
+      "value": 100197.36
+    },
+    {
+      "date": "2023-10-24",
+      "value": 100197.36
+    },
+    {
+      "date": "2023-10-25",
+      "value": 100197.36
+    },
+    {
+      "date": "2023-10-26",
+      "value": 100197.36
+    },
+    {
+      "date": "2023-10-27",
+      "value": 100152.29
+    },
+    {
+      "date": "2023-10-28",
+      "value": 100140.96
+    },
+    {
+      "date": "2023-10-29",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-10-30",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-10-31",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-01",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-02",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-03",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-04",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-05",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-06",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-07",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-08",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-09",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-10",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-11",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-12",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-13",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-14",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-15",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-16",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-17",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-18",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-19",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-20",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-21",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-22",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-23",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-24",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-25",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-26",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-27",
+      "value": 100062.03
+    },
+    {
+      "date": "2023-11-28",
+      "value": 100002.02
+    },
+    {
+      "date": "2023-11-29",
+      "value": 100031.67
+    },
+    {
+      "date": "2023-11-30",
+      "value": 99942.07
+    },
+    {
+      "date": "2023-12-01",
+      "value": 99942.07
+    },
+    {
+      "date": "2023-12-02",
+      "value": 99942.07
+    },
+    {
+      "date": "2023-12-03",
+      "value": 99882.14
+    },
+    {
+      "date": "2023-12-04",
+      "value": 98992.74
+    },
+    {
+      "date": "2023-12-05",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-06",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-07",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-08",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-09",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-10",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-11",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-12",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-13",
+      "value": 98734.21
+    },
+    {
+      "date": "2023-12-14",
+      "value": 98675
+    },
+    {
+      "date": "2023-12-15",
+      "value": 98469.61
+    },
+    {
+      "date": "2023-12-16",
+      "value": 98293.74
+    },
+    {
+      "date": "2023-12-17",
+      "value": 98293.74
+    },
+    {
+      "date": "2023-12-18",
+      "value": 98293.74
+    },
+    {
+      "date": "2023-12-19",
+      "value": 98293.74
+    },
+    {
+      "date": "2023-12-20",
+      "value": 98293.74
+    },
+    {
+      "date": "2023-12-21",
+      "value": 98234.79
+    },
+    {
+      "date": "2023-12-22",
+      "value": 98205.77
+    },
+    {
+      "date": "2023-12-23",
+      "value": 98117.97
+    },
+    {
+      "date": "2023-12-24",
+      "value": 98117.97
+    },
+    {
+      "date": "2023-12-25",
+      "value": 98117.97
+    },
+    {
+      "date": "2023-12-26",
+      "value": 98117.97
+    },
+    {
+      "date": "2023-12-27",
+      "value": 98059.13
+    },
+    {
+      "date": "2023-12-28",
+      "value": 97973.19
+    },
+    {
+      "date": "2023-12-29",
+      "value": 97743.04
+    },
+    {
+      "date": "2023-12-30",
+      "value": 97743.04
+    },
+    {
+      "date": "2023-12-31",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-01",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-02",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-03",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-04",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-05",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-06",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-07",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-08",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-09",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-10",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-11",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-12",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-13",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-14",
+      "value": 97743.04
+    },
+    {
+      "date": "2024-01-15",
+      "value": 97684.42
+    },
+    {
+      "date": "2024-01-16",
+      "value": 97368.51
+    },
+    {
+      "date": "2024-01-17",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-18",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-19",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-20",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-21",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-22",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-23",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-24",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-25",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-26",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-27",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-28",
+      "value": 97124.28
+    },
+    {
+      "date": "2024-01-29",
+      "value": 97066.04
+    },
+    {
+      "date": "2024-01-30",
+      "value": 97152.97
+    },
+    {
+      "date": "2024-01-31",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-01",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-02",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-03",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-04",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-05",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-06",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-07",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-08",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-09",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-10",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-11",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-12",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-13",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-14",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-15",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-16",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-17",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-18",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-19",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-20",
+      "value": 97210.29
+    },
+    {
+      "date": "2024-02-21",
+      "value": 97151.99
+    },
+    {
+      "date": "2024-02-22",
+      "value": 97137.44
+    },
+    {
+      "date": "2024-02-23",
+      "value": 97180.9
+    },
+    {
+      "date": "2024-02-24",
+      "value": 97180.9
+    },
+    {
+      "date": "2024-02-25",
+      "value": 97180.9
+    },
+    {
+      "date": "2024-02-26",
+      "value": 97180.9
+    },
+    {
+      "date": "2024-02-27",
+      "value": 97180.9
+    },
+    {
+      "date": "2024-02-28",
+      "value": 97122.62
+    },
+    {
+      "date": "2024-02-29",
+      "value": 96776.4
+    },
+    {
+      "date": "2024-03-01",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-02",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-03",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-04",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-05",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-06",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-07",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-08",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-09",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-10",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-11",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-12",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-13",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-14",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-15",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-16",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-17",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-18",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-19",
+      "value": 97064.39
+    },
+    {
+      "date": "2024-03-20",
+      "value": 97020.74
+    },
+    {
+      "date": "2024-03-21",
+      "value": 96910.9
+    },
+    {
+      "date": "2024-03-22",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-23",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-24",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-25",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-26",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-27",
+      "value": 96628.34
+    },
+    {
+      "date": "2024-03-28",
+      "value": 96570.39
+    },
+    {
+      "date": "2024-03-29",
+      "value": 96648.94
+    },
+    {
+      "date": "2024-03-30",
+      "value": 96421.04
+    },
+    {
+      "date": "2024-03-31",
+      "value": 96421.04
+    },
+    {
+      "date": "2024-04-01",
+      "value": 96363.22
+    },
+    {
+      "date": "2024-04-02",
+      "value": 96777.89
+    },
+    {
+      "date": "2024-04-03",
+      "value": 97210.73
+    },
+    {
+      "date": "2024-04-04",
+      "value": 97210.73
+    },
+    {
+      "date": "2024-04-05",
+      "value": 97167.01
+    },
+    {
+      "date": "2024-04-06",
+      "value": 97044.41
+    },
+    {
+      "date": "2024-04-07",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-08",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-09",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-10",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-11",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-12",
+      "value": 96878.63
+    },
+    {
+      "date": "2024-04-13",
+      "value": 96849.58
+    },
+    {
+      "date": "2024-04-14",
+      "value": 96488.42
+    },
+    {
+      "date": "2024-04-15",
+      "value": 96702.16
+    },
+    {
+      "date": "2024-04-16",
+      "value": 96369.5
+    },
+    {
+      "date": "2024-04-17",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-18",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-19",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-20",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-21",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-22",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-23",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-24",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-25",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-26",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-27",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-28",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-29",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-04-30",
+      "value": 96217.55
+    },
+    {
+      "date": "2024-05-01",
+      "value": 96159.85
+    },
+    {
+      "date": "2024-05-02",
+      "value": 95922.66
+    },
+    {
+      "date": "2024-05-03",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-04",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-05",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-06",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-07",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-08",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-09",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-10",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-11",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-12",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-13",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-14",
+      "value": 95840.58
+    },
+    {
+      "date": "2024-05-15",
+      "value": 95783.1
+    },
+    {
+      "date": "2024-05-16",
+      "value": 95553.8
+    },
+    {
+      "date": "2024-05-17",
+      "value": 95846.13
+    },
+    {
+      "date": "2024-05-18",
+      "value": 95846.13
+    },
+    {
+      "date": "2024-05-19",
+      "value": 95788.65
+    },
+    {
+      "date": "2024-05-20",
+      "value": 95896.15
+    },
+    {
+      "date": "2024-05-21",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-22",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-23",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-24",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-25",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-26",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-27",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-28",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-29",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-30",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-05-31",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-01",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-02",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-03",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-04",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-05",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-06",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-07",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-08",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-09",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-10",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-11",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-12",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-13",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-14",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-15",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-16",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-17",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-18",
+      "value": 95826.59
+    },
+    {
+      "date": "2024-06-19",
+      "value": 95769.12
+    },
+    {
+      "date": "2024-06-20",
+      "value": 96141.13
+    },
+    {
+      "date": "2024-06-21",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-22",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-23",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-24",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-25",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-26",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-27",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-28",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-29",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-06-30",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-07-01",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-07-02",
+      "value": 95773.59
+    },
+    {
+      "date": "2024-07-03",
+      "value": 95716.15
+    },
+    {
+      "date": "2024-07-04",
+      "value": 95532.24
+    },
+    {
+      "date": "2024-07-05",
+      "value": 95818.05
+    },
+    {
+      "date": "2024-07-06",
+      "value": 95818.05
+    },
+    {
+      "date": "2024-07-07",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-08",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-09",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-10",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-11",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-12",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-13",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-14",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-15",
+      "value": 95727.34
+    },
+    {
+      "date": "2024-07-16",
+      "value": 95669.93
+    },
+    {
+      "date": "2024-07-17",
+      "value": 95623.01
+    },
+    {
+      "date": "2024-07-18",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-19",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-20",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-21",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-22",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-23",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-24",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-25",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-26",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-27",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-28",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-29",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-30",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-07-31",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-01",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-02",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-03",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-04",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-05",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-06",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-07",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-08",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-09",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-10",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-11",
+      "value": 95366.76
+    },
+    {
+      "date": "2024-08-12",
+      "value": 95309.57
+    },
+    {
+      "date": "2024-08-13",
+      "value": 95182.02
+    },
+    {
+      "date": "2024-08-14",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-15",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-16",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-17",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-18",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-19",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-20",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-21",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-22",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-23",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-24",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-25",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-26",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-27",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-28",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-29",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-30",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-08-31",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-01",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-02",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-03",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-04",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-05",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-06",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-07",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-08",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-09",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-10",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-11",
+      "value": 94997.85
+    },
+    {
+      "date": "2024-09-12",
+      "value": 94940.88
+    },
+    {
+      "date": "2024-09-13",
+      "value": 95219.68
+    },
+    {
+      "date": "2024-09-14",
+      "value": 95151.08
+    },
+    {
+      "date": "2024-09-15",
+      "value": 95151.08
+    },
+    {
+      "date": "2024-09-16",
+      "value": 95151.08
+    },
+    {
+      "date": "2024-09-17",
+      "value": 95151.08
+    },
+    {
+      "date": "2024-09-18",
+      "value": 95151.08
+    },
+    {
+      "date": "2024-09-19",
+      "value": 95094.02
+    },
+    {
+      "date": "2024-09-20",
+      "value": 95479.38
+    },
+    {
+      "date": "2024-09-21",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-22",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-23",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-24",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-25",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-26",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-27",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-28",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-29",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-09-30",
+      "value": 95487.54
+    },
+    {
+      "date": "2024-10-01",
+      "value": 95430.27
+    },
+    {
+      "date": "2024-10-02",
+      "value": 95334.1
+    },
+    {
+      "date": "2024-10-03",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-04",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-05",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-06",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-07",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-08",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-09",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-10",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-11",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-12",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-13",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-14",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-15",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-16",
+      "value": 95245.09
+    },
+    {
+      "date": "2024-10-17",
+      "value": 95187.97
+    },
+    {
+      "date": "2024-10-18",
+      "value": 95420.13
+    },
+    {
+      "date": "2024-10-19",
+      "value": 95478.45
+    },
+    {
+      "date": "2024-10-20",
+      "value": 95478.45
+    },
+    {
+      "date": "2024-10-21",
+      "value": 95478.45
+    },
+    {
+      "date": "2024-10-22",
+      "value": 95421.19
+    },
+    {
+      "date": "2024-10-23",
+      "value": 95213.84
+    },
+    {
+      "date": "2024-10-24",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-25",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-26",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-27",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-28",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-29",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-30",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-10-31",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-01",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-02",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-03",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-04",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-05",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-06",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-07",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-08",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-09",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-10",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-11",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-12",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-13",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-14",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-15",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-16",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-17",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-18",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-19",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-20",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-21",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-22",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-23",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-24",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-25",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-26",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-27",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-28",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-29",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-11-30",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-01",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-02",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-03",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-04",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-05",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-06",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-07",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-08",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-09",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-10",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-11",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-12",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-13",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-14",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-15",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-16",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-17",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-18",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-19",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-20",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-21",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-22",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-23",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-24",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-25",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-26",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-27",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-28",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-29",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-30",
+      "value": 95322.6
+    },
+    {
+      "date": "2024-12-31",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-01",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-02",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-03",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-04",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-05",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-06",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-07",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-08",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-09",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-10",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-11",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-12",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-13",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-14",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-15",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-16",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-17",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-18",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-19",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-20",
+      "value": 95322.6
+    },
+    {
+      "date": "2025-01-21",
+      "value": 95265.44
+    },
+    {
+      "date": "2025-01-22",
+      "value": 95421.89
+    },
+    {
+      "date": "2025-01-23",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-24",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-25",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-26",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-27",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-28",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-29",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-30",
+      "value": 95312.42
+    },
+    {
+      "date": "2025-01-31",
+      "value": 95255.26
+    },
+    {
+      "date": "2025-02-01",
+      "value": 95397.83
+    },
+    {
+      "date": "2025-02-02",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-03",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-04",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-05",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-06",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-07",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-08",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-09",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-10",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-11",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-12",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-13",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-14",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-15",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-16",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-17",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-18",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-19",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-20",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-21",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-22",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-23",
+      "value": 95330.28
+    },
+    {
+      "date": "2025-02-24",
+      "value": 95273.12
+    },
+    {
+      "date": "2025-02-25",
+      "value": 94814.15
+    },
+    {
+      "date": "2025-02-26",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-02-27",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-02-28",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-01",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-02",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-03",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-04",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-05",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-06",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-07",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-08",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-09",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-10",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-11",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-12",
+      "value": 94700.7
+    },
+    {
+      "date": "2025-03-13",
+      "value": 94643.91
+    },
+    {
+      "date": "2025-03-14",
+      "value": 94577.75
+    },
+    {
+      "date": "2025-03-15",
+      "value": 94577.74
+    },
+    {
+      "date": "2025-03-16",
+      "value": 94577.74
+    },
+    {
+      "date": "2025-03-17",
+      "value": 94577.74
+    },
+    {
+      "date": "2025-03-18",
+      "value": 94521.02
+    },
+    {
+      "date": "2025-03-19",
+      "value": 94493.3
+    },
+    {
+      "date": "2025-03-20",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-21",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-22",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-23",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-24",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-25",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-26",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-27",
+      "value": 94372.13
+    },
+    {
+      "date": "2025-03-28",
+      "value": 94315.53
+    },
+    {
+      "date": "2025-03-29",
+      "value": 94553.28
+    },
+    {
+      "date": "2025-03-30",
+      "value": 94405.01
+    },
+    {
+      "date": "2025-03-31",
+      "value": 94405.01
+    },
+    {
+      "date": "2025-04-01",
+      "value": 94405.01
+    },
+    {
+      "date": "2025-04-02",
+      "value": 94348.39
+    },
+    {
+      "date": "2025-04-03",
+      "value": 93772.25
+    },
+    {
+      "date": "2025-04-04",
+      "value": 93079.93
+    },
+    {
+      "date": "2025-04-05",
+      "value": 93079.93
+    },
+    {
+      "date": "2025-04-06",
+      "value": 93079.93
+    },
+    {
+      "date": "2025-04-07",
+      "value": 93024.11
+    },
+    {
+      "date": "2025-04-08",
+      "value": 92986.97
+    },
+    {
+      "date": "2025-04-09",
+      "value": 93840.42
+    },
+    {
+      "date": "2025-04-10",
+      "value": 95988.99
+    },
+    {
+      "date": "2025-04-11",
+      "value": 96845.24
+    },
+    {
+      "date": "2025-04-12",
+      "value": 96269.46
+    },
+    {
+      "date": "2025-04-13",
+      "value": 96232.14
+    },
+    {
+      "date": "2025-04-14",
+      "value": 96232.14
+    },
+    {
+      "date": "2025-04-15",
+      "value": 96232.14
+    },
+    {
+      "date": "2025-04-16",
+      "value": 96203.28
+    },
+    {
+      "date": "2025-04-17",
+      "value": 96070.95
+    },
+    {
+      "date": "2025-04-18",
+      "value": 96067.95
+    },
+    {
+      "date": "2025-04-19",
+      "value": 96067.95
+    },
+    {
+      "date": "2025-04-20",
+      "value": 96067.95
+    },
+    {
+      "date": "2025-04-21",
+      "value": 96039.14
+    },
+    {
+      "date": "2025-04-22",
+      "value": 95569.26
+    },
+    {
+      "date": "2025-04-23",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-24",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-25",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-26",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-27",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-28",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-29",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-04-30",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-05-01",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-05-02",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-05-03",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-05-04",
+      "value": 95483.32
+    },
+    {
+      "date": "2025-05-05",
+      "value": 95426.06
+    },
+    {
+      "date": "2025-05-06",
+      "value": 95947.45
+    },
+    {
+      "date": "2025-05-07",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-08",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-09",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-10",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-11",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-12",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-13",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-14",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-15",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-16",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-17",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-18",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-19",
+      "value": 95667.42
+    },
+    {
+      "date": "2025-05-20",
+      "value": 95610.04
+    },
+    {
+      "date": "2025-05-21",
+      "value": 95778.88
+    },
+    {
+      "date": "2025-05-22",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-23",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-24",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-25",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-26",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-27",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-28",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-29",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-30",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-05-31",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-06-01",
+      "value": 95602.63
+    },
+    {
+      "date": "2025-06-02",
+      "value": 95545.3
+    },
+    {
+      "date": "2025-06-03",
+      "value": 95312.92
+    },
+    {
+      "date": "2025-06-04",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-05",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-06",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-07",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-08",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-09",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-10",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-11",
+      "value": 95439.37
+    },
+    {
+      "date": "2025-06-12",
+      "value": 95382.13
+    },
+    {
+      "date": "2025-06-13",
+      "value": 95831.6
+    },
+    {
+      "date": "2025-06-14",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-15",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-16",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-17",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-18",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-19",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-20",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-21",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-22",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-23",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-24",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-25",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-26",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-27",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-28",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-29",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-06-30",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-01",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-02",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-03",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-04",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-05",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-06",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-07",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-08",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-09",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-10",
+      "value": 95988.1
+    },
+    {
+      "date": "2025-07-11",
+      "value": 95930.53
+    },
+    {
+      "date": "2025-07-12",
+      "value": 95955.96
+    },
+    {
+      "date": "2025-07-13",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-14",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-15",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-16",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-17",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-18",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-19",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-20",
+      "value": 95921.81
+    },
+    {
+      "date": "2025-07-21",
+      "value": 95864.29
+    },
+    {
+      "date": "2025-07-22",
+      "value": 96113.12
+    },
+    {
+      "date": "2025-07-23",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-24",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-25",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-26",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-27",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-28",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-29",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-30",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-07-31",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-01",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-02",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-03",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-04",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-05",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-06",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-07",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-08",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-09",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-10",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-11",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-12",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-13",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-14",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-15",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-16",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-17",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-18",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-19",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-20",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-21",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-22",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-23",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-24",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-25",
+      "value": 95793.22
+    },
+    {
+      "date": "2025-08-26",
+      "value": 95735.77
+    },
+    {
+      "date": "2025-08-27",
+      "value": 95819.23
+    },
+    {
+      "date": "2025-08-28",
+      "value": 95999
+    },
+    {
+      "date": "2025-08-29",
+      "value": 95999
+    },
+    {
+      "date": "2025-08-30",
+      "value": 95999
+    },
+    {
+      "date": "2025-08-31",
+      "value": 95999
+    },
+    {
+      "date": "2025-09-01",
+      "value": 95941.43
+    },
+    {
+      "date": "2025-09-02",
+      "value": 96310.67
+    },
+    {
+      "date": "2025-09-03",
+      "value": 96472.41
+    },
+    {
+      "date": "2025-09-04",
+      "value": 96472.41
+    },
+    {
+      "date": "2025-09-05",
+      "value": 96472.41
+    },
+    {
+      "date": "2025-09-06",
+      "value": 96472.41
+    },
+    {
+      "date": "2025-09-07",
+      "value": 96472.41
+    },
+    {
+      "date": "2025-09-08",
+      "value": 96443.48
+    },
+    {
+      "date": "2025-09-09",
+      "value": 96452.7
+    },
+    {
+      "date": "2025-09-10",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-11",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-12",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-13",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-14",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-15",
+      "value": 96420.37
+    },
+    {
+      "date": "2025-09-16",
+      "value": 96377
+    },
+    {
+      "date": "2025-09-17",
+      "value": 96182.91
+    },
+    {
+      "date": "2025-09-18",
+      "value": 95984.57
+    },
+    {
+      "date": "2025-09-19",
+      "value": 95984.57
+    },
+    {
+      "date": "2025-09-20",
+      "value": 95984.57
+    },
+    {
+      "date": "2025-09-21",
+      "value": 95984.57
+    },
+    {
+      "date": "2025-09-22",
+      "value": 95927.01
+    },
+    {
+      "date": "2025-09-23",
+      "value": 96054.24
+    },
+    {
+      "date": "2025-09-24",
+      "value": 95847.89
+    },
+    {
+      "date": "2025-09-25",
+      "value": 95847.89
+    },
+    {
+      "date": "2025-09-26",
+      "value": 95847.89
+    },
+    {
+      "date": "2025-09-27",
+      "value": 95847.89
+    },
+    {
+      "date": "2025-09-28",
+      "value": 95847.89
+    },
+    {
+      "date": "2025-09-29",
+      "value": 95790.41
+    },
+    {
+      "date": "2025-09-30",
+      "value": 96000.42
+    },
+    {
+      "date": "2025-10-01",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-02",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-03",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-04",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-05",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-06",
+      "value": 95899.73
+    },
+    {
+      "date": "2025-10-07",
+      "value": 95856.6
+    },
+    {
+      "date": "2025-10-08",
+      "value": 96025.4
+    },
+    {
+      "date": "2025-10-09",
+      "value": 95810.23
+    },
+    {
+      "date": "2025-10-10",
+      "value": 95810.23
+    },
+    {
+      "date": "2025-10-11",
+      "value": 95767.14
+    },
+    {
+      "date": "2025-10-12",
+      "value": 96006.71
+    },
+    {
+      "date": "2025-10-13",
+      "value": 96529.17
+    },
+    {
+      "date": "2025-10-14",
+      "value": 96529.17
+    },
+    {
+      "date": "2025-10-15",
+      "value": 96500.23
+    },
+    {
+      "date": "2025-10-16",
+      "value": 97177.09
+    },
+    {
+      "date": "2025-10-17",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-18",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-19",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-20",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-21",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-22",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-23",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-24",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-25",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-26",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-27",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-28",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-29",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-30",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-10-31",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-01",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-02",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-03",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-04",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-05",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-06",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-07",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-08",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-09",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-10",
+      "value": 96473.05
+    },
+    {
+      "date": "2025-11-11",
+      "value": 96415.2
+    },
+    {
+      "date": "2025-11-12",
+      "value": 96766.59
+    },
+    {
+      "date": "2025-11-13",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-14",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-15",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-16",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-17",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-18",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-19",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-20",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-21",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-22",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-23",
+      "value": 96692.65
+    },
+    {
+      "date": "2025-11-24",
+      "value": 96634.66
+    },
+    {
+      "date": "2025-11-25",
+      "value": 96529.4
+    },
+    {
+      "date": "2025-11-26",
+      "value": 96727.56
+    },
+    {
+      "date": "2025-11-27",
+      "value": 96727.56
+    },
+    {
+      "date": "2025-11-28",
+      "value": 96727.56
+    },
+    {
+      "date": "2025-11-29",
+      "value": 96727.56
+    },
+    {
+      "date": "2025-11-30",
+      "value": 96727.56
+    },
+    {
+      "date": "2025-12-01",
+      "value": 96669.55
+    },
+    {
+      "date": "2025-12-02",
+      "value": 96457.32
+    },
+    {
+      "date": "2025-12-03",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-04",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-05",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-06",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-07",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-08",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-09",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-10",
+      "value": 96413.97
+    },
+    {
+      "date": "2025-12-11",
+      "value": 96356.15
+    },
+    {
+      "date": "2025-12-12",
+      "value": 96514.2
+    },
+    {
+      "date": "2025-12-13",
+      "value": 96509.83
+    },
+    {
+      "date": "2025-12-14",
+      "value": 96509.83
+    },
+    {
+      "date": "2025-12-15",
+      "value": 96509.83
+    },
+    {
+      "date": "2025-12-16",
+      "value": 96451.95
+    },
+    {
+      "date": "2025-12-17",
+      "value": 96693.87
+    },
+    {
+      "date": "2025-12-18",
+      "value": 96568.31
+    },
+    {
+      "date": "2025-12-19",
+      "value": 96568.31
+    },
+    {
+      "date": "2025-12-20",
+      "value": 96568.31
+    },
+    {
+      "date": "2025-12-21",
+      "value": 96568.31
+    },
+    {
+      "date": "2025-12-22",
+      "value": 96510.4
+    },
+    {
+      "date": "2025-12-23",
+      "value": 96807.43
+    },
+    {
+      "date": "2025-12-24",
+      "value": 96528.92
+    },
+    {
+      "date": "2025-12-25",
+      "value": 96528.92
+    },
+    {
+      "date": "2025-12-26",
+      "value": 96485.51
+    },
+    {
+      "date": "2025-12-27",
+      "value": 96552.88
+    },
+    {
+      "date": "2025-12-28",
+      "value": 96405.07
+    },
+    {
+      "date": "2025-12-29",
+      "value": 96405.07
+    },
+    {
+      "date": "2025-12-30",
+      "value": 96405.07
+    },
+    {
+      "date": "2025-12-31",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-01",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-02",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-03",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-04",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-05",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-06",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-07",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-08",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-09",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-10",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-11",
+      "value": 96405.07
+    },
+    {
+      "date": "2026-01-12",
+      "value": 96347.26
+    },
+    {
+      "date": "2026-01-13",
+      "value": 96282.53
+    },
+    {
+      "date": "2026-01-14",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-15",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-16",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-17",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-18",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-19",
+      "value": 96371.35
+    },
+    {
+      "date": "2026-01-20",
+      "value": 96328
+    },
+    {
+      "date": "2026-01-21",
+      "value": 96298.03
+    },
+    {
+      "date": "2026-01-22",
+      "value": 97064.04
+    },
+    {
+      "date": "2026-01-23",
+      "value": 97064.04
+    },
+    {
+      "date": "2026-01-24",
+      "value": 97064.04
+    },
+    {
+      "date": "2026-01-25",
+      "value": 97034.94
+    },
+    {
+      "date": "2026-01-26",
+      "value": 96999.63
+    },
+    {
+      "date": "2026-01-27",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-01-28",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-01-29",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-01-30",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-01-31",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-01",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-02",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-03",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-04",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-05",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-06",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-07",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-08",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-09",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-10",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-11",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-12",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-13",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-14",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-15",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-16",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-17",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-18",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-19",
+      "value": 97356.97
+    },
+    {
+      "date": "2026-02-20",
+      "value": 97313.18
+    },
+    {
+      "date": "2026-02-21",
+      "value": 97423.54
+    },
+    {
+      "date": "2026-02-22",
+      "value": 97570.86
+    },
+    {
+      "date": "2026-02-23",
+      "value": 97570.86
+    },
+    {
+      "date": "2026-02-24",
+      "value": 97570.86
+    },
+    {
+      "date": "2026-02-25",
+      "value": 97570.86
+    },
+    {
+      "date": "2026-02-26",
+      "value": 97570.86
+    },
+    {
+      "date": "2026-02-27",
+      "value": 97526.97
+    },
+    {
+      "date": "2026-02-28",
+      "value": 97854.95
+    },
+    {
+      "date": "2026-03-01",
+      "value": 98086.27
+    },
+    {
+      "date": "2026-03-02",
+      "value": 98086.27
+    },
+    {
+      "date": "2026-03-03",
+      "value": 98086.27
+    },
+    {
+      "date": "2026-03-04",
+      "value": 98086.27
+    },
+    {
+      "date": "2026-03-05",
+      "value": 98086.27
+    },
+    {
+      "date": "2026-03-06",
+      "value": 98042.16
+    },
+    {
+      "date": "2026-03-07",
+      "value": 97999.19
+    },
+    {
+      "date": "2026-03-08",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-09",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-10",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-11",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-12",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-13",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-14",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-15",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-16",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-17",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-18",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-19",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-20",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-21",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-22",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-23",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-24",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-25",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-26",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-27",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-28",
+      "value": 97585.57
+    },
+    {
+      "date": "2026-03-29",
+      "value": 97585.57
+    }
+  ],
+  "profile": "yolo",
+  "symbols": [
+    "GOLD"
+  ],
+  "startDate": "2022-01-01"
+}

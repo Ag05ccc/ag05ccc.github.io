@@ -836,8 +836,40 @@ function App() {
   const chartCandles = allChartCandles.slice(zoomStart, zoomEnd);
   const chartZoomPct = allChartCandles.length > 0 ? Math.round((chartCandles.length / allChartCandles.length) * 100) : 100;
 
+  const chartRef = useRef(null);
+  const chartZoomRef = useRef({ allLen: 0, zoomStart: 0, zoomEnd: 0 });
+  chartZoomRef.current = { allLen: allChartCandles.length, zoomStart: zoomStart, zoomEnd: zoomEnd };
+
+  useEffect(function() {
+    var el = chartRef.current;
+    if (!el) return;
+    function handler(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var z = chartZoomRef.current;
+      var len = z.allLen;
+      if (len < 10) return;
+      var rect = el.getBoundingClientRect();
+      var mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      var s = z.zoomStart, en = z.zoomEnd;
+      var span = en - s;
+      var anchor = s + span * mouseX;
+      var factor = e.deltaY > 0 ? 1.25 : 0.75;
+      var ns = Math.round(span * factor);
+      ns = Math.max(10, Math.min(len, ns));
+      var nStart = Math.round(anchor - ns * mouseX);
+      var nEnd = nStart + ns;
+      if (nStart < 0) { nStart = 0; nEnd = Math.min(ns, len); }
+      if (nEnd > len) { nEnd = len; nStart = Math.max(0, len - ns); }
+      if (nEnd - nStart >= len) { setChartZoom(null); return; }
+      setChartZoom([nStart, nEnd]);
+    }
+    el.addEventListener('wheel', handler, { passive: false });
+    return function() { el.removeEventListener('wheel', handler); };
+  }, []);
+
   function onChartWheel(e) {
-    e.preventDefault();
+    // Fallback for React (won't preventDefault in passive mode, but keeps logic)
     var len = allChartCandles.length;
     if (len < 10) return;
     var rect = e.currentTarget.getBoundingClientRect();
@@ -1279,12 +1311,12 @@ function App() {
               )}
 
               {chartCandles.length > 2 ? (
-                chartType === "candle" ? (
-                  <div onWheel={onChartWheel} style={{ cursor: "crosshair", position: "relative" }}>
-                  {chartZoom && <div style={{ position: "absolute", top: 4, right: 8, zIndex: 10, display: "flex", gap: 4 }}>
-                    <span style={{ fontSize: 9, color: "#818cf8", fontFamily: "var(--m)", background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 3 }}>{chartZoomPct}%</span>
-                    <span onClick={() => setChartZoom(null)} style={{ fontSize: 9, color: "#ef4444", cursor: "pointer", fontFamily: "var(--m)", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 3 }}>Reset</span>
-                  </div>}
+                <div ref={chartRef} style={{ cursor: "crosshair", position: "relative" }}>
+                {chartZoom && <div style={{ position: "absolute", top: 4, right: 8, zIndex: 10, display: "flex", gap: 4 }}>
+                  <span style={{ fontSize: 9, color: "#818cf8", fontFamily: "var(--m)", background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 3 }}>{chartZoomPct}%</span>
+                  <span onClick={() => setChartZoom(null)} style={{ fontSize: 9, color: "#ef4444", cursor: "pointer", fontFamily: "var(--m)", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 3 }}>Reset</span>
+                </div>}
+                {chartType === "candle" ? (
                   <div ref={el => {
                     if (!el) return;
                     const W = el.offsetWidth - 16;
@@ -1356,13 +1388,7 @@ function App() {
                     s += `</svg>`;
                     el.innerHTML = s;
                   }} style={{ background: "#0f172a", borderRadius: 10, padding: "8px", border: "1px solid rgba(255,255,255,0.06)" }} />
-                  </div>
                 ) : (
-                  <div onWheel={onChartWheel} style={{ cursor: "crosshair", position: "relative" }}>
-                  {chartZoom && <div style={{ position: "absolute", top: 4, right: 8, zIndex: 10, display: "flex", gap: 4 }}>
-                    <span style={{ fontSize: 9, color: "#818cf8", fontFamily: "var(--m)", background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 3 }}>{chartZoomPct}%</span>
-                    <span onClick={() => setChartZoom(null)} style={{ fontSize: 9, color: "#ef4444", cursor: "pointer", fontFamily: "var(--m)", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 3 }}>Reset</span>
-                  </div>}
                   <ResponsiveContainer width="100%" height={340}>
                     <ComposedChart data={chartCandles} margin={{ top: 8, right: 16, bottom: 20, left: 0 }}>
                       <XAxis dataKey="t" tick={{ fontSize: 9, fill: "#4b5563" }} interval="preserveStartEnd" />
@@ -1372,8 +1398,8 @@ function App() {
                       <Line type="monotone" dataKey="c" stroke={ch >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} dot={false} isAnimationActive={false} name="c" />
                     </ComposedChart>
                   </ResponsiveContainer>
-                  </div>
-                )
+                )}
+                </div>
               ) : (
                 <div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Loading candle data...</div>
               )}

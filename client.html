@@ -287,7 +287,7 @@ function BacktestTab({ isMobile }) {
   }
 
   var profileColors = { conservative: "#3b82f6", moderate: "#22c55e", aggressive: "#f59e0b", yolo: "#ef4444", dma: "#8b5cf6" };
-  var profileNames = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive", yolo: "YOLO", dma: "DMA Trend" };
+  var profileNames = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive", yolo: "YOLO", dma: "KRAL Trend" };
 
   return (
     <div style={{ padding: isMobile ? "12px 8px" : "20px 24px" }}>
@@ -307,7 +307,7 @@ function BacktestTab({ isMobile }) {
               <option value="moderate">Moderate</option>
               <option value="aggressive">Aggressive</option>
               <option value="yolo">YOLO</option>
-              <option value="dma">DMA Trend (EMA Crossover)</option>
+              <option value="dma">KRAL Trend (EMA200 Band)</option>
             </select>
           </div>
           {/* Start date */}
@@ -1640,12 +1640,12 @@ function App() {
                 </div>
               </div>
 
-              {/* Module 2: DMA Trend Follower */}
+              {/* Module 2: KRAL Trend */}
               <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(139,92,246,0.3)", padding: isMobile ? 14 : 20, marginBottom: 16, position: "relative" }}>
                 <div style={{ position: "absolute", top: 10, right: 12, fontSize: 8, fontWeight: 700, color: "#8b5cf6", background: "rgba(139,92,246,0.15)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--h)", letterSpacing: "0.05em" }}>NEW</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 18 }}>&#x1F4C8;</span>
-                  <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#8b5cf6" }}>Module 2: DMA Trend Follower</span>
+                  <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#8b5cf6" }}>Module 2: KRAL Trend</span>
                 </div>
 
                 <div style={{ fontSize: 12, color: "#94a3b8", fontFamily: "var(--m)", lineHeight: 1.7 }}>

@@ -363,7 +363,7 @@ portfolios = PROFILES.map(p => ({
 
 // ─── DMA TREND FOLLOWER PORTFOLIO (independent module) ───
 portfolios.push({
-  id: 'dma', name: 'DMA Trend', color: '#8b5cf6', icon: '\u{1F4C8}', desc: 'Simple EMA21/EMA50 crossover - buys uptrends, sells downtrends',
+  id: 'dma', name: 'KRAL Trend', color: '#8b5cf6', icon: '\u{1F451}', desc: 'BTC only - EMA200 band strategy: buy at -1%/-2%, sell at +1%/+2%',
   cash: DEFAULT_CASH, startCash: DEFAULT_CASH, holdings: {}, orders: [],
   actives: [], peaks: {},
   history: [{ t: 0, value: DEFAULT_CASH }],

@@ -717,6 +717,7 @@ function App() {
   const isMobile = window.innerWidth <= 768;
   const [editProfile, setEditProfile] = useState(null);
   const [compareStart, setCompareStart] = useState("2026-01-01");
+  const [chartZoom, setChartZoom] = useState(null);
   const [simLoading, setSimLoading] = useState(false);
   const [simResults, setSimResults] = useState(null);
   const [simError, setSimError] = useState(null);
@@ -780,9 +781,10 @@ function App() {
     .catch(function() { setHistLoading(false); });
   }
 
-  // Auto-load historical data when selected symbol changes
+  // Auto-load historical data + reset zoom when selected symbol changes
   useEffect(function() {
     if (selected) loadHistorical(selected, "2020-01-01");
+    setChartZoom(null);
   }, [selected]);
 
   if (!state || !state.prices) {
@@ -827,10 +829,7 @@ function App() {
     rawT: c.t || 0,
     o: c.o, h: c.h, l: c.l, c: c.c, v: c.v,
   }));
-  // Zoom state for chart (shared between candle and line modes)
-  const [chartZoom, setChartZoom] = useState(null); // null = show last 120, or [start, end]
-  // Reset zoom when symbol changes
-  useEffect(function() { setChartZoom(null); }, [selected]);
+  // Reset zoom when symbol changes (chartZoom state declared at top with other hooks)
   const defaultShow = Math.min(120, allChartCandles.length);
   const zoomStart = chartZoom ? chartZoom[0] : Math.max(0, allChartCandles.length - defaultShow);
   const zoomEnd = chartZoom ? chartZoom[1] : allChartCandles.length;

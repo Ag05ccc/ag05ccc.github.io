@@ -787,6 +787,10 @@ function App() {
     setChartZoom(null);
   }, [selected]);
 
+  // Chart zoom refs — must be before early return to maintain hooks order
+  const chartRef = useRef(null);
+  const chartZoomRef = useRef({ allLen: 0, zoomStart: 0, zoomEnd: 0 });
+
   if (!state || !state.prices) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#f59e0b", fontFamily: "'Space Grotesk',sans-serif", fontSize: 18 }}>
       {connected ? "Loading data..." : "Connecting to server..."}
@@ -836,8 +840,6 @@ function App() {
   const chartCandles = allChartCandles.slice(zoomStart, zoomEnd);
   const chartZoomPct = allChartCandles.length > 0 ? Math.round((chartCandles.length / allChartCandles.length) * 100) : 100;
 
-  const chartRef = useRef(null);
-  const chartZoomRef = useRef({ allLen: 0, zoomStart: 0, zoomEnd: 0 });
   chartZoomRef.current = { allLen: allChartCandles.length, zoomStart: zoomStart, zoomEnd: zoomEnd };
 
   useEffect(function() {

@@ -862,11 +862,7 @@ function App() {
     setSimLoading(false);
   }
 
-  // Auto-run simulation on first load (via setTimeout to avoid hook issues)
-  useEffect(function() {
-    var timer = setTimeout(function() { runSimulation(); }, 500);
-    return function() { clearTimeout(timer); };
-  }, []);
+  // Note: click Simulate button to run comparison
 
   // Build simulation chart data by merging equity curves by date
   const simChartData = (() => {

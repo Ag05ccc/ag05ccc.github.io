@@ -835,7 +835,7 @@ function App() {
     { id: "dma", name: "KRAL Trend", color: "#8b5cf6" },
   ];
   const cryptoSymbols = Object.entries(COINS_META).filter(([, c]) => c.type === "crypto").map(([s]) => s);
-  const allSymbols = Object.keys(COINS_META);
+  const allSymbolsMeta = Object.keys(COINS_META);
 
   function runSimulation() {
     if (!compareStart) return;
@@ -846,7 +846,7 @@ function App() {
       fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: p.id, symbols: allSymbols, startDate: compareStart }),
+        body: JSON.stringify({ profile: p.id, symbols: allSymbolsMeta, startDate: compareStart }),
       }).then(r => r.json())
     )).then(results => {
       setSimLoading(false);

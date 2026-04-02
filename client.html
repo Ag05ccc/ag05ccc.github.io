@@ -862,13 +862,10 @@ function App() {
     setSimLoading(false);
   }
 
-  // Auto-run simulation on first load (once only)
-  const simRanOnce = useRef(false);
-  useEffect(() => {
-    if (!simRanOnce.current) {
-      simRanOnce.current = true;
-      runSimulation();
-    }
+  // Auto-run simulation on first load (via setTimeout to avoid hook issues)
+  useEffect(function() {
+    var timer = setTimeout(function() { runSimulation(); }, 500);
+    return function() { clearTimeout(timer); };
   }, []);
 
   // Build simulation chart data by merging equity curves by date

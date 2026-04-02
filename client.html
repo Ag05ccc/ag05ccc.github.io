@@ -832,8 +832,19 @@ function App() {
     { id: "moderate", name: "Moderate", color: "#22c55e" },
     { id: "aggressive", name: "Aggressive", color: "#f59e0b" },
     { id: "yolo", name: "YOLO", color: "#ef4444" },
+    { id: "dma", name: "KRAL Trend", color: "#8b5cf6" },
   ];
   const cryptoSymbols = Object.entries(COINS_META).filter(([, c]) => c.type === "crypto").map(([s]) => s);
+  const allSymbols = Object.keys(COINS_META);
+
+  // Auto-run simulation on first load
+  const simRanOnce = useRef(false);
+  useEffect(() => {
+    if (!simRanOnce.current && compareStart && !simResults && !simLoading) {
+      simRanOnce.current = true;
+      runSimulation();
+    }
+  }, [compareStart]);
 
   function runSimulation() {
     if (!compareStart) return;
@@ -844,7 +855,7 @@ function App() {
       fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: p.id, symbols: cryptoSymbols, startDate: compareStart }),
+        body: JSON.stringify({ profile: p.id, symbols: allSymbols, startDate: compareStart }),
       }).then(r => r.json())
     )).then(results => {
       setSimLoading(false);

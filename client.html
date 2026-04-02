@@ -837,15 +837,6 @@ function App() {
   const cryptoSymbols = Object.entries(COINS_META).filter(([, c]) => c.type === "crypto").map(([s]) => s);
   const allSymbols = Object.keys(COINS_META);
 
-  // Auto-run simulation on first load
-  const simRanOnce = useRef(false);
-  useEffect(() => {
-    if (!simRanOnce.current && compareStart && !simResults && !simLoading) {
-      simRanOnce.current = true;
-      runSimulation();
-    }
-  }, [compareStart]);
-
   function runSimulation() {
     if (!compareStart) return;
     setSimLoading(true);
@@ -870,6 +861,15 @@ function App() {
     setSimError(null);
     setSimLoading(false);
   }
+
+  // Auto-run simulation on first load
+  const simRanOnce = useRef(false);
+  useEffect(() => {
+    if (!simRanOnce.current && compareStart && !simResults && !simLoading) {
+      simRanOnce.current = true;
+      runSimulation();
+    }
+  }, [compareStart]);
 
   // Build simulation chart data by merging equity curves by date
   const simChartData = (() => {

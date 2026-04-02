@@ -791,6 +791,35 @@ function App() {
   const chartRef = useRef(null);
   const chartZoomRef = useRef({ allLen: 0, zoomStart: 0, zoomEnd: 0 });
 
+  // Non-passive wheel listener for chart zoom (must be before early return)
+  useEffect(function() {
+    var el = chartRef.current;
+    if (!el) return;
+    function handler(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var z = chartZoomRef.current;
+      var len = z.allLen;
+      if (len < 10) return;
+      var rect = el.getBoundingClientRect();
+      var mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      var s = z.zoomStart, en = z.zoomEnd;
+      var span = en - s;
+      var anchor = s + span * mouseX;
+      var factor = e.deltaY > 0 ? 1.25 : 0.75;
+      var ns = Math.round(span * factor);
+      ns = Math.max(10, Math.min(len, ns));
+      var nStart = Math.round(anchor - ns * mouseX);
+      var nEnd = nStart + ns;
+      if (nStart < 0) { nStart = 0; nEnd = Math.min(ns, len); }
+      if (nEnd > len) { nEnd = len; nStart = Math.max(0, len - ns); }
+      if (nEnd - nStart >= len) { setChartZoom(null); return; }
+      setChartZoom([nStart, nEnd]);
+    }
+    el.addEventListener('wheel', handler, { passive: false });
+    return function() { el.removeEventListener('wheel', handler); };
+  }, []);
+
   if (!state || !state.prices) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#f59e0b", fontFamily: "'Space Grotesk',sans-serif", fontSize: 18 }}>
       {connected ? "Loading data..." : "Connecting to server..."}
@@ -841,34 +870,6 @@ function App() {
   const chartZoomPct = allChartCandles.length > 0 ? Math.round((chartCandles.length / allChartCandles.length) * 100) : 100;
 
   chartZoomRef.current = { allLen: allChartCandles.length, zoomStart: zoomStart, zoomEnd: zoomEnd };
-
-  useEffect(function() {
-    var el = chartRef.current;
-    if (!el) return;
-    function handler(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var z = chartZoomRef.current;
-      var len = z.allLen;
-      if (len < 10) return;
-      var rect = el.getBoundingClientRect();
-      var mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      var s = z.zoomStart, en = z.zoomEnd;
-      var span = en - s;
-      var anchor = s + span * mouseX;
-      var factor = e.deltaY > 0 ? 1.25 : 0.75;
-      var ns = Math.round(span * factor);
-      ns = Math.max(10, Math.min(len, ns));
-      var nStart = Math.round(anchor - ns * mouseX);
-      var nEnd = nStart + ns;
-      if (nStart < 0) { nStart = 0; nEnd = Math.min(ns, len); }
-      if (nEnd > len) { nEnd = len; nStart = Math.max(0, len - ns); }
-      if (nEnd - nStart >= len) { setChartZoom(null); return; }
-      setChartZoom([nStart, nEnd]);
-    }
-    el.addEventListener('wheel', handler, { passive: false });
-    return function() { el.removeEventListener('wheel', handler); };
-  }, []);
 
   function onChartWheel(e) {
     // Fallback for React (won't preventDefault in passive mode, but keeps logic)

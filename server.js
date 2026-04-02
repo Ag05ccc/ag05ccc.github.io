@@ -1238,51 +1238,108 @@ function runStrategies() {
   });
 
   // ─── DMA TREND FOLLOWER (independent module) ───
+  // Strategy: BTC only, EMA200 on 5-minute candles
+  // Buy $50K when price is 1% below EMA200, another $50K at 2% below (100% invested)
+  // Sell $50K when price is 1% above EMA200, another $50K at 2% above (100% cash)
   var dmaPf = portfolios.find(function(p) { return p.id === 'dma'; });
   if (dmaPf) {
-    Object.keys(COINS).forEach(function(sym) {
-      var sd = marketData[sym];
-      if (!sd || sd.candles.length < 51) return;
+    var sym = 'BTC';
+    var sd = marketData[sym];
+    if (sd && sd.candles.length >= 200) {
       var closes = sd.candles.map(function(c) { return c.c; });
-      var ema21 = ema(closes, 21);
-      var ema50 = ema(closes, 50);
-      var prevCloses = closes.slice(0, -1);
-      var prevEma21 = ema(prevCloses, 21);
-      var prevEma50 = ema(prevCloses, 50);
-      if (!ema21 || !ema50 || !prevEma21 || !prevEma50) return;
+      var ema200 = ema(closes, 200);
+      if (ema200 && ema200 > 0) {
+        var price = sd.cur;
+        var pos = dmaPf.holdings[sym];
+        var posQty = (pos && pos.qty) || 0;
+        var halfCapital = dmaPf.startCash * 0.50; // $50K tranches
+        var COMM = 0.001;
 
-      var price = sd.cur;
-      var pos = dmaPf.holdings[sym];
+        // Calculate distance from EMA200 as percentage
+        var distPct = ((price - ema200) / ema200) * 100; // negative = below, positive = above
 
-      // Golden cross: BUY
-      if (prevEma21 <= prevEma50 && ema21 > ema50 && (!pos || pos.qty <= 0)) {
-        // Check max positions (max 8 simultaneous)
-        var openCount = Object.keys(dmaPf.holdings).filter(function(k) { return dmaPf.holdings[k] && dmaPf.holdings[k].qty > 0; }).length;
-        if (openCount >= 8) return;
-        var cashAvail = dmaPf.cash * 0.95;
-        var tradeVal = Math.min(cashAvail * 0.15, cashAvail); // 15% per position
-        if (tradeVal < 100) return;
-        var qty = tradeVal / price;
-        var comm = tradeVal * 0.001;
-        dmaPf.cash -= tradeVal + comm;
-        dmaPf.holdings[sym] = { qty: qty, avgCost: price, lots: [{ qty: qty, cost: price, date: new Date().toISOString() }] };
-        dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
-        dmaPf.tradeCount++;
-        dmaPf.orders = [{ sym: sym, side: 'buy', qty: qty, price: price, total: tradeVal, time: new Date().toISOString(), strat: 'DMA', why: 'EMA21 > EMA50 (Golden Cross)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+        // Track which levels have been triggered (prevent re-buying/selling same level)
+        if (!dmaPf._dmaState) dmaPf._dmaState = { bought1: false, bought2: false, sold1: false, sold2: false };
+        var state = dmaPf._dmaState;
+
+        // ─── BUY LOGIC ───
+        // Level 1: Price 1% below EMA200 → buy $50K (first tranche)
+        if (distPct <= -1.0 && !state.bought1 && dmaPf.cash >= halfCapital) {
+          var buyVal = Math.min(halfCapital, dmaPf.cash * 0.98);
+          var qty = buyVal / price;
+          var comm = buyVal * COMM;
+          dmaPf.cash -= buyVal + comm;
+          if (!dmaPf.holdings[sym]) dmaPf.holdings[sym] = { qty: 0, avgCost: 0, lots: [] };
+          var h = dmaPf.holdings[sym];
+          h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+          h.qty += qty;
+          if (!h.lots) h.lots = [];
+          h.lots.push({ qty: qty, cost: price, date: new Date().toISOString() });
+          dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+          dmaPf.tradeCount++;
+          dmaPf.orders = [{ sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (1st tranche $50K)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          state.bought1 = true;
+          state.sold1 = false; // Reset sell flags when buying
+          state.sold2 = false;
+          console.log('[' + new Date().toLocaleTimeString() + '] DMA BUY1 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% qty=' + qty.toFixed(4));
+        }
+        // Level 2: Price 2% below EMA200 → buy another $50K (fully invested)
+        if (distPct <= -2.0 && state.bought1 && !state.bought2 && dmaPf.cash >= halfCapital * 0.5) {
+          var buyVal = Math.min(halfCapital, dmaPf.cash * 0.98);
+          var qty = buyVal / price;
+          var comm = buyVal * COMM;
+          dmaPf.cash -= buyVal + comm;
+          if (!dmaPf.holdings[sym]) dmaPf.holdings[sym] = { qty: 0, avgCost: 0, lots: [] };
+          var h = dmaPf.holdings[sym];
+          h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+          h.qty += qty;
+          if (!h.lots) h.lots = [];
+          h.lots.push({ qty: qty, cost: price, date: new Date().toISOString() });
+          dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+          dmaPf.tradeCount++;
+          dmaPf.orders = [{ sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (2nd tranche $50K - FULL)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          state.bought2 = true;
+          console.log('[' + new Date().toLocaleTimeString() + '] DMA BUY2 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% qty=' + qty.toFixed(4) + ' FULLY INVESTED');
+        }
+
+        // ─── SELL LOGIC ───
+        // Level 1: Price 1% above EMA200 → sell $50K (first tranche)
+        if (distPct >= 1.0 && !state.sold1 && posQty > 0) {
+          var sellQty = Math.min(posQty * 0.5, halfCapital / price); // Sell half
+          if (sellQty > posQty) sellQty = posQty;
+          var sellVal = sellQty * price;
+          var comm = sellVal * COMM;
+          dmaPf.cash += sellVal - comm;
+          var pnl = (price - pos.avgCost) * sellQty;
+          if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
+          dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+          dmaPf.tradeCount++;
+          dmaPf.orders = [{ sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (1st sell $50K)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          pos.qty -= sellQty;
+          if (pos.qty <= 0.000001) delete dmaPf.holdings[sym];
+          state.sold1 = true;
+          state.bought1 = false; // Reset buy flags when selling
+          state.bought2 = false;
+          console.log('[' + new Date().toLocaleTimeString() + '] DMA SELL1 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% pnl=$' + pnl.toFixed(0));
+        }
+        // Level 2: Price 2% above EMA200 → sell remaining (100% cash)
+        if (distPct >= 2.0 && state.sold1 && !state.sold2 && dmaPf.holdings[sym] && dmaPf.holdings[sym].qty > 0) {
+          var remainPos = dmaPf.holdings[sym];
+          var sellQty = remainPos.qty;
+          var sellVal = sellQty * price;
+          var comm = sellVal * COMM;
+          dmaPf.cash += sellVal - comm;
+          var pnl = (price - remainPos.avgCost) * sellQty;
+          if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
+          dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
+          dmaPf.tradeCount++;
+          dmaPf.orders = [{ sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (2nd sell - 100% CASH)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          delete dmaPf.holdings[sym];
+          state.sold2 = true;
+          console.log('[' + new Date().toLocaleTimeString() + '] DMA SELL2 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% pnl=$' + pnl.toFixed(0) + ' 100% CASH');
+        }
       }
-      // Death cross: SELL
-      else if (prevEma21 >= prevEma50 && ema21 < ema50 && pos && pos.qty > 0) {
-        var sellVal = pos.qty * price;
-        var comm = sellVal * 0.001;
-        dmaPf.cash += sellVal - comm;
-        var pnl = (price - pos.avgCost) * pos.qty;
-        if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
-        dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
-        dmaPf.tradeCount++;
-        dmaPf.orders = [{ sym: sym, side: 'sell', qty: pos.qty, price: price, total: sellVal, pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'DMA', why: 'EMA21 < EMA50 (Death Cross)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
-        delete dmaPf.holdings[sym];
-      }
-    });
+    }
 
     // Record DMA history
     var dmaHVal = Object.entries(dmaPf.holdings).reduce(function(s, entry) {
@@ -1588,6 +1645,7 @@ const server = http.createServer((req, res) => {
         var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
         var cbCooldownDays = 10;
         var cbTriggeredDay = -999;
+        var dmaState = null; // For DMA backtest: { bought1, bought2, sold1, sold2 }
         var cbTriggerCount = 0;
         var cbMaxTriggers = 3; // After 3 circuit breaker hits, stop permanently
 
@@ -1658,64 +1716,87 @@ const server = http.createServer((req, res) => {
 
           // ─── DMA BACKTEST: simple EMA21/EMA50 crossover ───
           if (isDmaBacktest) {
-            symbols.forEach(function(sym) {
-              var sd = symData[sym];
-              if (!sd || sd.candles.length < 51) return;
-              var closes = sd.candles.map(function(c) { return c.c; });
-              var ema21val = ema(closes, 21);
-              var ema50val = ema(closes, 50);
-              // Previous bar EMAs
-              var prevCloses = closes.slice(0, -1);
-              if (prevCloses.length < 50) return;
-              var prevEma21 = ema(prevCloses, 21);
-              var prevEma50 = ema(prevCloses, 50);
-              if (!ema21val || !ema50val || !prevEma21 || !prevEma50) return;
+            // DMA Strategy: BTC only, EMA200, two-tranche buy/sell at ±1% and ±2%
+            var dmaSym = 'BTC';
+            var dmaSD = symData[dmaSym];
+            if (dmaSD && dmaSD.candles.length >= 200) {
+              var dmaCloses = dmaSD.candles.map(function(c) { return c.c; });
+              var ema200val = ema(dmaCloses, 200);
+              if (ema200val && ema200val > 0) {
+                var price = dmaSD.cur;
+                if (price > 0) {
+                  var dmaPos = holdings[dmaSym];
+                  var dmaPosQty = (dmaPos && dmaPos.qty) || 0;
+                  var dmaHalf = startCash * 0.50;
+                  var distPct = ((price - ema200val) / ema200val) * 100;
+                  var COMM = 0.001;
 
-              var price = sd.cur;
-              if (price <= 0) return;
-              var pos = holdings[sym];
+                  if (!dmaState) dmaState = { bought1: false, bought2: false, sold1: false, sold2: false };
 
-              // Golden cross: BUY
-              if (prevEma21 <= prevEma50 && ema21val > ema50val && (!pos || pos.qty <= 0)) {
-                var openCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
-                if (openCount >= 8) return;
-                var minCashReserve = startCash * 0.02;
-                var cashAvail = Math.max(0, cash - minCashReserve) * 0.95;
-                var tradeVal = Math.min(cashAvail * 0.15, cashAvail);
-                if (tradeVal < 100) return;
-                var qty = tradeVal / price;
-                var comm = tradeVal * 0.001;
-                cash -= tradeVal + comm;
-                totalCommission += comm;
-                holdings[sym] = { qty: qty, avgCost: price };
-                trades.push({
-                  date: date, side: 'buy', symbol: sym, price: +price.toFixed(2),
-                  signalPrice: +price.toFixed(2), slippage: 0,
-                  qty: +qty.toFixed(6), total: +tradeVal.toFixed(2),
-                  pnl: 0, pnlPct: 0,
-                  reason: 'EMA21 > EMA50 (Golden Cross)', regime: 'dma',
-                  commission: +comm.toFixed(2),
-                });
+                  // BUY Level 1: price 1% below EMA200
+                  if (distPct <= -1.0 && !dmaState.bought1 && cash >= dmaHalf * 0.5) {
+                    var buyVal = Math.min(dmaHalf, cash * 0.98);
+                    var qty = buyVal / price;
+                    var comm = buyVal * COMM;
+                    cash -= buyVal + comm;
+                    totalCommission += comm;
+                    if (!holdings[dmaSym]) holdings[dmaSym] = { qty: 0, avgCost: 0 };
+                    var h = holdings[dmaSym];
+                    h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+                    h.qty += qty;
+                    trades.push({ date: date, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (1st tranche $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+                    dmaState.bought1 = true;
+                    dmaState.sold1 = false;
+                    dmaState.sold2 = false;
+                  }
+                  // BUY Level 2: price 2% below EMA200
+                  if (distPct <= -2.0 && dmaState.bought1 && !dmaState.bought2 && cash >= dmaHalf * 0.3) {
+                    var buyVal = Math.min(dmaHalf, cash * 0.98);
+                    var qty = buyVal / price;
+                    var comm = buyVal * COMM;
+                    cash -= buyVal + comm;
+                    totalCommission += comm;
+                    if (!holdings[dmaSym]) holdings[dmaSym] = { qty: 0, avgCost: 0 };
+                    var h = holdings[dmaSym];
+                    h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+                    h.qty += qty;
+                    trades.push({ date: date, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (2nd tranche FULL)', regime: 'dma', commission: +comm.toFixed(2) });
+                    dmaState.bought2 = true;
+                  }
+                  // SELL Level 1: price 1% above EMA200
+                  if (distPct >= 1.0 && !dmaState.sold1 && dmaPosQty > 0) {
+                    var sellQty = Math.min(dmaPosQty * 0.5, dmaHalf / price);
+                    if (sellQty > dmaPosQty) sellQty = dmaPosQty;
+                    var sellVal = sellQty * price;
+                    var comm = sellVal * COMM;
+                    cash += sellVal - comm;
+                    totalCommission += comm;
+                    var pnl = (price - dmaPos.avgCost) * sellQty;
+                    if (pnl > 0) wins++; else losses++;
+                    trades.push({ date: date, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (dmaPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (1st sell $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+                    dmaPos.qty -= sellQty;
+                    if (dmaPos.qty <= 0.000001) delete holdings[dmaSym];
+                    dmaState.sold1 = true;
+                    dmaState.bought1 = false;
+                    dmaState.bought2 = false;
+                  }
+                  // SELL Level 2: price 2% above EMA200
+                  if (distPct >= 2.0 && dmaState.sold1 && !dmaState.sold2 && holdings[dmaSym] && holdings[dmaSym].qty > 0) {
+                    var remPos = holdings[dmaSym];
+                    var sellQty = remPos.qty;
+                    var sellVal = sellQty * price;
+                    var comm = sellVal * COMM;
+                    cash += sellVal - comm;
+                    totalCommission += comm;
+                    var pnl = (price - remPos.avgCost) * sellQty;
+                    if (pnl > 0) wins++; else losses++;
+                    trades.push({ date: date, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (remPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (2nd sell 100% CASH)', regime: 'dma', commission: +comm.toFixed(2) });
+                    delete holdings[dmaSym];
+                    dmaState.sold2 = true;
+                  }
+                }
               }
-              // Death cross: SELL
-              else if (prevEma21 >= prevEma50 && ema21val < ema50val && pos && pos.qty > 0) {
-                var sellVal = pos.qty * price;
-                var comm = sellVal * 0.001;
-                cash += sellVal - comm;
-                totalCommission += comm;
-                var pnl = (price - pos.avgCost) * pos.qty;
-                if (pnl > 0) wins++; else losses++;
-                trades.push({
-                  date: date, side: 'sell', symbol: sym, price: +price.toFixed(2),
-                  signalPrice: +price.toFixed(2), slippage: 0,
-                  qty: +pos.qty.toFixed(6), total: +sellVal.toFixed(2),
-                  pnl: +pnl.toFixed(2), pnlPct: +((pnl / (pos.avgCost * pos.qty)) * 100).toFixed(2),
-                  reason: 'EMA21 < EMA50 (Death Cross)', regime: 'dma',
-                  commission: +comm.toFixed(2),
-                });
-                delete holdings[sym];
-              }
-            });
+            }
           } else {
           // Now run signal evaluation for each symbol (scoring system)
           symbols.forEach(function(sym) {

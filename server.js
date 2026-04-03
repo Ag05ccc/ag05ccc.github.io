@@ -1591,12 +1591,14 @@ const server = http.createServer((req, res) => {
           // Timeframe grouping: derive 5m/15m/1h/4h from 1m candles
           var tfMinutes = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240 }[timeframe] || 1;
 
-          // Set headers for streaming ndjson
-          res.writeHead(200, {
-            'Content-Type': 'application/x-ndjson',
-            'Access-Control-Allow-Origin': '*',
-            'Transfer-Encoding': 'chunked'
-          });
+          // Send progress via WebSocket to all connected clients
+          function sendProgress(pct) {
+            wss.clients.forEach(function(client) {
+              if (client.readyState === 1) {
+                try { client.send(JSON.stringify({ type: 'backtestProgress', pct: pct })); } catch(e) {}
+              }
+            });
+          }
 
           // EMA200 incremental calculation
           var emaValue = 0;
@@ -1632,7 +1634,7 @@ const server = http.createServer((req, res) => {
             var pct = Math.round(i / lines.length * 100);
             if (pct !== lastProgressPct && pct % 2 === 0) {
               lastProgressPct = pct;
-              res.write(JSON.stringify({ progress: i, total: lines.length, pct: pct }) + '\n');
+              sendProgress(pct);
             }
 
             // If grouping candles for higher timeframes
@@ -1817,8 +1819,9 @@ const server = http.createServer((req, res) => {
             timeframe: timeframe,
           };
 
-          res.write(JSON.stringify({ done: true, result: result }) + '\n');
-          res.end();
+          sendProgress(100);
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(result));
           return; // Skip normal backtest flow
         }
 
@@ -2023,13 +2026,12 @@ const server = http.createServer((req, res) => {
         // Equity curve sampling: for minute data, only record every ~1 day worth of bars
         var eqSampleInterval = isMinuteTimeframe ? Math.ceil(1440 / (tfMinutesGeneral || 1)) : 1;
 
-        // For streaming progress on minute-based backtests
-        var isStreaming = isMinuteTimeframe;
-        if (isStreaming) {
-          res.writeHead(200, {
-            'Content-Type': 'application/x-ndjson',
-            'Access-Control-Allow-Origin': '*',
-            'Transfer-Encoding': 'chunked'
+        // Send progress via WebSocket for minute-based backtests
+        function sendGenProgress(pct) {
+          wss.clients.forEach(function(client) {
+            if (client.readyState === 1) {
+              try { client.send(JSON.stringify({ type: 'backtestProgress', pct: pct })); } catch(e) {}
+            }
           });
         }
         var lastGenProgressPct = -1;
@@ -2038,12 +2040,12 @@ const server = http.createServer((req, res) => {
         for (var dayIdx = 0; dayIdx < sortedDates.length; dayIdx++) {
           var dateKey = sortedDates[dayIdx];
 
-          // Send progress for streaming backtests
-          if (isStreaming) {
+          // Send progress for minute-based backtests
+          if (isMinuteTimeframe) {
             var genPct = Math.round(dayIdx / sortedDates.length * 100);
             if (genPct !== lastGenProgressPct && genPct % 2 === 0) {
               lastGenProgressPct = genPct;
-              res.write(JSON.stringify({ progress: dayIdx, total: sortedDates.length, pct: genPct }) + '\n');
+              sendGenProgress(genPct);
             }
           }
 
@@ -2582,13 +2584,9 @@ const server = http.createServer((req, res) => {
           timeframe: timeframe,
           skippedSymbols: skippedSymbols,
         };
-        if (isStreaming) {
-          res.write(JSON.stringify({ done: true, result: result }) + '\n');
-          res.end();
-        } else {
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-          res.end(JSON.stringify(result));
-        }
+        if (isMinuteTimeframe) sendGenProgress(100);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(result));
       } catch(e) {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });

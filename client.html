@@ -229,6 +229,8 @@ function BacktestTab({ isMobile }) {
   const [btTradeFilter, setBtTradeFilter] = useState("all");
   const [btChartSym, setBtChartSym] = useState("");
   const [btProgress, setBtProgress] = useState(0);
+  // Expose setter globally so WebSocket handler in App can update progress
+  useEffect(function() { window._setBtProgress = setBtProgress; return function() { window._setBtProgress = null; }; }, []);
 
   // Load available assets on mount
   useEffect(function() {
@@ -258,46 +260,7 @@ function BacktestTab({ isMobile }) {
     setBtError(null);
     setBtResult(null);
     setBtProgress(0);
-    var isStreamingTf = btTimeframe !== '1d';
-    if (isStreamingTf) {
-      // Streaming backtest with progress for all minute-based timeframes
-      fetch('/api/backtest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: btProfile, symbols: btSymbols, startDate: btStartDate, timeframe: btTimeframe }),
-      }).then(function(response) {
-        if (!response.ok) {
-          return response.text().then(function(t) {
-            try { var err = JSON.parse(t); throw new Error(err.error || 'Backtest failed'); }
-            catch(e2) { if (e2.message) throw e2; throw new Error('Backtest failed (' + response.status + ')'); }
-          });
-        }
-        var reader = response.body.getReader();
-        var decoder = new TextDecoder();
-        var buffer = '';
-        function read() {
-          reader.read().then(function(result) {
-            if (result.done) { setBtLoading(false); return; }
-            buffer += decoder.decode(result.value, { stream: true });
-            var lines = buffer.split('\n');
-            buffer = lines.pop(); // keep incomplete line in buffer
-            lines.forEach(function(line) {
-              if (!line.trim()) return;
-              try {
-                var msg = JSON.parse(line);
-                if (msg.pct !== undefined) setBtProgress(msg.pct);
-                if (msg.done && msg.result) { setBtResult(msg.result); setBtLoading(false); }
-                if (msg.error) { setBtError(msg.error); setBtLoading(false); }
-              } catch(e) {}
-            });
-            read();
-          }).catch(function(e) { setBtLoading(false); setBtError(e.message || 'Stream read failed'); });
-        }
-        read();
-      }).catch(function(e) { setBtLoading(false); setBtError(e.message || 'Backtest failed'); });
-      return;
-    }
-    // Daily (1d) backtest - standard JSON response
+    // All timeframes use standard JSON response. Progress sent via WebSocket.
     fetch('/api/backtest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -816,6 +779,9 @@ function App() {
           const msg = JSON.parse(e.data);
           if (msg.type === 'init' || msg.type === 'update') {
             setState(msg.data);
+          } else if (msg.type === 'backtestProgress') {
+            window._btProgress = msg.pct || 0;
+            if (window._setBtProgress) window._setBtProgress(msg.pct || 0);
           }
         } catch(err) {}
       };

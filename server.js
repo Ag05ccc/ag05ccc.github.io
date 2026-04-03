@@ -1303,9 +1303,9 @@ function runStrategies() {
         }
 
         // ─── SELL LOGIC ───
-        // Level 1: Price 1% above EMA200 → sell $50K (first tranche)
+        // Level 1: Price 1% above EMA200 → sell $50K worth (first tranche)
         if (distPct >= 1.0 && !state.sold1 && posQty > 0) {
-          var sellQty = Math.min(posQty * 0.5, halfCapital / price); // Sell half
+          var sellQty = Math.min(halfCapital / price, posQty); // Sell $50K worth
           if (sellQty > posQty) sellQty = posQty;
           var sellVal = sellQty * price;
           var comm = sellVal * COMM;
@@ -1763,10 +1763,9 @@ const server = http.createServer((req, res) => {
                     trades.push({ date: date, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (2nd tranche FULL)', regime: 'dma', commission: +comm.toFixed(2) });
                     dmaState.bought2 = true;
                   }
-                  // SELL Level 1: price 1% above EMA200
+                  // SELL Level 1: price 1% above EMA200 → sell $50K worth
                   if (distPct >= 1.0 && !dmaState.sold1 && dmaPosQty > 0) {
-                    var sellQty = Math.min(dmaPosQty * 0.5, dmaHalf / price);
-                    if (sellQty > dmaPosQty) sellQty = dmaPosQty;
+                    var sellQty = Math.min(dmaHalf / price, dmaPosQty);
                     var sellVal = sellQty * price;
                     var comm = sellVal * COMM;
                     cash += sellVal - comm;

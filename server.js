@@ -1264,7 +1264,7 @@ function runStrategies() {
 
         // ─── BUY LOGIC ───
         // Level 1: Price 1% below EMA200 → buy $50K (first tranche)
-        if (distPct <= -1.0 && !state.bought1 && dmaPf.cash >= halfCapital) {
+        if (distPct <= -0.5 && !state.bought1 && dmaPf.cash >= halfCapital) {
           var buyVal = Math.min(halfCapital, dmaPf.cash * 0.98);
           var qty = buyVal / price;
           var comm = buyVal * COMM;
@@ -1284,7 +1284,7 @@ function runStrategies() {
           console.log('[' + new Date().toLocaleTimeString() + '] DMA BUY1 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% qty=' + qty.toFixed(4));
         }
         // Level 2: Price 2% below EMA200 → buy another $50K (fully invested)
-        if (distPct <= -2.0 && state.bought1 && !state.bought2 && dmaPf.cash >= halfCapital * 0.5) {
+        if (distPct <= -1.0 && state.bought1 && !state.bought2 && dmaPf.cash >= halfCapital * 0.5) {
           var buyVal = Math.min(halfCapital, dmaPf.cash * 0.98);
           var qty = buyVal / price;
           var comm = buyVal * COMM;
@@ -1304,7 +1304,7 @@ function runStrategies() {
 
         // ─── SELL LOGIC ───
         // Level 1: Price 1% above EMA200 → sell $50K worth (first tranche)
-        if (distPct >= 1.0 && !state.sold1 && posQty > 0) {
+        if (distPct >= 0.5 && !state.sold1 && posQty > 0) {
           var sellQty = Math.min(halfCapital / price, posQty); // Sell $50K worth
           if (sellQty > posQty) sellQty = posQty;
           var sellVal = sellQty * price;
@@ -1323,7 +1323,7 @@ function runStrategies() {
           console.log('[' + new Date().toLocaleTimeString() + '] DMA SELL1 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% pnl=$' + pnl.toFixed(0));
         }
         // Level 2: Price 2% above EMA200 → sell remaining (100% cash)
-        if (distPct >= 2.0 && state.sold1 && !state.sold2 && dmaPf.holdings[sym] && dmaPf.holdings[sym].qty > 0) {
+        if (distPct >= 1.0 && state.sold1 && !state.sold2 && dmaPf.holdings[sym] && dmaPf.holdings[sym].qty > 0) {
           var remainPos = dmaPf.holdings[sym];
           var sellQty = remainPos.qty;
           var sellVal = sellQty * price;
@@ -1734,7 +1734,7 @@ const server = http.createServer((req, res) => {
                   if (!dmaState) dmaState = { bought1: false, bought2: false, sold1: false, sold2: false };
 
                   // BUY Level 1: price 1% below EMA200
-                  if (distPct <= -1.0 && !dmaState.bought1 && cash >= dmaHalf * 0.5) {
+                  if (distPct <= -0.5 && !dmaState.bought1 && cash >= dmaHalf * 0.5) {
                     var buyVal = Math.min(dmaHalf, cash * 0.98);
                     var qty = buyVal / price;
                     var comm = buyVal * COMM;
@@ -1750,7 +1750,7 @@ const server = http.createServer((req, res) => {
                     dmaState.sold2 = false;
                   }
                   // BUY Level 2: price 2% below EMA200
-                  if (distPct <= -2.0 && dmaState.bought1 && !dmaState.bought2 && cash >= dmaHalf * 0.3) {
+                  if (distPct <= -1.0 && dmaState.bought1 && !dmaState.bought2 && cash >= dmaHalf * 0.3) {
                     var buyVal = Math.min(dmaHalf, cash * 0.98);
                     var qty = buyVal / price;
                     var comm = buyVal * COMM;
@@ -1764,7 +1764,7 @@ const server = http.createServer((req, res) => {
                     dmaState.bought2 = true;
                   }
                   // SELL Level 1: price 1% above EMA200 → sell $50K worth
-                  if (distPct >= 1.0 && !dmaState.sold1 && dmaPosQty > 0) {
+                  if (distPct >= 0.5 && !dmaState.sold1 && dmaPosQty > 0) {
                     var sellQty = Math.min(dmaHalf / price, dmaPosQty);
                     var sellVal = sellQty * price;
                     var comm = sellVal * COMM;
@@ -1780,7 +1780,7 @@ const server = http.createServer((req, res) => {
                     dmaState.bought2 = false;
                   }
                   // SELL Level 2: price 2% above EMA200
-                  if (distPct >= 2.0 && dmaState.sold1 && !dmaState.sold2 && holdings[dmaSym] && holdings[dmaSym].qty > 0) {
+                  if (distPct >= 1.0 && dmaState.sold1 && !dmaState.sold2 && holdings[dmaSym] && holdings[dmaSym].qty > 0) {
                     var remPos = holdings[dmaSym];
                     var sellQty = remPos.qty;
                     var sellVal = sellQty * price;

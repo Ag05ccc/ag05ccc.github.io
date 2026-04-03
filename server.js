@@ -1567,6 +1567,7 @@ const server = http.createServer((req, res) => {
         var startDate = params.startDate || '2020-01-01';
         var startCash = params.startCash || 100000;
 
+        var timeframe = params.timeframe || '1d';
         var isDmaBacktest = profileId === 'dma';
         var profile = PROFILES.find(function(p) { return p.id === profileId; });
         if (!profile && !isDmaBacktest) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown profile' })); return; }
@@ -1575,50 +1576,123 @@ const server = http.createServer((req, res) => {
         }
         if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
 
-        // Load CSV data for all symbols
         var dataDir = path.join(__dirname, 'backtest', 'data');
         var allCandles = {}; // { BTC: [ {date, open, high, low, close, volume}, ... ] }
         var allDates = {};
-        symbols.forEach(function(sym) {
-          var csvPath = path.join(dataDir, sym + '_daily.csv');
-          if (!fs.existsSync(csvPath)) return;
-          var content = fs.readFileSync(csvPath, 'utf8');
-          var lines = content.split('\n').filter(function(l) { return l.trim().length > 0; });
-          var dataLines = lines.slice(2); // skip header URL + column headers
-          var candles = [];
-          dataLines.forEach(function(line) {
-            var parts = line.split(',');
-            if (parts.length < 7) return;
-            var date = (parts[1] || '').trim();
-            if (date < startDate) return;
-            candles.push({
-              date: date,
-              open: parseFloat(parts[3]) || 0,
-              high: parseFloat(parts[4]) || 0,
-              low: parseFloat(parts[5]) || 0,
-              close: parseFloat(parts[6]) || 0,
-              volume: parseFloat(parts[7]) || 0,
-            });
-            allDates[date] = true;
-          });
-          // Sort ascending by date
-          candles.sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
-          if (candles.length > 0) allCandles[sym] = candles;
-        });
+        var skippedSymbols = [];
 
-        var sortedDates = Object.keys(allDates).sort();
-        if (sortedDates.length < 30) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not enough data (need 30+ days)' })); return; }
+        if (timeframe === '1m') {
+          // ─── LOAD 1-MINUTE JSONL DATA ───
+          var startTimestamp = new Date(startDate + 'T00:00:00Z').getTime();
+          // 2 years of 1m data cutoff for very large files
+          var twoYearsMs = 2 * 365.25 * 24 * 60 * 60 * 1000;
+
+          symbols.forEach(function(sym) {
+            var jsonlPath = path.join(dataDir, '1m', sym + '.jsonl');
+            if (!fs.existsSync(jsonlPath)) {
+              skippedSymbols.push(sym);
+              return;
+            }
+            var stat = fs.statSync(jsonlPath);
+            var content = fs.readFileSync(jsonlPath, 'utf8');
+            var lines = content.split('\n');
+            var candles = [];
+            // If file > 500MB, compute cutoff to only keep last 2 years
+            var sizeCutoffTs = 0;
+            if (stat.size > 500 * 1024 * 1024) {
+              // Find the last timestamp to compute 2-year window
+              for (var li = lines.length - 1; li >= 0; li--) {
+                var trimmed = lines[li].trim();
+                if (trimmed.length === 0) continue;
+                try { var lastObj = JSON.parse(trimmed); sizeCutoffTs = lastObj.t - twoYearsMs; } catch(e2) {}
+                break;
+              }
+            }
+            var effectiveStartTs = Math.max(startTimestamp, sizeCutoffTs);
+
+            for (var li = 0; li < lines.length; li++) {
+              var line = lines[li].trim();
+              if (line.length === 0) continue;
+              try {
+                var obj = JSON.parse(line);
+                if (obj.t < effectiveStartTs) continue;
+                var candleDate = new Date(obj.t).toISOString().slice(0, 16);
+                candles.push({
+                  date: candleDate,
+                  timestamp: obj.t,
+                  open: obj.o || 0,
+                  high: obj.h || 0,
+                  low: obj.l || 0,
+                  close: obj.c || 0,
+                  volume: obj.v || 0,
+                });
+              } catch(e3) { /* skip malformed lines */ }
+            }
+            // Already sorted by timestamp in JSONL
+            if (candles.length > 0) allCandles[sym] = candles;
+          });
+
+          // For 1m data: build a unified timestamp sequence across all symbols
+          // Use the symbol with the most candles as the "clock"
+          var clockSym = null;
+          var maxLen = 0;
+          Object.keys(allCandles).forEach(function(sym) {
+            if (allCandles[sym].length > maxLen) { maxLen = allCandles[sym].length; clockSym = sym; }
+          });
+          if (!clockSym || maxLen < 200) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not enough 1m data (need 200+ candles). Skipped: ' + skippedSymbols.join(', ') })); return; }
+
+          // Use clock symbol timestamps as sorted dates equivalent
+          var sortedDates = allCandles[clockSym].map(function(c) { return c.timestamp; });
+
+        } else {
+          // ─── LOAD DAILY CSV DATA (original logic) ───
+          symbols.forEach(function(sym) {
+            var csvPath = path.join(dataDir, sym + '_daily.csv');
+            if (!fs.existsSync(csvPath)) return;
+            var content = fs.readFileSync(csvPath, 'utf8');
+            var lines = content.split('\n').filter(function(l) { return l.trim().length > 0; });
+            var dataLines = lines.slice(2); // skip header URL + column headers
+            var candles = [];
+            dataLines.forEach(function(line) {
+              var parts = line.split(',');
+              if (parts.length < 7) return;
+              var date = (parts[1] || '').trim();
+              if (date < startDate) return;
+              candles.push({
+                date: date,
+                open: parseFloat(parts[3]) || 0,
+                high: parseFloat(parts[4]) || 0,
+                low: parseFloat(parts[5]) || 0,
+                close: parseFloat(parts[6]) || 0,
+                volume: parseFloat(parts[7]) || 0,
+              });
+              allDates[date] = true;
+            });
+            // Sort ascending by date
+            candles.sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+            if (candles.length > 0) allCandles[sym] = candles;
+          });
+
+          var sortedDates = Object.keys(allDates).sort();
+          if (sortedDates.length < 30) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not enough data (need 30+ days)' })); return; }
+        }
 
         // Build cumulative candle history per symbol for TA calculation
         var symHistory = {}; // { BTC: { closes:[], highs:[], lows:[], candles:[] } }
-        var symDateIndex = {}; // { BTC: { "2022-01-01": 0, ... } }
+        var symDateIndex = {}; // { BTC: { "2022-01-01": 0, ... } } or { BTC: { timestamp: 0, ... } }
         symbols.forEach(function(sym) {
           if (!allCandles[sym]) return;
           symHistory[sym] = { closes: [], highs: [], lows: [], candles: [] };
           symDateIndex[sym] = {};
-          allCandles[sym].forEach(function(c, i) {
-            symDateIndex[sym][c.date] = i;
-          });
+          if (timeframe === '1m') {
+            allCandles[sym].forEach(function(c, i) {
+              symDateIndex[sym][c.timestamp] = i;
+            });
+          } else {
+            allCandles[sym].forEach(function(c, i) {
+              symDateIndex[sym][c.date] = i;
+            });
+          }
         });
 
         // Backtest state
@@ -1634,16 +1708,27 @@ const server = http.createServer((req, res) => {
         var buyThreshold = profile.buyThreshold || 3;
         var sellThreshold = profile.sellThreshold || 0.8;
         var cashPct = profile.cashPct || 0.10;
-        // Per-symbol cooldown (in days/bars) - prevents overtrading
+        // Per-symbol cooldown (in bars) - prevents overtrading
+        // For 1m data, cooldowns are in minutes; for daily, in days
         var lastTradeDay = {}; // { BTC: dayIdx }
-        var cooldownDays = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
+        var cooldownDays;
+        if (timeframe === '1m') {
+          cooldownDays = { conservative: 240, moderate: 120, aggressive: 60, yolo: 30 }; // minutes
+        } else {
+          cooldownDays = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
+        }
         var symCooldown = cooldownDays[profileId] || 3;
         var holdUntil = {}; // { BTC: dayIdx } - minimum hold time per asset
-        var minHoldDays = { crypto: 2, stock: 3, commodity: 5 };
+        var minHoldDays;
+        if (timeframe === '1m') {
+          minHoldDays = { crypto: 60, stock: 120, commodity: 240 }; // minutes
+        } else {
+          minHoldDays = { crypto: 2, stock: 3, commodity: 5 };
+        }
         var dailyTradeLimit = { conservative: 2, moderate: 3, aggressive: 5, yolo: 8 };
         var dailyTradeCount = {}; // { "2022-01-15": 3 }
         var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
-        var cbCooldownDays = 10;
+        var cbCooldownDays = timeframe === '1m' ? 1440 * 10 : 10; // 10 days in minutes or days
         var cbTriggeredDay = -999;
         var dmaState = null; // For DMA backtest: { bought1, bought2, sold1, sold2 }
         var cbTriggerCount = 0;
@@ -1653,20 +1738,28 @@ const server = http.createServer((req, res) => {
         var buyHoldStart = {};
         var buyHoldStartCash = startCash;
 
-        // Process each date
-        sortedDates.forEach(function(date, dayIdx) {
+        // Equity curve sampling for 1m: only record every N candles
+        var eqSampleInterval = timeframe === '1m' ? 1440 : 1; // 1440 minutes = ~1 day
+
+        // Process each date/timestamp
+        sortedDates.forEach(function(dateKey, dayIdx) {
+
+          // For 1m, dateKey is a timestamp number; for daily, it's a date string
+          var displayDate = timeframe === '1m' ? new Date(dateKey).toISOString().slice(0, 16) : dateKey;
+          // For daily trade limit, group by calendar day
+          var calendarDay = timeframe === '1m' ? new Date(dateKey).toISOString().slice(0, 10) : dateKey;
 
           // For each symbol, build up history and compute indicators
           var symData = {}; // { BTC: { sd-like object } }
           symbols.forEach(function(sym) {
-            if (!allCandles[sym] || symDateIndex[sym][date] === undefined) return;
-            var idx = symDateIndex[sym][date];
+            if (!allCandles[sym] || symDateIndex[sym][dateKey] === undefined) return;
+            var idx = symDateIndex[sym][dateKey];
             var c = allCandles[sym][idx];
             var sh = symHistory[sym];
             sh.closes.push(c.close);
             sh.highs.push(c.high);
             sh.lows.push(c.low);
-            sh.candles.push({ o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume, t: date });
+            sh.candles.push({ o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume, t: displayDate });
 
             if (sh.closes.length < 5) return;
 
@@ -1744,7 +1837,7 @@ const server = http.createServer((req, res) => {
                     var h = holdings[dmaSym];
                     h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
                     h.qty += qty;
-                    trades.push({ date: date, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (1st tranche $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+                    trades.push({ date: displayDate, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (1st tranche $50K)', regime: 'dma', commission: +comm.toFixed(2) });
                     dmaState.bought1 = true;
                     dmaState.sold1 = false;
                     dmaState.sold2 = false;
@@ -1760,7 +1853,7 @@ const server = http.createServer((req, res) => {
                     var h = holdings[dmaSym];
                     h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
                     h.qty += qty;
-                    trades.push({ date: date, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (2nd tranche FULL)', regime: 'dma', commission: +comm.toFixed(2) });
+                    trades.push({ date: displayDate, side: 'buy', symbol: dmaSym, price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 -' + Math.abs(distPct).toFixed(1) + '% (2nd tranche FULL)', regime: 'dma', commission: +comm.toFixed(2) });
                     dmaState.bought2 = true;
                   }
                   // SELL Level 1: price 1% above EMA200 → sell $50K worth
@@ -1772,7 +1865,7 @@ const server = http.createServer((req, res) => {
                     totalCommission += comm;
                     var pnl = (price - dmaPos.avgCost) * sellQty;
                     if (pnl > 0) wins++; else losses++;
-                    trades.push({ date: date, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (dmaPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (1st sell $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+                    trades.push({ date: displayDate, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (dmaPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (1st sell $50K)', regime: 'dma', commission: +comm.toFixed(2) });
                     dmaPos.qty -= sellQty;
                     if (dmaPos.qty <= 0.000001) delete holdings[dmaSym];
                     dmaState.sold1 = true;
@@ -1789,7 +1882,7 @@ const server = http.createServer((req, res) => {
                     totalCommission += comm;
                     var pnl = (price - remPos.avgCost) * sellQty;
                     if (pnl > 0) wins++; else losses++;
-                    trades.push({ date: date, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (remPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (2nd sell 100% CASH)', regime: 'dma', commission: +comm.toFixed(2) });
+                    trades.push({ date: displayDate, side: 'sell', symbol: dmaSym, price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (remPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (2nd sell 100% CASH)', regime: 'dma', commission: +comm.toFixed(2) });
                     delete holdings[dmaSym];
                     dmaState.sold2 = true;
                   }
@@ -1800,7 +1893,7 @@ const server = http.createServer((req, res) => {
           // Now run signal evaluation for each symbol (scoring system)
           symbols.forEach(function(sym) {
             // Daily trade limit check
-            if ((dailyTradeCount[date] || 0) >= (dailyTradeLimit[profileId] || 3)) return;
+            if ((dailyTradeCount[calendarDay] || 0) >= (dailyTradeLimit[profileId] || 3)) return;
 
             var sd = symData[sym];
             if (!sd || sd.candles.length < 30) return;
@@ -1922,7 +2015,7 @@ const server = http.createServer((req, res) => {
               var riskPnl = (riskFillP - pos.avgCost) * riskQty;
               if (riskPnl > 0) wins++; else losses++;
               trades.push({
-                date: date, side: 'sell', symbol: sym, price: +riskFillP.toFixed(2),
+                date: displayDate, side: 'sell', symbol: sym, price: +riskFillP.toFixed(2),
                 signalPrice: +price.toFixed(2), slippage: btSlippage,
                 qty: +riskQty.toFixed(6), total: +riskTotal.toFixed(2),
                 pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
@@ -1932,7 +2025,7 @@ const server = http.createServer((req, res) => {
               delete holdings[sym];
               delete peaks[sym];
               lastTradeDay[sym] = dayIdx;
-              dailyTradeCount[date] = (dailyTradeCount[date] || 0) + 1;
+              dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;
               return;
             }
 
@@ -1969,7 +2062,7 @@ const server = http.createServer((req, res) => {
               var btTpPct = (profile.overrides && profile.overrides.tp_pct !== undefined) ? profile.overrides.tp_pct : 2.0;
               var btSlPct = (profile.overrides && profile.overrides.sl_pct !== undefined) ? profile.overrides.sl_pct : 1.0;
               trades.push({
-                date: date, side: 'buy', symbol: sym, price: +btBuyFill.toFixed(2),
+                date: displayDate, side: 'buy', symbol: sym, price: +btBuyFill.toFixed(2),
                 signalPrice: +price.toFixed(2), slippage: btSlippage,
                 bracketTP: +(btBuyFill * (1 + btTpPct / 100)).toFixed(2),
                 bracketSL: +(btBuyFill * (1 - btSlPct / 100)).toFixed(2),
@@ -1979,7 +2072,7 @@ const server = http.createServer((req, res) => {
                 commission: +commission.toFixed(2),
               });
               lastTradeDay[sym] = dayIdx;
-              dailyTradeCount[date] = (dailyTradeCount[date] || 0) + 1;
+              dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;
             }
             // Scoring-based sell (skip if in cooldown or minimum hold not met)
             else if (!inCooldown && sellScore >= sellThreshold && pos && pos.qty > 0 && (!holdUntil[sym] || dayIdx >= holdUntil[sym])) {
@@ -1992,7 +2085,7 @@ const server = http.createServer((req, res) => {
               var sellPnl = (btSellFill - pos.avgCost) * sq;
               if (sellPnl > 0) wins++; else losses++;
               trades.push({
-                date: date, side: 'sell', symbol: sym, price: +btSellFill.toFixed(2),
+                date: displayDate, side: 'sell', symbol: sym, price: +btSellFill.toFixed(2),
                 signalPrice: +price.toFixed(2), slippage: btSlippage,
                 qty: +sq.toFixed(6), total: +sellTotal.toFixed(2),
                 pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
@@ -2002,7 +2095,7 @@ const server = http.createServer((req, res) => {
               delete holdings[sym];
               delete peaks[sym];
               lastTradeDay[sym] = dayIdx;
-              dailyTradeCount[date] = (dailyTradeCount[date] || 0) + 1;
+              dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;
             }
 
             // Update peak tracking
@@ -2019,7 +2112,14 @@ const server = http.createServer((req, res) => {
             return s + ((h && h.qty) || 0) * hPrice;
           }, 0);
           var equity = cash + dayHoldingValue;
-          equityCurve.push({ date: date, value: +equity.toFixed(2) });
+          // For 1m data, only sample equity curve every eqSampleInterval candles
+          if (timeframe === '1m') {
+            if (dayIdx % eqSampleInterval === 0 || dayIdx === sortedDates.length - 1) {
+              equityCurve.push({ date: displayDate, value: +equity.toFixed(2) });
+            }
+          } else {
+            equityCurve.push({ date: displayDate, value: +equity.toFixed(2) });
+          }
 
           // Reset peak after circuit breaker cooldown ends — prevents infinite re-trigger
           if (cbTriggeredDay > 0 && dayIdx === cbTriggeredDay + cbCooldownDays) {
@@ -2049,11 +2149,11 @@ const server = http.createServer((req, res) => {
               var cbPnl = (cbFillPrice - cbPos.avgCost) * cbPos.qty;
               if (cbPnl > 0) wins++; else losses++;
               trades.push({
-                date: date, side: 'sell', symbol: cbSym, price: +cbFillPrice.toFixed(2),
+                date: displayDate, side: 'sell', symbol: cbSym, price: +cbFillPrice.toFixed(2),
                 signalPrice: +cbPrice.toFixed(2), slippage: cbSlippage,
                 qty: +cbPos.qty.toFixed(6), total: +cbTotal.toFixed(2),
                 pnl: +cbPnl.toFixed(2), pnlPct: +((cbPnl / (cbPos.avgCost * cbPos.qty)) * 100).toFixed(2),
-                reason: 'Circuit Breaker - Drawdown > ' + (cbThreshold * 100).toFixed(0) + '% (pausing ' + cbCooldownDays + ' days)', regime: 'circuit-break',
+                reason: 'Circuit Breaker - Drawdown > ' + (cbThreshold * 100).toFixed(0) + '% (pausing ' + (timeframe === '1m' ? Math.round(cbCooldownDays / 1440) : cbCooldownDays) + ' days)', regime: 'circuit-break',
                 commission: +cbComm.toFixed(2),
               });
             });
@@ -2093,8 +2193,12 @@ const server = http.createServer((req, res) => {
         });
         holdings = {};
 
-        // Final equity
-        var finalEquity = equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].value : startCash;
+        // Final equity - after closing all positions, cash IS the final equity
+        var finalEquity = +cash.toFixed(2);
+        // Update last equity curve point to reflect final closed value
+        if (equityCurve.length > 0) {
+          equityCurve[equityCurve.length - 1].value = finalEquity;
+        }
         var totalReturn = (finalEquity - startCash) / startCash;
 
         // Buy & hold comparison
@@ -2111,18 +2215,20 @@ const server = http.createServer((req, res) => {
         }
         var buyHoldReturn = buyHoldSymCount > 0 ? (buyHoldValue - buyHoldStartCash) / buyHoldStartCash : 0;
 
-        // Sharpe ratio (annualized from daily returns)
-        var dailyReturns = [];
+        // Sharpe ratio (annualized from period returns)
+        // For 1m data, equity curve is sampled every 1440 candles (~1 day), so annualize with sqrt(252)
+        var periodReturns = [];
         for (var di = 1; di < equityCurve.length; di++) {
           var prevVal = equityCurve[di - 1].value;
-          if (prevVal > 0) dailyReturns.push(Math.log(equityCurve[di].value / prevVal));
+          if (prevVal > 0) periodReturns.push(Math.log(equityCurve[di].value / prevVal));
         }
-        var avgReturn = dailyReturns.length > 0 ? dailyReturns.reduce(function(a, b) { return a + b; }, 0) / dailyReturns.length : 0;
+        var avgReturn = periodReturns.length > 0 ? periodReturns.reduce(function(a, b) { return a + b; }, 0) / periodReturns.length : 0;
         var stdReturn = 0;
-        if (dailyReturns.length > 1) {
-          var variance = dailyReturns.reduce(function(a, b) { return a + Math.pow(b - avgReturn, 2); }, 0) / (dailyReturns.length - 1);
+        if (periodReturns.length > 1) {
+          var variance = periodReturns.reduce(function(a, b) { return a + Math.pow(b - avgReturn, 2); }, 0) / (periodReturns.length - 1);
           stdReturn = Math.sqrt(variance);
         }
+        // Equity curve samples are ~daily for both timeframes (1m samples every 1440 candles)
         var sharpe = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0;
 
         // Build price history per symbol (downsampled for chart)
@@ -2170,6 +2276,8 @@ const server = http.createServer((req, res) => {
           profile: profileId,
           symbols: symbols,
           startDate: startDate,
+          timeframe: timeframe,
+          skippedSymbols: skippedSymbols,
         };
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify(result));

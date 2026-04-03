@@ -228,6 +228,7 @@ function BacktestTab({ isMobile }) {
   const [btError, setBtError] = useState(null);
   const [btTradeFilter, setBtTradeFilter] = useState("all");
   const [btChartSym, setBtChartSym] = useState("");
+  const [btProgress, setBtProgress] = useState(0);
 
   // Load available assets on mount
   useEffect(function() {
@@ -256,6 +257,47 @@ function BacktestTab({ isMobile }) {
     setBtLoading(true);
     setBtError(null);
     setBtResult(null);
+    setBtProgress(0);
+    var isStreamingTf = btTimeframe !== '1d';
+    if (isStreamingTf) {
+      // Streaming backtest with progress for all minute-based timeframes
+      fetch('/api/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: btProfile, symbols: btSymbols, startDate: btStartDate, timeframe: btTimeframe }),
+      }).then(function(response) {
+        if (!response.ok) {
+          return response.text().then(function(t) {
+            try { var err = JSON.parse(t); throw new Error(err.error || 'Backtest failed'); }
+            catch(e2) { if (e2.message) throw e2; throw new Error('Backtest failed (' + response.status + ')'); }
+          });
+        }
+        var reader = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        function read() {
+          reader.read().then(function(result) {
+            if (result.done) { setBtLoading(false); return; }
+            buffer += decoder.decode(result.value, { stream: true });
+            var lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete line in buffer
+            lines.forEach(function(line) {
+              if (!line.trim()) return;
+              try {
+                var msg = JSON.parse(line);
+                if (msg.pct !== undefined) setBtProgress(msg.pct);
+                if (msg.done && msg.result) { setBtResult(msg.result); setBtLoading(false); }
+                if (msg.error) { setBtError(msg.error); setBtLoading(false); }
+              } catch(e) {}
+            });
+            read();
+          }).catch(function(e) { setBtLoading(false); setBtError(e.message || 'Stream read failed'); });
+        }
+        read();
+      }).catch(function(e) { setBtLoading(false); setBtError(e.message || 'Backtest failed'); });
+      return;
+    }
+    // Daily (1d) backtest - standard JSON response
     fetch('/api/backtest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -314,9 +356,14 @@ function BacktestTab({ isMobile }) {
           {/* Timeframe selector */}
           <div>
             <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 4, fontFamily: "var(--h)", fontWeight: 600 }}>TIMEFRAME</div>
-            <div style={{ display: "flex", gap: 4 }}>
-              <button onClick={function() { setBtTimeframe("1d"); }} className="bt" style={{ padding: "8px 14px", borderRadius: 6, border: btTimeframe === "1d" ? "1px solid #22c55e" : "1px solid #1e293b", background: btTimeframe === "1d" ? "rgba(34,197,94,0.15)" : "#0a0e17", color: btTimeframe === "1d" ? "#22c55e" : "#6b7280", fontSize: 12, fontWeight: 700, fontFamily: "var(--m)", cursor: "pointer" }}>1D</button>
-              <button onClick={function() { setBtTimeframe("1m"); }} className="bt" style={{ padding: "8px 14px", borderRadius: 6, border: btTimeframe === "1m" ? "1px solid #f59e0b" : "1px solid #1e293b", background: btTimeframe === "1m" ? "rgba(245,158,11,0.15)" : "#0a0e17", color: btTimeframe === "1m" ? "#f59e0b" : "#6b7280", fontSize: 12, fontWeight: 700, fontFamily: "var(--m)", cursor: "pointer" }}>1m</button>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {["1d", "1m", "5m", "15m", "1h", "4h"].map(function(tf) {
+                var active = btTimeframe === tf;
+                var tfColor = tf === "1d" ? "#22c55e" : "#f59e0b";
+                return (
+                  <button key={tf} onClick={function() { setBtTimeframe(tf); }} className="bt" style={{ padding: "8px 10px", borderRadius: 6, border: active ? "1px solid " + tfColor : "1px solid #1e293b", background: active ? (tf === "1d" ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : "#0a0e17", color: active ? tfColor : "#6b7280", fontSize: 12, fontWeight: 700, fontFamily: "var(--m)", cursor: "pointer", minWidth: 36, textAlign: "center" }}>{tf.toUpperCase()}</button>
+                );
+              })}
             </div>
           </div>
           {/* Start date */}
@@ -331,8 +378,8 @@ function BacktestTab({ isMobile }) {
             </button>
           </div>
         </div>
-        {btTimeframe === "1m" && (
-          <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "6px 12px", marginBottom: 12, fontSize: 11, color: "#f59e0b", fontFamily: "var(--m)" }}>1m data is large and may take longer to process</div>
+        {btTimeframe !== "1d" && (
+          <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "6px 12px", marginBottom: 12, fontSize: 11, color: "#f59e0b", fontFamily: "var(--m)" }}>{btTimeframe.toUpperCase()} uses 1-minute candle data{btTimeframe !== "1m" ? " (grouped from 1m)" : ""} and may take longer to process</div>
         )}
 
         {/* Asset selection */}
@@ -355,12 +402,23 @@ function BacktestTab({ isMobile }) {
         </div>
       </div>
 
-      {/* Loading spinner */}
+      {/* Loading spinner + progress bar */}
       {btLoading && (
         <div style={{ textAlign: "center", padding: 40 }}>
           <div style={{ display: "inline-block", width: 32, height: 32, border: "3px solid #1e293b", borderTop: "3px solid " + (profileColors[btProfile] || "#f59e0b"), borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8, fontFamily: "var(--m)" }}>Running backtest on {btSymbols.length} assets...</div>
+          {btTimeframe !== "1d" && btProgress > 0 && (
+            <div style={{ marginTop: 16, maxWidth: 320, marginLeft: "auto", marginRight: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#8b5cf6", fontFamily: "var(--m)", marginBottom: 4 }}>
+                <span>Processing {btTimeframe.toUpperCase()} candles...</span>
+                <span>{btProgress}%</span>
+              </div>
+              <div style={{ height: 6, background: "#1e293b", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: btProgress + "%", background: "linear-gradient(90deg, #8b5cf6, #a78bfa)", borderRadius: 3, transition: "width 0.3s" }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -403,9 +461,9 @@ function BacktestTab({ isMobile }) {
           {/* Summary bar */}
           <div style={{ background: "#0f172a", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.04)", marginBottom: 16, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 11, fontFamily: "var(--m)" }}>
             <span style={{ color: "#6b7280" }}>Profile: <span style={{ color: profileColors[btResult.profile] || "#f8fafc", fontWeight: 600 }}>{profileNames[btResult.profile] || btResult.profile}</span></span>
-            <span style={{ color: "#6b7280" }}>Timeframe: <span style={{ color: btResult.timeframe === "1m" ? "#f59e0b" : "#f8fafc", fontWeight: 600 }}>{btResult.timeframe === "1m" ? "1 Minute" : "Daily"}</span></span>
+            <span style={{ color: "#6b7280" }}>Timeframe: <span style={{ color: btResult.timeframe !== "1d" ? "#f59e0b" : "#f8fafc", fontWeight: 600 }}>{({"1d":"Daily","1m":"1 Minute","5m":"5 Minute","15m":"15 Minute","1h":"1 Hour","4h":"4 Hour"})[btResult.timeframe] || btResult.timeframe}</span></span>
             <span style={{ color: "#6b7280" }}>Period: <span style={{ color: "#f8fafc" }}>{btResult.startDate} to {eqData.length > 0 ? eqData[eqData.length - 1].date : "?"}</span></span>
-            <span style={{ color: "#6b7280" }}>{btResult.timeframe === "1m" ? "Candles" : "Days"}: <span style={{ color: "#f8fafc" }}>{m.days}</span></span>
+            <span style={{ color: "#6b7280" }}>{btResult.timeframe !== "1d" ? "Candles" : "Days"}: <span style={{ color: "#f8fafc" }}>{m.days}</span></span>
             {m.processedCandles ? <span style={{ color: "#6b7280" }}>1m Candles: <span style={{ color: "#f8fafc" }}>{m.processedCandles.toLocaleString()}</span></span> : null}
             <span style={{ color: "#6b7280" }}>Assets: <span style={{ color: "#f8fafc" }}>{(btResult.symbols || []).length}</span></span>
             <span style={{ color: "#6b7280" }}>Commission: <span style={{ color: "#f59e0b" }}>${fK(m.totalCommission)}</span></span>

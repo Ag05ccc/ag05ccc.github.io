@@ -1577,7 +1577,7 @@ const server = http.createServer((req, res) => {
         if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
 
         // ─── FAST PATH: DMA 1m backtest with incremental EMA200 ───
-        if (isDmaBacktest && timeframe === '1m') {
+        if (isDmaBacktest && timeframe !== '1d') {
           var jsonlPath = path.join(__dirname, 'backtest', 'data', '1m', 'BTC.jsonl');
           if (!fs.existsSync(jsonlPath)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1588,10 +1588,21 @@ const server = http.createServer((req, res) => {
           var content = fs.readFileSync(jsonlPath, 'utf8');
           var lines = content.split('\n');
 
+          // Timeframe grouping: derive 5m/15m/1h/4h from 1m candles
+          var tfMinutes = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240 }[timeframe] || 1;
+
+          // Set headers for streaming ndjson
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ndjson',
+            'Access-Control-Allow-Origin': '*',
+            'Transfer-Encoding': 'chunked'
+          });
+
           // EMA200 incremental calculation
           var emaValue = 0;
           var emaCount = 0;
-          var emaK = 2 / (200 + 1);
+          var emaPeriod = 200;
+          var emaK = 2 / (emaPeriod + 1);
           var cash = startCash;
           var holdings = {};
           var trades = [];
@@ -1607,17 +1618,48 @@ const server = http.createServer((req, res) => {
           var buyHoldStartPrice = 0;
           var processedCandles = 0;
 
+          // Grouping buffer for higher timeframes
+          var groupBuffer = { o: 0, h: 0, l: Infinity, c: 0, v: 0, t: 0, count: 0 };
+          var lastProgressPct = -1;
+
           for (var i = 0; i < lines.length; i++) {
             if (!lines[i]) continue;
             try {
               var c = JSON.parse(lines[i]);
             } catch(e) { continue; }
 
+            // Send progress every ~2%
+            var pct = Math.round(i / lines.length * 100);
+            if (pct !== lastProgressPct && pct % 2 === 0) {
+              lastProgressPct = pct;
+              res.write(JSON.stringify({ progress: i, total: lines.length, pct: pct }) + '\n');
+            }
+
+            // If grouping candles for higher timeframes
+            if (tfMinutes > 1) {
+              if (groupBuffer.count === 0) {
+                groupBuffer.o = c.o;
+                groupBuffer.h = c.h;
+                groupBuffer.l = c.l;
+                groupBuffer.t = c.t;
+              } else {
+                if (c.h > groupBuffer.h) groupBuffer.h = c.h;
+                if (c.l < groupBuffer.l) groupBuffer.l = c.l;
+              }
+              groupBuffer.c = c.c;
+              groupBuffer.v += (c.v || 0);
+              groupBuffer.count++;
+              if (groupBuffer.count < tfMinutes) continue;
+              // Grouped candle is ready
+              c = { o: groupBuffer.o, h: groupBuffer.h, l: groupBuffer.l, c: groupBuffer.c, v: groupBuffer.v, t: groupBuffer.t };
+              groupBuffer = { o: 0, h: 0, l: Infinity, c: 0, v: 0, t: 0, count: 0 };
+            }
+
             var price = c.c;
             if (price <= 0) continue;
 
             // Build EMA200 incrementally
-            if (emaCount < 200) {
+            if (emaCount < emaPeriod) {
               emaValue = ((emaValue * emaCount) + price) / (emaCount + 1); // simple average for warmup
               emaCount++;
               continue;
@@ -1763,7 +1805,7 @@ const server = http.createServer((req, res) => {
               openPositionsClosed: 0,
               circuitBreakerTriggered: false,
               circuitBreakerCount: 0,
-              timeframe: '1m',
+              timeframe: timeframe,
               processedCandles: processedCandles,
             },
             equityCurve: equityCurve,
@@ -1772,11 +1814,11 @@ const server = http.createServer((req, res) => {
             profile: profileId,
             symbols: ['BTC'],
             startDate: startDate,
-            timeframe: '1m',
+            timeframe: timeframe,
           };
 
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-          res.end(JSON.stringify(result));
+          res.write(JSON.stringify({ done: true, result: result }) + '\n');
+          res.end();
           return; // Skip normal backtest flow
         }
 
@@ -1785,8 +1827,11 @@ const server = http.createServer((req, res) => {
         var allDates = {};
         var skippedSymbols = [];
 
-        if (timeframe === '1m') {
-          // ─── LOAD 1-MINUTE JSONL DATA ───
+        var tfMinutesGeneral = { '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240 }[timeframe] || 0;
+        var isMinuteTimeframe = tfMinutesGeneral > 0;
+
+        if (isMinuteTimeframe) {
+          // ─── LOAD 1-MINUTE JSONL DATA (all sub-daily timeframes) ───
           var startTimestamp = new Date(startDate + 'T00:00:00Z').getTime();
           // 2 years of 1m data cutoff for very large files
           var twoYearsMs = 2 * 365.25 * 24 * 60 * 60 * 1000;
@@ -1836,7 +1881,37 @@ const server = http.createServer((req, res) => {
             if (candles.length > 0) allCandles[sym] = candles;
           });
 
-          // For 1m data: build a unified timestamp sequence across all symbols
+          // Group 1m candles into higher timeframes if needed (5m, 15m, 1h, 4h)
+          if (tfMinutesGeneral > 1) {
+            Object.keys(allCandles).forEach(function(sym) {
+              var raw = allCandles[sym];
+              var grouped = [];
+              var buf = null;
+              for (var gi = 0; gi < raw.length; gi++) {
+                var rc = raw[gi];
+                if (!buf) {
+                  buf = { date: rc.date, timestamp: rc.timestamp, open: rc.open, high: rc.high, low: rc.low, close: rc.close, volume: rc.volume, count: 1 };
+                } else {
+                  if (rc.high > buf.high) buf.high = rc.high;
+                  if (rc.low < buf.low) buf.low = rc.low;
+                  buf.close = rc.close;
+                  buf.volume += rc.volume;
+                  buf.count++;
+                }
+                if (buf.count >= tfMinutesGeneral) {
+                  grouped.push({ date: buf.date, timestamp: buf.timestamp, open: buf.open, high: buf.high, low: buf.low, close: buf.close, volume: buf.volume });
+                  buf = null;
+                }
+              }
+              // Push remaining partial group
+              if (buf && buf.count > 0) {
+                grouped.push({ date: buf.date, timestamp: buf.timestamp, open: buf.open, high: buf.high, low: buf.low, close: buf.close, volume: buf.volume });
+              }
+              allCandles[sym] = grouped;
+            });
+          }
+
+          // For minute data: build a unified timestamp sequence across all symbols
           // Use the symbol with the most candles as the "clock"
           var clockSym = null;
           var maxLen = 0;
@@ -1888,7 +1963,7 @@ const server = http.createServer((req, res) => {
           if (!allCandles[sym]) return;
           symHistory[sym] = { closes: [], highs: [], lows: [], candles: [] };
           symDateIndex[sym] = {};
-          if (timeframe === '1m') {
+          if (isMinuteTimeframe) {
             allCandles[sym].forEach(function(c, i) {
               symDateIndex[sym][c.timestamp] = i;
             });
@@ -1916,23 +1991,26 @@ const server = http.createServer((req, res) => {
         // For 1m data, cooldowns are in minutes; for daily, in days
         var lastTradeDay = {}; // { BTC: dayIdx }
         var cooldownDays;
-        if (timeframe === '1m') {
-          cooldownDays = { conservative: 240, moderate: 120, aggressive: 60, yolo: 30 }; // minutes
+        if (isMinuteTimeframe) {
+          // Cooldowns in bars (grouped candles). For 1m: 1 bar = 1 min; for 5m: 1 bar = 5 min; etc.
+          var barsPerMinute = 1 / (tfMinutesGeneral || 1);
+          cooldownDays = { conservative: Math.ceil(240 * barsPerMinute), moderate: Math.ceil(120 * barsPerMinute), aggressive: Math.ceil(60 * barsPerMinute), yolo: Math.ceil(30 * barsPerMinute) };
         } else {
           cooldownDays = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
         }
         var symCooldown = cooldownDays[profileId] || 3;
         var holdUntil = {}; // { BTC: dayIdx } - minimum hold time per asset
         var minHoldDays;
-        if (timeframe === '1m') {
-          minHoldDays = { crypto: 60, stock: 120, commodity: 240 }; // minutes
+        if (isMinuteTimeframe) {
+          var bpm = 1 / (tfMinutesGeneral || 1);
+          minHoldDays = { crypto: Math.ceil(60 * bpm), stock: Math.ceil(120 * bpm), commodity: Math.ceil(240 * bpm) };
         } else {
           minHoldDays = { crypto: 2, stock: 3, commodity: 5 };
         }
         var dailyTradeLimit = { conservative: 2, moderate: 3, aggressive: 5, yolo: 8 };
         var dailyTradeCount = {}; // { "2022-01-15": 3 }
         var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
-        var cbCooldownDays = timeframe === '1m' ? 1440 * 10 : 10; // 10 days in minutes or days
+        var cbCooldownDays = isMinuteTimeframe ? Math.ceil(1440 * 10 / (tfMinutesGeneral || 1)) : 10; // 10 days in bars
         var cbTriggeredDay = -999;
         var dmaState = null; // For DMA backtest: { bought1, bought2, sold1, sold2 }
         var cbTriggerCount = 0;
@@ -1942,16 +2020,37 @@ const server = http.createServer((req, res) => {
         var buyHoldStart = {};
         var buyHoldStartCash = startCash;
 
-        // Equity curve sampling for 1m: only record every N candles
-        var eqSampleInterval = timeframe === '1m' ? 1440 : 1; // 1440 minutes = ~1 day
+        // Equity curve sampling: for minute data, only record every ~1 day worth of bars
+        var eqSampleInterval = isMinuteTimeframe ? Math.ceil(1440 / (tfMinutesGeneral || 1)) : 1;
+
+        // For streaming progress on minute-based backtests
+        var isStreaming = isMinuteTimeframe;
+        if (isStreaming) {
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ndjson',
+            'Access-Control-Allow-Origin': '*',
+            'Transfer-Encoding': 'chunked'
+          });
+        }
+        var lastGenProgressPct = -1;
 
         // Process each date/timestamp
-        sortedDates.forEach(function(dateKey, dayIdx) {
+        for (var dayIdx = 0; dayIdx < sortedDates.length; dayIdx++) {
+          var dateKey = sortedDates[dayIdx];
 
-          // For 1m, dateKey is a timestamp number; for daily, it's a date string
-          var displayDate = timeframe === '1m' ? new Date(dateKey).toISOString().slice(0, 16) : dateKey;
+          // Send progress for streaming backtests
+          if (isStreaming) {
+            var genPct = Math.round(dayIdx / sortedDates.length * 100);
+            if (genPct !== lastGenProgressPct && genPct % 2 === 0) {
+              lastGenProgressPct = genPct;
+              res.write(JSON.stringify({ progress: dayIdx, total: sortedDates.length, pct: genPct }) + '\n');
+            }
+          }
+
+          // For minute data, dateKey is a timestamp number; for daily, it's a date string
+          var displayDate = isMinuteTimeframe ? new Date(dateKey).toISOString().slice(0, 16) : dateKey;
           // For daily trade limit, group by calendar day
-          var calendarDay = timeframe === '1m' ? new Date(dateKey).toISOString().slice(0, 10) : dateKey;
+          var calendarDay = isMinuteTimeframe ? new Date(dateKey).toISOString().slice(0, 10) : dateKey;
 
           // For each symbol, build up history and compute indicators
           var symData = {}; // { BTC: { sd-like object } }
@@ -2317,7 +2416,7 @@ const server = http.createServer((req, res) => {
           }, 0);
           var equity = cash + dayHoldingValue;
           // For 1m data, only sample equity curve every eqSampleInterval candles
-          if (timeframe === '1m') {
+          if (isMinuteTimeframe) {
             if (dayIdx % eqSampleInterval === 0 || dayIdx === sortedDates.length - 1) {
               equityCurve.push({ date: displayDate, value: +equity.toFixed(2) });
             }
@@ -2357,7 +2456,7 @@ const server = http.createServer((req, res) => {
                 signalPrice: +cbPrice.toFixed(2), slippage: cbSlippage,
                 qty: +cbPos.qty.toFixed(6), total: +cbTotal.toFixed(2),
                 pnl: +cbPnl.toFixed(2), pnlPct: +((cbPnl / (cbPos.avgCost * cbPos.qty)) * 100).toFixed(2),
-                reason: 'Circuit Breaker - Drawdown > ' + (cbThreshold * 100).toFixed(0) + '% (pausing ' + (timeframe === '1m' ? Math.round(cbCooldownDays / 1440) : cbCooldownDays) + ' days)', regime: 'circuit-break',
+                reason: 'Circuit Breaker - Drawdown > ' + (cbThreshold * 100).toFixed(0) + '% (pausing ' + (isMinuteTimeframe ? Math.round(cbCooldownDays * (tfMinutesGeneral || 1) / 1440) : cbCooldownDays) + ' days)', regime: 'circuit-break',
                 commission: +cbComm.toFixed(2),
               });
             });
@@ -2365,7 +2464,7 @@ const server = http.createServer((req, res) => {
             cbTriggeredDay = dayIdx;
             cbTriggerCount++;
           }
-        });
+        }
 
         // Close all remaining open positions at last known price
         var openPositionsClosed = 0;
@@ -2483,10 +2582,17 @@ const server = http.createServer((req, res) => {
           timeframe: timeframe,
           skippedSymbols: skippedSymbols,
         };
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(result));
+        if (isStreaming) {
+          res.write(JSON.stringify({ done: true, result: result }) + '\n');
+          res.end();
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(result));
+        }
       } catch(e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+        }
         res.end(JSON.stringify({ error: e.message }));
       }
     });

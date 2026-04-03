@@ -1608,6 +1608,7 @@ const server = http.createServer((req, res) => {
           var cash = startCash;
           var holdings = {};
           var trades = [];
+          var btcPriceHistory = []; // Daily OHLCV for price chart
           var equityCurve = [];
           var wins = 0, losses = 0;
           var totalCommission = 0;
@@ -1740,12 +1741,13 @@ const server = http.createServer((req, res) => {
               dmaState.sold2 = true;
             }
 
-            // Record equity once per day
+            // Record equity + price once per day
             var dayKey = new Date(c.t).toISOString().slice(0, 10);
             if (dayKey !== lastEquityDate) {
               var hVal = holdings['BTC'] ? holdings['BTC'].qty * price : 0;
               var equity = cash + hVal;
               equityCurve.push({ date: dayKey, value: +equity.toFixed(2) });
+              btcPriceHistory.push({ date: dayKey, o: +price.toFixed(2), h: +price.toFixed(2), l: +price.toFixed(2), c: +price.toFixed(2), v: 0 });
               if (equity > maxEquity) maxEquity = equity;
               var dd = (maxEquity - equity) / maxEquity;
               if (dd > maxDrawdown) maxDrawdown = dd;
@@ -1812,7 +1814,7 @@ const server = http.createServer((req, res) => {
             },
             equityCurve: equityCurve,
             trades: trades,
-            priceHistory: {},
+            priceHistory: { BTC: btcPriceHistory },
             profile: profileId,
             symbols: ['BTC'],
             startDate: startDate,

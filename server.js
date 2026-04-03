@@ -1576,6 +1576,210 @@ const server = http.createServer((req, res) => {
         }
         if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
 
+        // ─── FAST PATH: DMA 1m backtest with incremental EMA200 ───
+        if (isDmaBacktest && timeframe === '1m') {
+          var jsonlPath = path.join(__dirname, 'backtest', 'data', '1m', 'BTC.jsonl');
+          if (!fs.existsSync(jsonlPath)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No 1m data for BTC' }));
+            return;
+          }
+          var startTs = new Date(startDate + 'T00:00:00Z').getTime();
+          var content = fs.readFileSync(jsonlPath, 'utf8');
+          var lines = content.split('\n');
+
+          // EMA200 incremental calculation
+          var emaValue = 0;
+          var emaCount = 0;
+          var emaK = 2 / (200 + 1);
+          var cash = startCash;
+          var holdings = {};
+          var trades = [];
+          var equityCurve = [];
+          var wins = 0, losses = 0;
+          var totalCommission = 0;
+          var maxEquity = startCash;
+          var maxDrawdown = 0;
+          var dmaState = { bought1: false, bought2: false, sold1: false, sold2: false };
+          var lastEquityDate = '';
+          var dmaHalf = startCash * 0.50;
+          var COMM = 0.001;
+          var buyHoldStartPrice = 0;
+          var processedCandles = 0;
+
+          for (var i = 0; i < lines.length; i++) {
+            if (!lines[i]) continue;
+            try {
+              var c = JSON.parse(lines[i]);
+            } catch(e) { continue; }
+
+            var price = c.c;
+            if (price <= 0) continue;
+
+            // Build EMA200 incrementally
+            if (emaCount < 200) {
+              emaValue = ((emaValue * emaCount) + price) / (emaCount + 1); // simple average for warmup
+              emaCount++;
+              continue;
+            } else {
+              emaValue = price * emaK + emaValue * (1 - emaK);
+            }
+
+            // Skip candles before startDate (but still feed EMA above)
+            if (c.t < startTs) continue;
+
+            processedCandles++;
+            if (!buyHoldStartPrice) buyHoldStartPrice = price;
+
+            var distPct = ((price - emaValue) / emaValue) * 100;
+            var pos = holdings['BTC'];
+            var posQty = (pos && pos.qty) || 0;
+
+            // BUY Level 1: price 0.5% below EMA200
+            if (distPct <= -0.5 && !dmaState.bought1 && cash >= dmaHalf * 0.5) {
+              var buyVal = Math.min(dmaHalf, cash * 0.98);
+              var qty = buyVal / price;
+              var comm = buyVal * COMM;
+              cash -= buyVal + comm;
+              totalCommission += comm;
+              if (!holdings['BTC']) holdings['BTC'] = { qty: 0, avgCost: 0 };
+              var h = holdings['BTC'];
+              h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+              h.qty += qty;
+              trades.push({ date: new Date(c.t).toISOString().slice(0, 16), side: 'buy', symbol: 'BTC', price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 ' + distPct.toFixed(1) + '% (1st tranche $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+              dmaState.bought1 = true;
+              dmaState.sold1 = false;
+              dmaState.sold2 = false;
+            }
+            // BUY Level 2: price 1% below EMA200
+            if (distPct <= -1.0 && dmaState.bought1 && !dmaState.bought2 && cash >= dmaHalf * 0.3) {
+              var buyVal = Math.min(dmaHalf, cash * 0.98);
+              var qty = buyVal / price;
+              var comm = buyVal * COMM;
+              cash -= buyVal + comm;
+              totalCommission += comm;
+              if (!holdings['BTC']) holdings['BTC'] = { qty: 0, avgCost: 0 };
+              var h = holdings['BTC'];
+              h.avgCost = h.qty > 0 ? ((h.avgCost * h.qty) + (price * qty)) / (h.qty + qty) : price;
+              h.qty += qty;
+              trades.push({ date: new Date(c.t).toISOString().slice(0, 16), side: 'buy', symbol: 'BTC', price: +price.toFixed(2), qty: +qty.toFixed(6), total: +buyVal.toFixed(2), pnl: 0, pnlPct: 0, reason: 'EMA200 ' + distPct.toFixed(1) + '% (2nd tranche FULL)', regime: 'dma', commission: +comm.toFixed(2) });
+              dmaState.bought2 = true;
+            }
+            // SELL Level 1: price 0.5% above EMA200
+            if (distPct >= 0.5 && !dmaState.sold1 && posQty > 0) {
+              var sellQty = Math.min(dmaHalf / price, posQty);
+              var sellVal = sellQty * price;
+              var comm = sellVal * COMM;
+              cash += sellVal - comm;
+              totalCommission += comm;
+              var pnl = (price - pos.avgCost) * sellQty;
+              if (pnl > 0) wins++; else losses++;
+              trades.push({ date: new Date(c.t).toISOString().slice(0, 16), side: 'sell', symbol: 'BTC', price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (pos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (1st sell $50K)', regime: 'dma', commission: +comm.toFixed(2) });
+              pos.qty -= sellQty;
+              if (pos.qty <= 0.000001) delete holdings['BTC'];
+              dmaState.sold1 = true;
+              dmaState.bought1 = false;
+              dmaState.bought2 = false;
+            }
+            // SELL Level 2: price 1% above EMA200
+            if (distPct >= 1.0 && dmaState.sold1 && !dmaState.sold2 && holdings['BTC'] && holdings['BTC'].qty > 0) {
+              var remPos = holdings['BTC'];
+              var sellQty = remPos.qty;
+              var sellVal = sellQty * price;
+              var comm = sellVal * COMM;
+              cash += sellVal - comm;
+              totalCommission += comm;
+              var pnl = (price - remPos.avgCost) * sellQty;
+              if (pnl > 0) wins++; else losses++;
+              trades.push({ date: new Date(c.t).toISOString().slice(0, 16), side: 'sell', symbol: 'BTC', price: +price.toFixed(2), qty: +sellQty.toFixed(6), total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (remPos.avgCost * sellQty)) * 100).toFixed(2), reason: 'EMA200 +' + distPct.toFixed(1) + '% (2nd sell 100% CASH)', regime: 'dma', commission: +comm.toFixed(2) });
+              delete holdings['BTC'];
+              dmaState.sold2 = true;
+            }
+
+            // Record equity once per day
+            var dayKey = new Date(c.t).toISOString().slice(0, 10);
+            if (dayKey !== lastEquityDate) {
+              var hVal = holdings['BTC'] ? holdings['BTC'].qty * price : 0;
+              var equity = cash + hVal;
+              equityCurve.push({ date: dayKey, value: +equity.toFixed(2) });
+              if (equity > maxEquity) maxEquity = equity;
+              var dd = (maxEquity - equity) / maxEquity;
+              if (dd > maxDrawdown) maxDrawdown = dd;
+              lastEquityDate = dayKey;
+            }
+          }
+
+          // Close remaining positions at last known price
+          var lastPrice = 0;
+          for (var j = lines.length - 1; j >= 0; j--) {
+            if (lines[j]) { try { lastPrice = JSON.parse(lines[j]).c; break; } catch(e) {} }
+          }
+          if (holdings['BTC'] && holdings['BTC'].qty > 0 && lastPrice > 0) {
+            var rp = holdings['BTC'];
+            var sv = rp.qty * lastPrice;
+            var cm = sv * COMM;
+            cash += sv - cm;
+            totalCommission += cm;
+            var pnl = (lastPrice - rp.avgCost) * rp.qty;
+            if (pnl > 0) wins++; else losses++;
+            trades.push({ date: equityCurve.length > 0 ? equityCurve[equityCurve.length - 1].date : '', side: 'sell', symbol: 'BTC', price: +lastPrice.toFixed(2), qty: +rp.qty.toFixed(6), total: +sv.toFixed(2), pnl: +pnl.toFixed(2), pnlPct: +((pnl / (rp.avgCost * rp.qty)) * 100).toFixed(2), reason: 'Backtest End', regime: 'dma', commission: +cm.toFixed(2) });
+            delete holdings['BTC'];
+          }
+
+          var finalEquity = +cash.toFixed(2);
+          var totalReturn = (finalEquity - startCash) / startCash;
+          var buyHoldReturn = buyHoldStartPrice > 0 ? (lastPrice - buyHoldStartPrice) / buyHoldStartPrice : 0;
+
+          // Sharpe ratio (log returns, daily equity samples)
+          var dailyReturns = [];
+          for (var di = 1; di < equityCurve.length; di++) {
+            var pv = equityCurve[di - 1].value;
+            if (pv > 0) dailyReturns.push(Math.log(equityCurve[di].value / pv));
+          }
+          var avgR = dailyReturns.length > 0 ? dailyReturns.reduce(function(a, b) { return a + b; }, 0) / dailyReturns.length : 0;
+          var stdR = 0;
+          if (dailyReturns.length > 1) {
+            stdR = Math.sqrt(dailyReturns.reduce(function(a, b) { return a + Math.pow(b - avgR, 2); }, 0) / (dailyReturns.length - 1));
+          }
+          var sharpe = stdR > 0 ? (avgR / stdR) * Math.sqrt(252) : 0;
+
+          var result = {
+            metrics: {
+              totalReturn: +(totalReturn * 100).toFixed(2),
+              winRate: wins + losses > 0 ? +((wins / (wins + losses)) * 100).toFixed(1) : 0,
+              maxDrawdown: +(maxDrawdown * 100).toFixed(2),
+              sharpe: +sharpe.toFixed(3),
+              totalTrades: wins + losses,
+              totalOrders: trades.length,
+              buys: trades.filter(function(t) { return t.side === 'buy'; }).length,
+              sells: trades.filter(function(t) { return t.side === 'sell'; }).length,
+              wins: wins,
+              losses: losses,
+              totalCommission: +totalCommission.toFixed(2),
+              finalEquity: finalEquity,
+              startCash: startCash,
+              buyHoldReturn: +(buyHoldReturn * 100).toFixed(2),
+              days: equityCurve.length,
+              openPositionsClosed: 0,
+              circuitBreakerTriggered: false,
+              circuitBreakerCount: 0,
+              timeframe: '1m',
+              processedCandles: processedCandles,
+            },
+            equityCurve: equityCurve,
+            trades: trades,
+            priceHistory: {},
+            profile: profileId,
+            symbols: ['BTC'],
+            startDate: startDate,
+            timeframe: '1m',
+          };
+
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(result));
+          return; // Skip normal backtest flow
+        }
+
         var dataDir = path.join(__dirname, 'backtest', 'data');
         var allCandles = {}; // { BTC: [ {date, open, high, low, close, volume}, ... ] }
         var allDates = {};

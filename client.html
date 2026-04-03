@@ -406,6 +406,7 @@ function BacktestTab({ isMobile }) {
             <span style={{ color: "#6b7280" }}>Timeframe: <span style={{ color: btResult.timeframe === "1m" ? "#f59e0b" : "#f8fafc", fontWeight: 600 }}>{btResult.timeframe === "1m" ? "1 Minute" : "Daily"}</span></span>
             <span style={{ color: "#6b7280" }}>Period: <span style={{ color: "#f8fafc" }}>{btResult.startDate} to {eqData.length > 0 ? eqData[eqData.length - 1].date : "?"}</span></span>
             <span style={{ color: "#6b7280" }}>{btResult.timeframe === "1m" ? "Candles" : "Days"}: <span style={{ color: "#f8fafc" }}>{m.days}</span></span>
+            {m.processedCandles ? <span style={{ color: "#6b7280" }}>1m Candles: <span style={{ color: "#f8fafc" }}>{m.processedCandles.toLocaleString()}</span></span> : null}
             <span style={{ color: "#6b7280" }}>Assets: <span style={{ color: "#f8fafc" }}>{(btResult.symbols || []).length}</span></span>
             <span style={{ color: "#6b7280" }}>Commission: <span style={{ color: "#f59e0b" }}>${fK(m.totalCommission)}</span></span>
             <span style={{ color: "#6b7280" }}>Final: <span style={{ color: m.finalEquity >= m.startCash ? "#22c55e" : "#ef4444", fontWeight: 700 }}>${fK(m.finalEquity)}</span></span>

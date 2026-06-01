@@ -779,6 +779,29 @@ function App() {
           const msg = JSON.parse(e.data);
           if (msg.type === 'init' || msg.type === 'update') {
             setState(msg.data);
+          } else if (msg.type === 'prices') {
+            // Lightweight 2s delta: merge only the fields that change every tick
+            // (current prices + portfolio totals) into the last full snapshot,
+            // keeping candles/indicators/orders/history. Avoids re-sending ~800KB/2s.
+            setState(prev => {
+              if (!prev) return prev; // wait for the first full snapshot
+              const prices = { ...prev.prices };
+              if (msg.prices) {
+                for (const sym in msg.prices) {
+                  if (prices[sym]) prices[sym] = { ...prices[sym], cur: msg.prices[sym] };
+                }
+              }
+              let portfolios = prev.portfolios;
+              if (msg.portfolios) {
+                const byId = {};
+                msg.portfolios.forEach(p => { byId[p.id] = p; });
+                portfolios = prev.portfolios.map(pf => {
+                  const u = byId[pf.id];
+                  return u ? { ...pf, cash: u.cash, hVal: u.hVal, totalValue: u.totalValue, pnl: u.pnl } : pf;
+                });
+              }
+              return { ...prev, prices, portfolios, tick: msg.tick != null ? msg.tick : prev.tick };
+            });
           } else if (msg.type === 'backtestProgress') {
             window._btProgress = msg.pct || 0;
             if (window._setBtProgress) window._setBtProgress(msg.pct || 0);
@@ -797,7 +820,12 @@ function App() {
 
   const sendWs = useCallback(function(msg) {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
+      // Attach the admin token (if the operator opened the page with ?token=...).
+      // Mutating commands (reset/resume/updateConfig) are rejected server-side
+      // without it when an ADMIN_TOKEN is configured.
+      var adminToken = '';
+      try { adminToken = new URLSearchParams(window.location.search).get('token') || ''; } catch (e) {}
+      wsRef.current.send(JSON.stringify(adminToken ? Object.assign({}, msg, { token: adminToken }) : msg));
     }
   }, []);
   const resetPf = useCallback(function(id) { sendWs({ type: 'reset', id: id }); }, [sendWs]);

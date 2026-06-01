@@ -1,5 +1,7 @@
 node_modules/
 state.json
+state.json.tmp
+state.json.bak
 ngrok_recovery_codes.txt
 .env
 logs/

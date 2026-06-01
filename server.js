@@ -13,15 +13,24 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const PORT = 3000;
-const TICK_MS = 2000;
-const CANDLE_TICKS = 30; // 30 ticks x 2s = 60 seconds = 1 minute candles
+// Operational/economic settings. All overridable via env so the same code can run
+// on a different port, with different capital, or different fee/slippage assumptions
+// without editing source (e.g. PORT=3999 node server.js for a test instance).
+function envNum(name, def) { var v = parseFloat(process.env[name]); return isNaN(v) ? def : v; }
+const PORT = parseInt(process.env.PORT, 10) || 3000;
+const TICK_MS = envNum('TICK_MS', 2000);
+const CANDLE_TICKS = envNum('CANDLE_TICKS', 30); // 30 ticks x 2s = 60 seconds = 1 minute candles
 const PRICE_FETCH_INTERVAL = 30000;
-const DEFAULT_CASH = 100000;
-const COMMISSION_RATE = 0.001; // 0.1% commission per trade
-const SLIPPAGE_PCT = 0.0005; // 0.05% default slippage
+const DEFAULT_CASH = envNum('DEFAULT_CASH', 100000);
+const COMMISSION_RATE = envNum('COMMISSION_RATE', 0.001); // 0.1% commission per trade
+const SLIPPAGE_PCT = envNum('SLIPPAGE_PCT', 0.0005); // 0.05% default slippage
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
+// Optional admin token. When set, state-MUTATING actions (portfolio reset, resume,
+// live config changes) require a matching token; reads stay public (shared demo).
+// When unset, behaviour is unchanged (a startup warning is logged).
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+function isAuthorized(token) { return !ADMIN_TOKEN || token === ADMIN_TOKEN; }
 // Cooldown per profile (ms) - increased based on backtest (1h data = all negative)
 // Fewer trades = less commission drag = better returns
 // Cooldowns very high — commission was killing all returns
@@ -32,301 +41,24 @@ const COOLDOWNS = {
   aggressive: 900000,    // 15 minutes
   yolo: 600000,          // 10 minutes
 };
-const STATE_FILE = path.resolve(__dirname, 'state.json');
-const STATE_SAVE_INTERVAL = 10000; // Save state every 10 seconds
+const STATE_FILE = process.env.STATE_FILE ? path.resolve(process.env.STATE_FILE) : path.resolve(__dirname, 'state.json');
+const STATE_SAVE_INTERVAL = envNum('STATE_SAVE_INTERVAL', 10000); // Save state every 10 seconds
 
-// ─── ASSET DEFINITIONS ───
-const COINS = {
-  // Crypto (20) - real-time via Binance WebSocket + CoinGecko fallback
-  BTC: { name: "Bitcoin", cgId: "bitcoin", type: "crypto" },
-  ETH: { name: "Ethereum", cgId: "ethereum", type: "crypto" },
-  SOL: { name: "Solana", cgId: "solana", type: "crypto" },
-  BNB: { name: "BNB", cgId: "binancecoin", type: "crypto" },
-  XRP: { name: "Ripple", cgId: "ripple", type: "crypto" },
-  ADA: { name: "Cardano", cgId: "cardano", type: "crypto" },
-  AVAX: { name: "Avalanche", cgId: "avalanche-2", type: "crypto" },
-  DOGE: { name: "Dogecoin", cgId: "dogecoin", type: "crypto" },
-  DOT: { name: "Polkadot", cgId: "polkadot", type: "crypto" },
-  LINK: { name: "Chainlink", cgId: "chainlink", type: "crypto" },
-  MATIC: { name: "Polygon", cgId: "matic-network", type: "crypto" },
-  UNI: { name: "Uniswap", cgId: "uniswap", type: "crypto" },
-  ATOM: { name: "Cosmos", cgId: "cosmos", type: "crypto" },
-  LTC: { name: "Litecoin", cgId: "litecoin", type: "crypto" },
-  NEAR: { name: "NEAR", cgId: "near", type: "crypto" },
-  APT: { name: "Aptos", cgId: "aptos", type: "crypto" },
-  ARB: { name: "Arbitrum", cgId: "arbitrum", type: "crypto" },
-  OP: { name: "Optimism", cgId: "optimism", type: "crypto" },
-  SUI: { name: "Sui", cgId: "sui", type: "crypto" },
-  FIL: { name: "Filecoin", cgId: "filecoin", type: "crypto" },
-  // Commodity - real-time via Twelve Data (XAU/USD)
-  GOLD: { name: "Gold", type: "commodity", tdSymbol: "XAU/USD" },
-  // Stocks (20) - real-time via Twelve Data API
-  AAPL: { name: "Apple", type: "stock", tdSymbol: "AAPL" },
-  MSFT: { name: "Microsoft", type: "stock", tdSymbol: "MSFT" },
-  GOOGL: { name: "Alphabet", type: "stock", tdSymbol: "GOOGL" },
-  AMZN: { name: "Amazon", type: "stock", tdSymbol: "AMZN" },
-  NVDA: { name: "NVIDIA", type: "stock", tdSymbol: "NVDA" },
-  META: { name: "Meta", type: "stock", tdSymbol: "META" },
-  TSLA: { name: "Tesla", type: "stock", tdSymbol: "TSLA" },
-  JPM: { name: "JPMorgan", type: "stock", tdSymbol: "JPM" },
-  V: { name: "Visa", type: "stock", tdSymbol: "V" },
-  WMT: { name: "Walmart", type: "stock", tdSymbol: "WMT" },
-  NFLX: { name: "Netflix", type: "stock", tdSymbol: "NFLX" },
-  AMD: { name: "AMD", type: "stock", tdSymbol: "AMD" },
-  CRM: { name: "Salesforce", type: "stock", tdSymbol: "CRM" },
-  ORCL: { name: "Oracle", type: "stock", tdSymbol: "ORCL" },
-  INTC: { name: "Intel", type: "stock", tdSymbol: "INTC" },
-  DIS: { name: "Disney", type: "stock", tdSymbol: "DIS" },
-  BA: { name: "Boeing", type: "stock", tdSymbol: "BA" },
-  PYPL: { name: "PayPal", type: "stock", tdSymbol: "PYPL" },
-  UBER: { name: "Uber", type: "stock", tdSymbol: "UBER" },
-  COIN: { name: "Coinbase", type: "stock", tdSymbol: "COIN" },
-};
-
-// ─── TA FUNCTIONS ───
-function ema(data, period) {
-  if (data.length < period) return null;
-  const k = 2 / (period + 1);
-  let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < data.length; i++) e = data[i] * k + e * (1 - k);
-  return e;
-}
-function emaArray(data, period) {
-  if (data.length < period) return [];
-  const k = 2 / (period + 1);
-  const res = [];
-  let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  res.push(e);
-  for (let i = period; i < data.length; i++) { e = data[i] * k + e * (1 - k); res.push(e); }
-  return res;
-}
-function calcRSI(closes, period = 14) {
-  if (closes.length < period + 1) return 50;
-  let gains = 0, losses = 0;
-  for (let i = closes.length - period; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  const ag = gains / period, al = losses / period;
-  if (al === 0) return 100;
-  return 100 - 100 / (1 + ag / al);
-}
-function calcMACD(closes) {
-  if (closes.length < 26) return { macd: 0, signal: 0, hist: 0 };
-  const e12 = emaArray(closes, 12);
-  const e26 = emaArray(closes, 26);
-  const minLen = Math.min(e12.length, e26.length);
-  const macdLine = [];
-  for (let i = 0; i < minLen; i++) macdLine.push(e12[e12.length - minLen + i] - e26[e26.length - minLen + i]);
-  const signal = macdLine.length >= 9 ? ema(macdLine, 9) : 0;
-  const macd = macdLine[macdLine.length - 1] || 0;
-  return { macd, signal, hist: macd - signal };
-}
-function calcBB(closes, period = 20) {
-  if (closes.length < period) return { upper: 0, mid: 0, lower: 0 };
-  const slice = closes.slice(-period);
-  const mid = slice.reduce((a, b) => a + b, 0) / period;
-  const std = Math.sqrt(slice.reduce((a, b) => a + (b - mid) ** 2, 0) / period);
-  return { upper: mid + 2 * std, mid, lower: mid - 2 * std };
-}
-function calcStoch(highs, lows, closes, period = 14) {
-  if (closes.length < period) return { k: 50, d: 50 };
-  const h = Math.max(...highs.slice(-period));
-  const l = Math.min(...lows.slice(-period));
-  const k = h === l ? 50 : ((closes[closes.length - 1] - l) / (h - l)) * 100;
-  return { k, d: k };
-}
-function calcADX(highs, lows, closes, period = 14) {
-  if (closes.length < period + 1) return 20;
-  let sumDX = 0;
-  for (let i = closes.length - period; i < closes.length; i++) {
-    const tr = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
-    const dm = highs[i] - highs[i - 1] > lows[i - 1] - lows[i] ? Math.max(highs[i] - highs[i - 1], 0) : 0;
-    sumDX += tr > 0 ? (dm / tr) * 100 : 0;
-  }
-  return sumDX / period;
-}
-
-// ─── SIGNAL DEFINITIONS ───
-// Each signal evaluates to a label (truthy) or null (no signal)
-// Signals are scored: buy signals = +1, sell signals = -1
-// Trade executes when net score meets profile threshold
-// Weights optimized via backtest on 20 cryptos (2017-2026)
-// Key changes: Breakout reduced (was over-dominant), sell signals boosted,
-// EMA50 bounce requires confirmation (handled in evalSignal)
-const SIGNALS = [
-  // Buy signals - weights calibrated by backtest win contribution
-  { id: "rsi_ob", label: "RSI Oversold", side: "buy", category: "mean-reversion", weight: 1.0 },
-  { id: "macd_cross_b", label: "MACD Cross Buy", side: "buy", category: "trend", weight: 1.5 },
-  { id: "bb_lower", label: "BB Lower", side: "buy", category: "mean-reversion", weight: 1.0 },
-  { id: "ema_golden", label: "Golden Cross", side: "buy", category: "trend", weight: 2.0 },
-  { id: "ema50_bounce", label: "EMA50 Bounce", side: "buy", category: "trend", weight: 0.5 },  // Reduced: over-triggered in 1min
-  { id: "stoch_ob", label: "Stoch Oversold", side: "buy", category: "mean-reversion", weight: 0.8 },
-  { id: "vol_spike_b", label: "Vol Spike Buy", side: "buy", category: "momentum", weight: 1.2 },
-  { id: "hammer", label: "Hammer", side: "buy", category: "pattern", weight: 0.8 },  // Reduced: too frequent
-  { id: "engulf_b", label: "Bull Engulfing", side: "buy", category: "pattern", weight: 1.5 },
-  { id: "vwap_buy", label: "Below VWAP", side: "buy", category: "neutral", weight: 0.5 },  // Neutral: VWAP is reference, not mean-reversion
-  { id: "adx_trend_b", label: "ADX Trend Buy", side: "buy", category: "trend", weight: 1.0 },
-  { id: "fib_buy", label: "Fib 61.8%", side: "buy", category: "mean-reversion", weight: 0.8 },
-  { id: "dip_rsi_macd", label: "RSI+MACD Buy", side: "buy", category: "combo", weight: 2.5 },  // Best combo signal
-  { id: "breakout_high", label: "Breakout", side: "buy", category: "momentum", weight: 0.8 },  // Reduced from 1.5: was 3713 trades
-  { id: "ema200_trend", label: "EMA200 Trend", side: "buy", category: "trend", weight: 1.5 },
-  // Sell signals - weights boosted to fix buy/sell imbalance
-  { id: "rsi_os", label: "RSI Overbought", side: "sell", category: "mean-reversion", weight: 1.2 },
-  { id: "macd_cross_s", label: "MACD Cross Sell", side: "sell", category: "trend", weight: 1.8 },  // Boosted
-  { id: "bb_upper", label: "BB Upper", side: "sell", category: "mean-reversion", weight: 1.2 },
-  { id: "ema_death", label: "Death Cross", side: "sell", category: "trend", weight: 2.5 },  // Boosted
-  { id: "stoch_os", label: "Stoch Overbought", side: "sell", category: "mean-reversion", weight: 1.2 },
-  { id: "vol_spike_s", label: "Vol Spike Sell", side: "sell", category: "momentum", weight: 1.5 },  // Boosted
-  { id: "shooting_star", label: "Shooting Star", side: "sell", category: "pattern", weight: 1.2 },
-  { id: "engulf_s", label: "Bear Engulfing", side: "sell", category: "pattern", weight: 2.0 },  // Boosted
-  { id: "vwap_sell", label: "Above VWAP", side: "sell", category: "neutral", weight: 0.8 },  // Neutral: VWAP is reference
-  { id: "dip_rsi_macd_s", label: "RSI+MACD Sell", side: "sell", category: "combo", weight: 2.5 },
-  { id: "breakdown", label: "Breakdown", side: "sell", category: "momentum", weight: 1.8 },  // Boosted
-  { id: "ema200_break", label: "EMA200 Break", side: "sell", category: "trend", weight: 1.5 },
-  // Risk management (always independent - bypass scoring)
-  { id: "tp_pct", label: "Take Profit", side: "sell", category: "risk", weight: 0 },
-  { id: "sl_pct", label: "Stop Loss", side: "sell", category: "risk", weight: 0 },
-  { id: "trailing", label: "Trailing Stop", side: "sell", category: "risk", weight: 0 },
-];
-
-// For backward compat with old code
-var STRATS = SIGNALS;
-
-// ─── MARKET REGIME DETECTION ───
-// trending: ADX > 25, good for crossover/breakout
-// ranging: ADX < 20, good for mean-reversion (RSI, BB)
-// volatile: high stddev, reduce position sizes
-function detectRegime(sd) {
-  if (!sd || sd.candles.length < 20) return { type: 'warming up', adx: 20, volatility: 0 };
-  var adx = sd.adx || 20;
-  // Calculate recent volatility (stddev of last 20 closes / mean)
-  var closes = sd.candles.slice(-20).map(function(c) { return c.c; });
-  var mean = closes.reduce(function(a, b) { return a + b; }, 0) / closes.length;
-  var stddev = Math.sqrt(closes.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / closes.length);
-  var volPct = mean > 0 ? (stddev / mean) * 100 : 0;
-
-  var type = 'mixed';
-  if (adx >= 25) type = 'trending';
-  else if (adx <= 18) type = 'ranging';
-
-  return { type: type, adx: adx, volatility: volPct };
-}
-
-// ─── SIGNAL EVALUATOR ───
-// Returns label string if signal fires, null otherwise
-function evalSignal(sigId, val, sd, pos, peakPrice) {
-  if (!sd || sd.candles.length < 5) return null;
-  var candles = sd.candles;
-  var lastCandle = candles[candles.length - 1];
-  var prevCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
-  switch (sigId) {
-    case "rsi_ob": if (sd.rsi <= val) return 'RSI ' + sd.rsi.toFixed(0); break;
-    case "rsi_os": if (pos && pos.qty > 0 && sd.rsi >= val) return 'RSI ' + sd.rsi.toFixed(0); break;
-    case "macd_cross_b": if (sd.macd.hist > 0 && sd.prevMacdHist <= 0) return 'MACD↑'; break;
-    case "macd_cross_s": if (pos && pos.qty > 0 && sd.macd.hist < 0 && sd.prevMacdHist >= 0) return 'MACD↓'; break;
-    case "bb_lower": if (sd.bb.lower > 0 && sd.cur <= sd.bb.lower * (1 - val / 100)) return 'BB lower'; break;
-    case "bb_upper": if (pos && pos.qty > 0 && sd.bb.upper > 0 && sd.cur >= sd.bb.upper * (1 + val / 100)) return 'BB upper'; break;
-    case "ema_golden": if (sd.ema9 > sd.ema21 && candles.length > 21) { var prevE9 = ema(candles.slice(0, -1).map(function(c){return c.c;}), 9); if (prevE9 && prevE9 <= sd.ema21) return 'Golden cross'; } break;
-    case "ema_death": if (pos && pos.qty > 0 && sd.ema9 < sd.ema21 && candles.length > 21) { var prevE9b = ema(candles.slice(0, -1).map(function(c){return c.c;}), 9); if (prevE9b && prevE9b >= sd.ema21) return 'Death cross'; } break;
-    case "ema50_bounce": if (sd.ema50 > 0 && prevCandle) { var dist = ((sd.cur - sd.ema50) / sd.ema50) * 100; if (dist >= 0 && dist <= val && lastCandle.c > lastCandle.o && prevCandle.c < prevCandle.o) return 'EMA50 bounce'; } break;
-    case "stoch_ob": if (sd.stoch.k <= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
-    case "stoch_os": if (pos && pos.qty > 0 && sd.stoch.k >= val) return 'Stoch K=' + sd.stoch.k.toFixed(0); break;
-    case "vol_spike_b": if (candles.length >= 10) { var avgV = candles.slice(-10).reduce(function(a,c2){return a+c2.v;},0)/10; if (lastCandle.v > avgV * val && lastCandle.c > lastCandle.o) return 'Vol ' + (lastCandle.v/avgV).toFixed(1) + 'x'; } break;
-    case "vol_spike_s": if (pos && pos.qty > 0 && candles.length >= 10) { var avgV2 = candles.slice(-10).reduce(function(a,c2){return a+c2.v;},0)/10; if (lastCandle.v > avgV2 * val && lastCandle.c < lastCandle.o) return 'Vol sell'; } break;
-    case "hammer": if (prevCandle && lastCandle) { var body = Math.abs(lastCandle.c - lastCandle.o); var lw = Math.min(lastCandle.o, lastCandle.c) - lastCandle.l; if (lw > body * 2 && lastCandle.c > lastCandle.o) return 'Hammer'; } break;
-    case "shooting_star": if (pos && pos.qty > 0 && lastCandle) { var body2 = Math.abs(lastCandle.c - lastCandle.o); var uw = lastCandle.h - Math.max(lastCandle.o, lastCandle.c); if (uw > body2 * 2 && lastCandle.c < lastCandle.o) return 'Shooting star'; } break;
-    case "engulf_b": if (prevCandle && lastCandle && prevCandle.c < prevCandle.o && lastCandle.c > lastCandle.o && lastCandle.c > prevCandle.o && lastCandle.o < prevCandle.c) return 'Bull engulf'; break;
-    case "engulf_s": if (pos && pos.qty > 0 && prevCandle && lastCandle && prevCandle.c > prevCandle.o && lastCandle.c < lastCandle.o && lastCandle.c < prevCandle.o && lastCandle.o > prevCandle.c) return 'Bear engulf'; break;
-    case "vwap_buy": if (sd.vwap > 0) { var vd = ((sd.vwap - sd.cur) / sd.vwap) * 100; if (vd >= val) return 'Below VWAP'; } break;
-    case "vwap_sell": if (pos && pos.qty > 0 && sd.vwap > 0) { var vd2 = ((sd.cur - sd.vwap) / sd.vwap) * 100; if (vd2 >= val) return 'Above VWAP'; } break;
-    case "adx_trend_b": if (sd.adx >= val && sd.cur > sd.ema21) return 'ADX ' + sd.adx.toFixed(0); break;
-    case "fib_buy": if (candles.length >= 20) { var hi = Math.max.apply(null, candles.slice(-20).map(function(c2){return c2.h;})); var lo = Math.min.apply(null, candles.slice(-20).map(function(c2){return c2.l;})); var fib = hi - (hi - lo) * val; if (sd.cur <= fib && sd.cur > lo) return 'Fib'; } break;
-    case "dip_rsi_macd": if (sd.rsi < val && sd.macd.hist > 0 && sd.prevMacdHist <= 0) return 'RSI+MACD↑'; break;
-    case "dip_rsi_macd_s": if (pos && pos.qty > 0 && sd.rsi > val && sd.macd.hist < 0 && sd.prevMacdHist >= 0) return 'RSI+MACD↓'; break;
-    case "breakout_high": { var n = Math.floor(val); if (candles.length >= n) { var bhi = Math.max.apply(null, candles.slice(-n - 1, -1).map(function(c2){return c2.h;})); if (sd.cur > bhi) return 'Breakout'; } break; }
-    case "breakdown": if (pos && pos.qty > 0 && candles.length >= Math.floor(val)) { var blo = Math.min.apply(null, candles.slice(-Math.floor(val) - 1, -1).map(function(c2){return c2.l;})); if (sd.cur < blo) return 'Breakdown'; } break;
-    case "tp_pct": if (pos && pos.qty > 0) {
-      var pl = ((sd.cur - pos.avgCost) / pos.avgCost) * 100;
-      // Dynamic TP: in trending market, let profits run (3x TP target)
-      // In ranging market, take profits early (1x TP target)
-      var tpMult = 1.0;
-      if (sd.adx >= 25) tpMult = 3.0;  // trending: 3x TP (e.g., 2% -> 6%)
-      else if (sd.adx >= 18) tpMult = 2.0; // mixed: 2x TP
-      // else ranging: 1x TP (original value)
-      if (pl >= val * tpMult) return 'TP +' + pl.toFixed(1) + '%';
-    } break;
-    case "sl_pct": if (pos && pos.qty > 0) { var pl2 = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl2 <= -val) return 'SL ' + pl2.toFixed(1) + '%'; } break;
-    case "trailing": if (pos && pos.qty > 0 && peakPrice) { var dr = ((peakPrice - sd.cur) / peakPrice) * 100; if (dr >= val) return 'Trail -' + dr.toFixed(1) + '%'; } break;
-    case "ema200_trend": if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { var pc = (candles[candles.length - 2] || {}).c; if (pc && pc <= sd.ema200) return 'Above EMA200'; } break;
-    case "ema200_break": if (pos && pos.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { var pc2 = (candles[candles.length - 2] || {}).c; if (pc2 && pc2 >= sd.ema200) return 'Below EMA200'; } break;
-  }
-  return null;
-}
-
-// ─── PORTFOLIO PROFILES ───
-// buyThreshold: minimum weighted score to trigger buy (higher = more confirmation needed)
-// sellThreshold: minimum weighted score to trigger sell
-// cashPct: % of available cash per trade
-// Risk signals (TP/SL/Trailing) always execute immediately (bypass scoring)
-// Profiles optimized via backtest on 20 cryptos (2017-2026)
-// Key changes: sell thresholds lowered (was 1.0 everywhere - too high for sells to fire),
-// TP/SL recalibrated for commission-adjusted R:R, cooldowns increased
-// OPTIMIZED v3: Dynamic TP, loose trailing (let trends run), fewer trades
-// Previous issue: TP too tight (2-5%) + too many trades = commission kills returns
-// Fix: TP 5-15% base (3x in trends), trailing 3-8%, higher buy thresholds
-var PROFILES = [
-  { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
-    desc: "Few high-conviction trades, tight risk control",
-    assets: Object.keys(COINS), cashPct: 0.15, buyThreshold: 4.5, sellThreshold: 1.0,
-    overrides: {
-      rsi_ob: 22, rsi_os: 78, stoch_ob: 15, stoch_os: 85,
-      tp_pct: 5.0, sl_pct: 2.0, trailing: 3.0,  // Wide trailing lets trends run
-      bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
-      breakout_high: 25, breakdown: 15, dip_rsi_macd: 28, dip_rsi_macd_s: 72,
-      vwap_sell: 0.03, vwap_buy: 0.05,
-      slippage: 0.0003,
-    } },
-  { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
-    desc: "Balanced approach, trend-following bias",
-    assets: Object.keys(COINS), cashPct: 0.20, buyThreshold: 4.0, sellThreshold: 1.0,
-    overrides: {
-      rsi_ob: 28, rsi_os: 72, stoch_ob: 20, stoch_os: 80,
-      tp_pct: 8.0, sl_pct: 3.0, trailing: 4.0,  // Let winners run longer
-      bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 1.2,
-      breakout_high: 18, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
-      vwap_sell: 0.05, vwap_buy: 0.08,
-      slippage: 0.0005,
-    } },
-  { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
-    desc: "Trend-following, wider stops, bigger moves",
-    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3.5, sellThreshold: 1.0,
-    overrides: {
-      rsi_ob: 32, rsi_os: 68, stoch_ob: 25, stoch_os: 75,
-      tp_pct: 12.0, sl_pct: 4.0, trailing: 5.0,  // Catch big moves
-      bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.0,
-      breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
-      ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 22,
-      slippage: 0.0007,
-    } },
-  { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
-    desc: "Maximum trend capture, high volatility tolerance",
-    assets: Object.keys(COINS), cashPct: 0.30, buyThreshold: 3.0, sellThreshold: 0.8,
-    overrides: {
-      rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70,
-      tp_pct: 15.0, sl_pct: 5.0, trailing: 8.0,  // Very wide: catch full trends
-      bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.2, vol_spike_s: 0.8,
-      breakout_high: 8, breakdown: 5, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
-      ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 18,
-      slippage: 0.001,
-    } },
-];
+// ─── ASSET DEFINITIONS, TA, SIGNALS & STRATEGY LOGIC (shared with backtest) ───
+// Previously defined inline here AND duplicated (and drifted) in
+// backtest/backtest.js. They now live in one module so the backtest provably
+// runs the same strategy logic as live trading.
+const {
+  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
+  SIGNALS, STRATS, detectRegime, evalSignal, PROFILES, scoreSignals,
+} = require("./engine-core");
 
 // ─── SERVER STATE ───
 let marketData = {};  // { BTC: { cur, candles, building, rsi, macd, ... }, ... }
 let portfolios = [];
 let tickCount = 0;
 let lastPrices = {}; // last fetched real prices
+let seededFromHistory = false; // true once the 4 portfolios are warm-started from ~1yr of history (persisted)
 
 // Initialize market data
 Object.entries(COINS).forEach(([sym, c]) => {
@@ -357,7 +89,7 @@ portfolios = PROFILES.map(p => ({
   id: p.id, name: p.name, color: p.color, icon: p.icon, desc: p.desc,
   cash: DEFAULT_CASH, startCash: DEFAULT_CASH, holdings: {}, orders: [],
   actives: buildStrategies(p), peaks: {},
-  history: [{ t: 0, value: DEFAULT_CASH }],
+  history: [{ t: Date.now(), value: DEFAULT_CASH }],
   tradeCount: 0, wins: 0, losses: 0,
 }));
 
@@ -366,50 +98,82 @@ portfolios.push({
   id: 'dma', name: 'KRAL Trend', color: '#8b5cf6', icon: '\u{1F451}', desc: 'BTC only - EMA200 band strategy: buy at -1%/-2%, sell at +1%/+2%',
   cash: DEFAULT_CASH, startCash: DEFAULT_CASH, holdings: {}, orders: [],
   actives: [], peaks: {},
-  history: [{ t: 0, value: DEFAULT_CASH }],
+  history: [{ t: Date.now(), value: DEFAULT_CASH }],
   tradeCount: 0, wins: 0, losses: 0, totalCommission: 0,
 });
 
 // ─── STATE PERSISTENCE ───
-function saveState() {
-  try {
-    var savedMarket = {};
-    Object.keys(marketData).forEach(function(sym) {
-      var sd = marketData[sym];
-      savedMarket[sym] = {
-        candles: sd.candles.slice(-200), cur: sd.cur,
-        rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
-        ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
-        stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
-      };
-    });
-    var state = {
-      portfolios: portfolios.map(function(pf) {
-        return {
-          id: pf.id, cash: pf.cash, startCash: pf.startCash,
-          holdings: pf.holdings, orders: pf.orders.slice(0, 100),
-          peaks: pf.peaks, history: pf.history.slice(-500),
-          tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
-          totalCommission: pf.totalCommission || 0,
-        };
-      }),
-      marketData: savedMarket,
-      savedAt: new Date().toISOString(),
+// Atomic write: serialize -> write to a temp file -> rename onto state.json.
+// rename(2) is atomic on the same filesystem, so a crash mid-write can never
+// truncate the live state.json. A rolling .bak of the last good file is kept
+// for recovery, and the periodic save runs async so it never blocks the tick.
+var stateSaveInProgress = false;
+var stateSaveCount = 0;
+var lastStateSaveAt = null; // wall-clock of last successful save (for /api/health)
+
+function buildStateSnapshot() {
+  var savedMarket = {};
+  Object.keys(marketData).forEach(function(sym) {
+    var sd = marketData[sym];
+    savedMarket[sym] = {
+      candles: sd.candles.slice(-200), cur: sd.cur,
+      rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
+      ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
+      stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
     };
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state));
-    console.log('[' + new Date().toLocaleTimeString() + '] State saved (' + Object.keys(savedMarket).length + ' assets, ' + portfolios.length + ' portfolios)');
+  });
+  return {
+    portfolios: portfolios.map(function(pf) {
+      return {
+        id: pf.id, cash: pf.cash, startCash: pf.startCash,
+        holdings: pf.holdings, orders: pf.orders.slice(0, 100),
+        peaks: pf.peaks, history: pf.history.slice(-1000),
+        tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
+        totalCommission: pf.totalCommission || 0,
+      };
+    }),
+    marketData: savedMarket,
+    seededFromHistory: seededFromHistory,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function saveState(opts) {
+  opts = opts || {};
+  var tmp = STATE_FILE + '.tmp';
+  try {
+    var json = JSON.stringify(buildStateSnapshot());
+    if (opts.sync) {
+      // Used on shutdown — must complete before the process exits.
+      fs.writeFileSync(tmp, json);
+      fs.renameSync(tmp, STATE_FILE);
+      lastStateSaveAt = Date.now();
+      return;
+    }
+    if (stateSaveInProgress) return; // a previous async save is still flushing
+    stateSaveInProgress = true;
+    fs.writeFile(tmp, json, function(err) {
+      if (err) { stateSaveInProgress = false; console.log('Failed to write state:', err.message); return; }
+      // Refresh the rolling backup roughly every ~5 min (best-effort) before replacing the live file.
+      var doBackup = (stateSaveCount++ % 30 === 0) && fs.existsSync(STATE_FILE);
+      var finishRename = function() {
+        fs.rename(tmp, STATE_FILE, function(err2) {
+          stateSaveInProgress = false;
+          if (err2) console.log('Failed to rename state:', err2.message);
+          else lastStateSaveAt = Date.now();
+        });
+      };
+      if (doBackup) fs.copyFile(STATE_FILE, STATE_FILE + '.bak', function() { finishRename(); });
+      else finishRename();
+    });
   } catch (e) {
+    stateSaveInProgress = false;
     console.log('Failed to save state:', e.message);
   }
 }
 
-function loadState() {
-  try {
-    if (!fs.existsSync(STATE_FILE)) return false;
-    const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    const state = JSON.parse(raw);
-    if (!state.portfolios || !state.marketData) return false;
-
+function applyState(state) {
+    seededFromHistory = !!state.seededFromHistory;
     // Restore portfolios
     state.portfolios.forEach(saved => {
       const pf = portfolios.find(p => p.id === saved.id);
@@ -426,7 +190,7 @@ function loadState() {
       });
       pf.orders = saved.orders || [];
       pf.peaks = saved.peaks || {};
-      pf.history = saved.history || [{ t: 0, value: DEFAULT_CASH }];
+      pf.history = saved.history || [{ t: Date.now(), value: DEFAULT_CASH }];
       pf.tradeCount = saved.tradeCount || 0;
       pf.wins = saved.wins || 0;
       pf.losses = saved.losses || 0;
@@ -451,16 +215,69 @@ function loadState() {
       marketData[sym].prevMacdHist = saved.prevMacdHist || 0;
     });
 
-    console.log('[' + new Date().toLocaleTimeString() + '] Restored state from ' + state.savedAt);
-    state.portfolios.forEach(p => {
-      const hVal = Object.entries(p.holdings).reduce((s, [sym, h]) => s + ((h && h.qty) || 0) * (lastPrices[sym] || (marketData[sym] && marketData[sym].cur) || 0), 0);
-      console.log('  ' + p.id + ': $' + (p.cash + hVal).toFixed(0) + ' (' + p.tradeCount + ' trades)');
-    });
-    return true;
-  } catch (e) {
-    console.log('Failed to load state:', e.message);
-    return false;
+}
+
+function loadState() {
+  // Try the live file first, then the rolling backup. This prevents a single
+  // corrupt/truncated save from silently wiping all accumulated history.
+  var candidates = [STATE_FILE, STATE_FILE + '.bak'];
+  for (var i = 0; i < candidates.length; i++) {
+    var file = candidates[i];
+    try {
+      if (!fs.existsSync(file)) continue;
+      var raw = fs.readFileSync(file, 'utf8');
+      var state = JSON.parse(raw);
+      if (!state.portfolios || !state.marketData) { console.log('State file ' + file + ' missing required fields; trying next.'); continue; }
+      applyState(state);
+      if (i > 0) console.log('WARNING: primary state.json was unreadable — recovered from backup (' + file + ').');
+      console.log('[' + new Date().toLocaleTimeString() + '] Restored state from ' + state.savedAt);
+      state.portfolios.forEach(function(p) {
+        var hVal = Object.entries(p.holdings).reduce(function(s, entry) { var sym = entry[0], h = entry[1]; return s + ((h && h.qty) || 0) * (lastPrices[sym] || (marketData[sym] && marketData[sym].cur) || 0); }, 0);
+        console.log('  ' + p.id + ': $' + (p.cash + hVal).toFixed(0) + ' (' + p.tradeCount + ' trades)');
+      });
+      return true;
+    } catch (e) {
+      console.log('Failed to load state from ' + file + ':', e.message);
+    }
   }
+  console.log('WARNING: no usable state file found — starting fresh with default portfolios.');
+  return false;
+}
+
+// ─── DURABLE TRADE LEDGER ───
+// pf.orders is capped at 200 in memory (and 100 on disk) for the live UI, so over
+// a long 24/7 run older trades are silently lost. Append every executed trade to a
+// per-day NDJSON file so the full history survives the cap, restarts, and is
+// queryable afterwards. Writes are async (non-blocking) and best-effort.
+var LOG_DIR = path.resolve(__dirname, 'logs');
+function appendTradeLog(pfId, order) {
+  try {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    var day = new Date().toISOString().slice(0, 10);
+    var entry = Object.assign({ portfolio: pfId, loggedAt: new Date().toISOString() }, order);
+    fs.appendFile(path.join(LOG_DIR, 'trades-' + day + '.ndjson'), JSON.stringify(entry) + '\n', function(err) {
+      if (err) console.log('Failed to append trade log:', err.message);
+    });
+  } catch (e) { console.log('Failed to append trade log:', e.message); }
+}
+// Single chokepoint for recording an executed trade: keep the capped in-memory
+// array for the UI AND persist to the durable ledger.
+function recordOrder(pf, order) {
+  pf.orders = [order].concat(pf.orders).slice(0, 200);
+  appendTradeLog(pf.id, order);
+  fullSnapshotDue = true; // ensure the next broadcast pushes fresh orders/holdings
+}
+
+// Record ONE equity point per calendar day (the current day's point is updated
+// intraday). This keeps the equity curve at daily resolution so the seeded ~1-year
+// baseline stays visible long-term instead of being scrolled out by per-minute points.
+function recordEquityPoint(pf, value) {
+  var now = Date.now();
+  var dayKey = new Date(now).toISOString().slice(0, 10);
+  var last = pf.history[pf.history.length - 1];
+  if (last && last.day === dayKey) { last.value = value; last.t = now; }
+  else { pf.history.push({ t: now, value: value, day: dayKey }); }
+  if (pf.history.length > 1200) pf.history = pf.history.slice(-1200);
 }
 
 // ─── FETCH REAL PRICES ───
@@ -642,6 +459,11 @@ function priceTick() {
       const highs = sd.candles.map(c => c.h);
       const lows = sd.candles.map(c => c.l);
 
+      // Capture the PREVIOUS candle's MACD histogram before recomputing, so
+      // MACD-cross / RSI+MACD signals can detect a sign flip (was overwritten
+      // with the current value below, making those signals impossible to fire).
+      const prevMacdHist = (sd.macd && sd.macd.hist) || 0;
+
       sd.rsi = calcRSI(closes);
       sd.macd = calcMACD(closes);
       sd.bb = calcBB(closes);
@@ -652,7 +474,7 @@ function priceTick() {
       sd.stoch = calcStoch(highs, lows, closes);
       sd.adx = calcADX(highs, lows, closes);
       sd.vwap = closes.length > 0 ? closes.reduce((a, b) => a + b, 0) / closes.length : np;
-      sd.prevMacdHist = sd.macd && sd.macd.hist || 0;
+      sd.prevMacdHist = prevMacdHist;
 
       sd.building = { o: np, h: np, l: np, c: np, v: 0, tickCount: 0 };
 
@@ -753,8 +575,9 @@ function checkDataFreshness() {
 
 function resumePortfolio(id) {
   portfolioStates[id] = 'RUNNING';
-  // Reset circuit breaker flag
+  // Reset circuit breaker flag + high-water mark (resume from the current equity)
   if (lastScores[id]) lastScores[id]._circuitBreaker = false;
+  delete cbHighWater[id];
   console.log('[' + new Date().toLocaleTimeString() + '] Portfolio resumed: ' + id);
   return true;
 }
@@ -765,6 +588,8 @@ var lastScores = {};
 
 // Daily tracking: { "portfolioId": { date: "2026-03-24", trades: 0, loss: 0 } }
 var dailyStats = {};
+// Circuit-breaker high-water mark per portfolio (trailing-drawdown baseline).
+var cbHighWater = {};
 var DAILY_MAX_TRADES = { conservative: 10, moderate: 20, aggressive: 50, yolo: 100 };
 var DAILY_MAX_LOSS_PCT = 0.05; // 5% max daily loss
 var CIRCUIT_BREAKER_PCT = 0.20; // Stop at 20% total drawdown
@@ -903,7 +728,15 @@ function runStrategies() {
       return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
     }, 0);
     var totalValue = pf.cash + hVal;
-    var drawdownPct = (pf.startCash - totalValue) / pf.startCash;
+    // Trailing drawdown from a high-water mark, lazily initialised to the CURRENT
+    // equity — so a seeded/restored portfolio that is already down does NOT instantly
+    // trip the breaker; it protects against FURTHER losses from here (and the mark
+    // climbs as the portfolio grows). Previously measured from startCash, which froze
+    // any seeded portfolio that opened below its drawdown threshold.
+    if (cbHighWater[pf.id] === undefined) cbHighWater[pf.id] = totalValue;
+    if (totalValue > cbHighWater[pf.id]) cbHighWater[pf.id] = totalValue;
+    var cbBase = cbHighWater[pf.id] > 0 ? cbHighWater[pf.id] : pf.startCash;
+    var drawdownPct = (cbBase - totalValue) / cbBase;
     var liveCbThreshold = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 }[pf.id] || 0.20;
     if (drawdownPct >= liveCbThreshold) {
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
@@ -1094,12 +927,16 @@ function runStrategies() {
         pf.cash += riskTotal - riskComm;
         pf.totalCommission = (pf.totalCommission || 0) + riskComm;
         var riskPnl = calcFifoPnl(pos, riskQty, riskFillPrice);
-        if (riskPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(riskPnl); }
+        // Classify win/loss and daily-loss on P&L NET of round-trip commission
+        // (gross P&L counted near-breakeven losers as wins, inflating the win rate
+        // and under-counting the daily-loss circuit breaker).
+        var riskNetPnl = riskPnl - riskComm - (pos.avgCost * riskQty * COMMISSION_RATE);
+        if (riskNetPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(riskNetPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL(risk) ' + sym + ' qty=' + riskQty.toFixed(4) + ' $' + riskTotal.toFixed(0) + ' pnl=$' + riskPnl.toFixed(0) + ' reason=' + riskSellTriggered);
-        pf.orders = [{
+        recordOrder(pf, {
           sym: sym, side: 'sell', qty: riskQty, total: +(riskTotal).toFixed(2), price: riskFillPrice,
           signalPrice: price, slippage: slippagePct,
           commission: riskComm.toFixed(2), time: new Date().toISOString(),
@@ -1111,7 +948,7 @@ function runStrategies() {
           rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
           cashAfter: +pf.cash.toFixed(0), candleCount: sd.candles.length,
           blackSwan: blackSwan,
-        }].concat(pf.orders).slice(0, 200);
+        });
         return;
       }
 
@@ -1165,8 +1002,7 @@ function runStrategies() {
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' BUY ' + sym + ' qty=' + tq.toFixed(4) + ' $' + total.toFixed(0) + ' score=+' + buyScore.toFixed(1) + ' regime=' + regime.type + ' [' + buyReasons.join(', ') + '] TP=$' + bracketTP + ' SL=$' + bracketSL);
-        var prevHolding = (pf.holdings[sym] && pf.holdings[sym].qty) || 0;
-        pf.orders = [{
+        recordOrder(pf, {
           sym: sym, side: 'buy', qty: tq, total: +(total).toFixed(2), price: buyFillPrice,
           signalPrice: price, slippage: slippagePct,
           bracketTP: bracketTP, bracketSL: bracketSL,
@@ -1175,12 +1011,12 @@ function runStrategies() {
           score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m,
           pnl: 0, pnlPct: 0,
           avgCost: +((pf.holdings[sym] || {}).avgCost || price).toFixed(2),
-          holdingBefore: +prevHolding.toFixed(6),
+          holdingBefore: +old.qty.toFixed(6),
           exposure: +(exposurePct * 100).toFixed(0), volatility: +regime.volatility.toFixed(2),
           rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
           cashBefore: +(pf.cash + total + commission).toFixed(0), cashAfter: +pf.cash.toFixed(0),
           candleCount: sd.candles.length, blackSwan: blackSwan,
-        }].concat(pf.orders).slice(0, 200);
+        });
       }
 
       // --- SCORING-BASED SELL ---
@@ -1200,12 +1036,14 @@ function runStrategies() {
         pf.cash += sellTotal - sellComm;
         pf.totalCommission = (pf.totalCommission || 0) + sellComm;
         var sellPnl = calcFifoPnl(pos, sq, sellFillPrice);
-        if (sellPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(sellPnl); }
+        // Net of round-trip commission (see risk-sell note above).
+        var sellNetPnl = sellPnl - sellComm - (pos.avgCost * sq * COMMISSION_RATE);
+        if (sellNetPnl > 0) pf.wins++; else { pf.losses++; ds.loss += Math.abs(sellNetPnl); }
         delete pf.holdings[sym];
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' SELL ' + sym + ' qty=' + sq.toFixed(4) + ' $' + sellTotal.toFixed(0) + ' pnl=$' + sellPnl.toFixed(0) + ' score=-' + sellScore.toFixed(1) + ' regime=' + regime.type + ' [' + sellReasons.join(', ') + ']');
-        pf.orders = [{
+        recordOrder(pf, {
           sym: sym, side: 'sell', qty: sq, total: +(sellTotal).toFixed(2), price: sellFillPrice,
           signalPrice: price, slippage: slippagePct,
           commission: sellComm.toFixed(2), time: new Date().toISOString(),
@@ -1218,7 +1056,7 @@ function runStrategies() {
           rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
           cashBefore: +(pf.cash - sellTotal + sellComm).toFixed(0), cashAfter: +pf.cash.toFixed(0),
           candleCount: sd.candles.length, blackSwan: blackSwan,
-        }].concat(pf.orders).slice(0, 200);
+        });
       }
     });
 
@@ -1233,8 +1071,7 @@ function runStrategies() {
       var sym = entry[0], h = entry[1];
       return s + ((h && h.qty) || 0) * ((marketData[sym] || {}).cur || 0);
     }, 0);
-    pf.history.push({ t: pf.history.length, value: pf.cash + hVal });
-    if (pf.history.length > 1000) pf.history = pf.history.slice(-1000);
+    recordEquityPoint(pf, pf.cash + hVal);
   });
 
   // ─── DMA TREND FOLLOWER (independent module) ───
@@ -1277,7 +1114,7 @@ function runStrategies() {
           h.lots.push({ qty: qty, cost: price, date: new Date().toISOString() });
           dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
           dmaPf.tradeCount++;
-          dmaPf.orders = [{ sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (1st tranche $50K)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          recordOrder(dmaPf, { sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (1st tranche $50K)', commission: comm.toFixed(2) });
           state.bought1 = true;
           state.sold1 = false; // Reset sell flags when buying
           state.sold2 = false;
@@ -1297,7 +1134,7 @@ function runStrategies() {
           h.lots.push({ qty: qty, cost: price, date: new Date().toISOString() });
           dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
           dmaPf.tradeCount++;
-          dmaPf.orders = [{ sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (2nd tranche $50K - FULL)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          recordOrder(dmaPf, { sym: sym, side: 'buy', qty: +qty.toFixed(6), price: price, total: +buyVal.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% below EMA200 (2nd tranche $50K - FULL)', commission: comm.toFixed(2) });
           state.bought2 = true;
           console.log('[' + new Date().toLocaleTimeString() + '] DMA BUY2 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% qty=' + qty.toFixed(4) + ' FULLY INVESTED');
         }
@@ -1314,7 +1151,7 @@ function runStrategies() {
           if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
           dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
           dmaPf.tradeCount++;
-          dmaPf.orders = [{ sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (1st sell $50K)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          recordOrder(dmaPf, { sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (1st sell $50K)', commission: comm.toFixed(2) });
           pos.qty -= sellQty;
           if (pos.qty <= 0.000001) delete dmaPf.holdings[sym];
           state.sold1 = true;
@@ -1333,7 +1170,7 @@ function runStrategies() {
           if (pnl > 0) dmaPf.wins = (dmaPf.wins || 0) + 1; else dmaPf.losses = (dmaPf.losses || 0) + 1;
           dmaPf.totalCommission = (dmaPf.totalCommission || 0) + comm;
           dmaPf.tradeCount++;
-          dmaPf.orders = [{ sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (2nd sell - 100% CASH)', commission: comm.toFixed(2) }].concat(dmaPf.orders).slice(0, 200);
+          recordOrder(dmaPf, { sym: sym, side: 'sell', qty: +sellQty.toFixed(6), price: price, total: +sellVal.toFixed(2), pnl: +pnl.toFixed(2), time: new Date().toISOString(), strat: 'EMA200', why: 'Price ' + distPct.toFixed(2) + '% above EMA200 (2nd sell - 100% CASH)', commission: comm.toFixed(2) });
           delete dmaPf.holdings[sym];
           state.sold2 = true;
           console.log('[' + new Date().toLocaleTimeString() + '] DMA SELL2 BTC @$' + price.toFixed(0) + ' EMA200=$' + ema200.toFixed(0) + ' dist=' + distPct.toFixed(2) + '% pnl=$' + pnl.toFixed(0) + ' 100% CASH');
@@ -1346,8 +1183,7 @@ function runStrategies() {
       var sym = entry[0], h = entry[1];
       return s + ((h && h.qty) || 0) * ((marketData[sym] || {}).cur || 0);
     }, 0);
-    dmaPf.history.push({ t: dmaPf.history.length, value: dmaPf.cash + dmaHVal });
-    if (dmaPf.history.length > 1000) dmaPf.history = dmaPf.history.slice(-1000);
+    recordEquityPoint(dmaPf, dmaPf.cash + dmaHVal);
   }
 }
 
@@ -1363,14 +1199,208 @@ function resetPortfolio(id) {
   pf.holdings = {};
   pf.orders = [];
   pf.peaks = {};
-  pf.history = [{ t: 0, value: DEFAULT_CASH }];
+  pf.history = [{ t: Date.now(), value: DEFAULT_CASH }];
   pf.tradeCount = 0;
   pf.wins = 0;
   pf.losses = 0;
   pf.totalCommission = 0;
   console.log('[' + new Date().toLocaleTimeString() + '] Reset portfolio: ' + id);
+  delete cbHighWater[id]; // reset circuit-breaker baseline on a fresh $100k portfolio
+  fullSnapshotDue = true; // push the wiped portfolio to clients immediately
   saveState();
   return true;
+}
+
+// ─── WARM-START: SEED A PORTFOLIO FROM ~1 YEAR OF HISTORY ───
+// Replays daily candles (all of the profile's assets) through the SAME scoring
+// engine the live server uses (engine-core.scoreSignals), producing live-shaped
+// portfolio state (cash, holdings+lots, orders, equity history). This makes a
+// portfolio open as if it had been trading for the last year on $100k, after which
+// the live 1-minute tick continues from where the seed left off.
+// NOTE: historical data is daily, the live engine is 1-minute — so the seeded
+// baseline is coarse-grained (few trades/year) and the live continuation is finer.
+function loadDailyCandles(sym) {
+  var csvPath = path.join(__dirname, 'backtest', 'data', sym + '_daily.csv');
+  if (!fs.existsSync(csvPath)) return null;
+  var lines = fs.readFileSync(csvPath, 'utf8').split('\n').filter(function(l) { return l.trim().length > 0; });
+  var rows = lines.slice(2); // skip the URL + column-header lines
+  var candles = [];
+  rows.forEach(function(line) {
+    var p = line.split(',');
+    if (p.length < 7) return;
+    var date = (p[1] || '').trim();
+    var close = parseFloat(p[6]) || 0;
+    if (!date || close <= 0) return;
+    candles.push({ date: date, o: parseFloat(p[3]) || 0, h: parseFloat(p[4]) || 0, l: parseFloat(p[5]) || 0, c: close, v: parseFloat(p[7]) || 0 });
+  });
+  candles.sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  return candles.length ? candles : null;
+}
+
+function seedPortfolioFromHistory(profile, startDate) {
+  var symbols = (profile.assets || Object.keys(COINS)).filter(function(s) { return COINS[s]; });
+  // Only load ~300 days of warmup before startDate (enough to seed EMA200); loading
+  // full multi-year history would make the per-day O(n) indicator recompute O(n^2).
+  var warmupStart = new Date(new Date(startDate + 'T00:00:00Z').getTime() - 300 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  var allCandles = {}, allDates = {};
+  symbols.forEach(function(sym) {
+    var candles = loadDailyCandles(sym);
+    if (!candles) return;
+    candles = candles.filter(function(c) { return c.date >= warmupStart; });
+    if (!candles.length) return;
+    allCandles[sym] = candles;
+    candles.forEach(function(c) { allDates[c.date] = true; });
+  });
+  var dates = Object.keys(allDates).sort();
+  if (dates.length < 30) return null;
+
+  var idxMap = {};
+  symbols.forEach(function(s) { if (!allCandles[s]) return; idxMap[s] = {}; allCandles[s].forEach(function(c, i) { idxMap[s][c.date] = i; }); });
+
+  // Portfolio state (mirrors the live engine's execution rules)
+  var cash = DEFAULT_CASH, holdings = {}, peaks = {}, orders = [], history = [];
+  var wins = 0, losses = 0, tradeCount = 0, totalCommission = 0;
+  var lastTradeDay = {}, lastClose = {};
+  var hist = {}; symbols.forEach(function(s) { hist[s] = { closes: [], highs: [], lows: [], candles: [] }; });
+
+  var COOLDOWN = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 }[profile.id] || 3;
+  var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
+  var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[profile.id] || 5;
+  var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[profile.id] || 0.10;
+  var slippage = (profile.overrides && profile.overrides.slippage) || SLIPPAGE_PCT;
+  var cashPct = profile.cashPct || 0.15;
+  var startMs = new Date(startDate + 'T00:00:00Z').getTime();
+  history.push({ t: startMs, value: DEFAULT_CASH });
+
+  for (var di = 0; di < dates.length; di++) {
+    var date = dates[di];
+    // Build/extend each symbol's indicator history from this day's candle.
+    var symData = {};
+    symbols.forEach(function(sym) {
+      if (!allCandles[sym] || idxMap[sym][date] === undefined) return;
+      var c = allCandles[sym][idxMap[sym][date]];
+      lastClose[sym] = c.c;
+      var sh = hist[sym];
+      sh.closes.push(c.c); sh.highs.push(c.h); sh.lows.push(c.l);
+      sh.candles.push({ o: c.o, h: c.h, l: c.l, c: c.c, v: c.v, t: date });
+      if (sh.closes.length < 5) return;
+      var closes = sh.closes, highs = sh.highs, lows = sh.lows;
+      var prevMacdHist = 0;
+      if (closes.length > 26) prevMacdHist = calcMACD(closes.slice(0, -1)).hist || 0;
+      symData[sym] = {
+        cur: c.c, candles: sh.candles, rsi: calcRSI(closes), macd: calcMACD(closes), bb: calcBB(closes),
+        ema9: ema(closes, 9) || c.c, ema21: ema(closes, 21) || c.c, ema50: ema(closes, 50) || c.c, ema200: ema(closes, 200) || c.c,
+        stoch: calcStoch(highs, lows, closes), adx: calcADX(highs, lows, closes),
+        vwap: closes.reduce(function(a, b) { return a + b; }, 0) / closes.length, prevMacdHist: prevMacdHist,
+      };
+    });
+
+    if (date < startDate) continue; // warm indicators on pre-start data, trade from startDate
+
+    var dateMs = new Date(date + 'T00:00:00Z').getTime();
+    var holdingValue = function() {
+      return Object.keys(holdings).reduce(function(s, k) { return s + (holdings[k].qty || 0) * (lastClose[k] || holdings[k].avgCost || 0); }, 0);
+    };
+
+    symbols.forEach(function(sym) {
+      var sd = symData[sym];
+      if (!sd) return;
+      var price = sd.cur;
+      if (!(price > 0)) return;
+      var pos = holdings[sym] || null;
+      var peakPrice = peaks[sym] || price;
+      if (price > peakPrice) { peaks[sym] = price; peakPrice = price; }
+      if ((di - (lastTradeDay[sym] || -999)) < COOLDOWN) return;
+
+      var totalValue = cash + holdingValue();
+      if (totalValue <= 0) totalValue = DEFAULT_CASH;
+      var scored = scoreSignals(sd, pos, peakPrice, profile, (COINS[sym] || {}).type);
+
+      // RISK exits (TP/SL/trailing) — immediate full sell
+      if (pos && pos.qty > 0 && scored.riskSellTriggered) {
+        var rFill = price * (1 - slippage);
+        var rTotal = rFill * pos.qty, rComm = rTotal * COMMISSION_RATE;
+        var rPnl = (rFill - pos.avgCost) * pos.qty;
+        var rNet = rPnl - rComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
+        cash += rTotal - rComm; totalCommission += rComm;
+        if (rNet > 0) wins++; else losses++;
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +rFill.toFixed(4), total: +rTotal.toFixed(2), pnl: +rPnl.toFixed(2), commission: +rComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: 'Risk Mgmt', why: scored.riskSellTriggered, score: 0, regime: scored.regime.type, seeded: true });
+        delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
+        return;
+      }
+
+      var exposurePct = holdingValue() / totalValue;
+      var openCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
+
+      // SCORING buy
+      if (scored.buyScore >= profile.buyThreshold && scored.buyScore > scored.sellScore && exposurePct < maxExposure && openCount < maxPositions) {
+        if (cash < 100) return;
+        var bFill = price * (1 + slippage);
+        var tradeValue = Math.min(cash * cashPct, cash * 0.95, DEFAULT_CASH * maxPerPosition);
+        var tq = +(tradeValue / bFill).toFixed(6);
+        if (tq <= 0) return;
+        var bTotal = bFill * tq, bComm = bTotal * COMMISSION_RATE;
+        if (bTotal + bComm > cash) return;
+        // Commission-aware gate (same as live): expected profit must beat 2x round-trip cost
+        var tpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
+        if (bTotal * (tpPct / 100) < bTotal * COMMISSION_RATE * 2 * 2) return;
+        cash -= bTotal + bComm; totalCommission += bComm;
+        var old = holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
+        if (!old.lots) old.lots = [];
+        var nq = +(old.qty + tq).toFixed(6);
+        holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + bTotal) / nq : bFill, lots: old.lots.concat([{ qty: tq, cost: bFill, date: date }]) };
+        peaks[sym] = price;
+        orders.push({ sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4), total: +bTotal.toFixed(2), pnl: 0, commission: +bComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: scored.buyReasons.length + ' signals', why: scored.buyReasons.join(', '), score: +scored.buyScore.toFixed(1), regime: scored.regime.type, seeded: true });
+        lastTradeDay[sym] = di; tradeCount++;
+      }
+      // SCORING sell
+      else if (scored.sellScore >= profile.sellThreshold && pos && pos.qty > 0) {
+        var sFill = price * (1 - slippage);
+        var sTotal = sFill * pos.qty, sComm = sTotal * COMMISSION_RATE;
+        var sPnl = (sFill - pos.avgCost) * pos.qty;
+        var sNet = sPnl - sComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
+        cash += sTotal - sComm; totalCommission += sComm;
+        if (sNet > 0) wins++; else losses++;
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +sFill.toFixed(4), total: +sTotal.toFixed(2), pnl: +sPnl.toFixed(2), commission: +sComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: scored.sellReasons.length + ' signals', why: scored.sellReasons.join(', '), score: +(-scored.sellScore).toFixed(1), regime: scored.regime.type, seeded: true });
+        delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
+      }
+    });
+
+    // Record one equity point per trading day
+    history.push({ t: dateMs, value: +(cash + holdingValue()).toFixed(2) });
+  }
+
+  return {
+    cash: cash,
+    holdings: holdings,
+    orders: orders.reverse().slice(0, 200), // newest-first, matching live convention
+    history: history.slice(-1000),
+    wins: wins, losses: losses, tradeCount: tradeCount,
+    totalCommission: +totalCommission.toFixed(2),
+  };
+}
+
+function seedAllPortfoliosFromHistory(startDate) {
+  PROFILES.forEach(function(profile) {
+    var pf = portfolios.find(function(p) { return p.id === profile.id; });
+    if (!pf) return;
+    try {
+      var seeded = seedPortfolioFromHistory(profile, startDate);
+      if (!seeded) { console.log('  seed: no data for ' + profile.id); return; }
+      pf.cash = seeded.cash;
+      pf.holdings = seeded.holdings;
+      pf.orders = seeded.orders;
+      pf.history = seeded.history.length ? seeded.history : [{ t: Date.now(), value: DEFAULT_CASH }];
+      pf.peaks = {};
+      pf.wins = seeded.wins; pf.losses = seeded.losses;
+      pf.tradeCount = seeded.tradeCount;
+      pf.totalCommission = seeded.totalCommission;
+      var hv = Object.keys(seeded.holdings).reduce(function(s, k) { return s + (seeded.holdings[k].qty || 0) * (seeded.holdings[k].avgCost || 0); }, 0);
+      console.log('  seeded ' + profile.id + ': ' + seeded.tradeCount + ' trades, ~$' + (seeded.cash + hv).toFixed(0) + ' equity (' + seeded.wins + 'W/' + seeded.losses + 'L)');
+    } catch (e) {
+      console.log('  seed failed for ' + profile.id + ': ' + e.message);
+    }
+  });
 }
 
 // ─── BUILD CLIENT STATE ───
@@ -1393,7 +1423,7 @@ function getState() {
       id: pf.id, name: pf.name, color: pf.color, icon: pf.icon, desc: pf.desc,
       cash: pf.cash, startCash: pf.startCash, holdings: pf.holdings,
       orders: pf.orders.slice(0, 50),
-      history: pf.history.slice(-300),
+      history: pf.history.slice(-500),
       tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
       totalCommission: pf.totalCommission || 0,
       totalValue: pf.cash + hVal, hVal, pnl: pf.cash + hVal - pf.startCash,
@@ -1427,10 +1457,42 @@ const server = http.createServer((req, res) => {
   } else if (req.url === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(getState()));
+  } else if (req.url === '/api/health') {
+    // Lightweight liveness/health probe for uptime monitors and operators.
+    var nowH = Date.now();
+    var lastPx = 0;
+    Object.keys(lastPriceUpdate).forEach(function(s) { if (lastPriceUpdate[s] > lastPx) lastPx = lastPriceUpdate[s]; });
+    var anyDegraded = portfolios.some(function(p) { return (portfolioStates[p.id] || 'RUNNING') !== 'RUNNING'; });
+    var health = {
+      status: anyDegraded ? 'degraded' : 'ok',
+      uptimeSec: Math.round(process.uptime()),
+      wsClients: wss.clients.size,
+      binanceConnected: !!(binanceWs && binanceWs.readyState === 1),
+      lastPriceUpdateAgeSec: lastPx ? Math.round((nowH - lastPx) / 1000) : null,
+      lastStateSaveAgeSec: lastStateSaveAt ? Math.round((nowH - lastStateSaveAt) / 1000) : null,
+      rssMB: Math.round(process.memoryUsage().rss / 1048576),
+      tick: tickCount,
+      portfolios: portfolios.map(function(p) { return { id: p.id, state: portfolioStates[p.id] || 'RUNNING' }; }),
+      serverTime: new Date().toISOString(),
+    };
+    res.writeHead(anyDegraded ? 503 : 200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify(health));
   } else if (req.url && req.url.indexOf('/api/reset/') === 0) {
-    var resetId = req.url.replace('/api/reset/', '');
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: resetPortfolio(resetId) }));
+    var resetPath = req.url.replace('/api/reset/', '');
+    var resetToken = '';
+    var qIdx = resetPath.indexOf('?');
+    if (qIdx >= 0) {
+      var rm = resetPath.slice(qIdx + 1).match(/(?:^|&)token=([^&]*)/);
+      if (rm) resetToken = decodeURIComponent(rm[1]);
+      resetPath = resetPath.slice(0, qIdx);
+    }
+    if (!isAuthorized(resetToken)) {
+      res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Unauthorized: admin token required' }));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: resetPortfolio(resetPath) }));
+    }
   } else if (req.url && req.url.match && req.url.match(/^\/api\/portfolio\/[^/]+\/export\/(csv|json)$/)) {
     // Portfolio export endpoints
     var urlParts = req.url.split('/');
@@ -1558,8 +1620,18 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(assets));
   } else if (req.method === 'POST' && req.url === '/api/backtest') {
     var body = '';
-    req.on('data', function(chunk) { body += chunk; });
+    var bodyAborted = false;
+    req.on('data', function(chunk) {
+      body += chunk;
+      if (body.length > 65536) { // 64KB cap — backtest params are tiny; reject oversized bodies
+        bodyAborted = true;
+        res.writeHead(413, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'Request body too large' }));
+        req.destroy();
+      }
+    });
     req.on('end', function() {
+      if (bodyAborted) return;
       try {
         var params = JSON.parse(body);
         var profileId = params.profile || 'moderate';
@@ -1574,7 +1646,15 @@ const server = http.createServer((req, res) => {
         if (isDmaBacktest) {
           profile = { id: 'dma', buyThreshold: 0, sellThreshold: 0, cashPct: 0.15, assets: Object.keys(COINS), overrides: { slippage: 0.0005 } };
         }
-        if (symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
+        if (!Array.isArray(symbols) || symbols.length === 0) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No symbols selected' })); return; }
+
+        // SECURITY: sym is concatenated into filesystem paths below (sym + '.jsonl' /
+        // sym + '_daily.csv'). Reject anything not in the known asset set to prevent
+        // path traversal / arbitrary-file probing. Also validate the timeframe.
+        var ALLOWED_TIMEFRAMES = { '1d': true, '1m': true, '5m': true, '15m': true, '1h': true, '4h': true };
+        if (!ALLOWED_TIMEFRAMES[timeframe]) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown timeframe' })); return; }
+        var invalidSymbols = symbols.filter(function(s) { return typeof s !== 'string' || !Object.prototype.hasOwnProperty.call(COINS, s); });
+        if (invalidSymbols.length) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown symbol(s): ' + invalidSymbols.slice(0, 10).join(', ') })); return; }
 
         // ─── FAST PATH: DMA 1m backtest with incremental EMA200 ───
         if (isDmaBacktest && timeframe !== '1d') {
@@ -1941,7 +2021,8 @@ const server = http.createServer((req, res) => {
               var parts = line.split(',');
               if (parts.length < 7) return;
               var date = (parts[1] || '').trim();
-              if (date < startDate) return;
+              // Load ALL candles incl. pre-startDate so EMA200/RSI/MACD warm up properly;
+              // trading is gated to dates >= startDate in the main loop (warmup burn-in).
               candles.push({
                 date: date,
                 open: parseFloat(parts[3]) || 0,
@@ -2108,11 +2189,15 @@ const server = http.createServer((req, res) => {
               prevMacdHist: prevMacdHist,
             };
 
-            // Store buy & hold start prices
-            if (!buyHoldStart[sym] && c.close > 0) {
+            // Store buy & hold start prices (at the requested startDate, not warmup)
+            if (!buyHoldStart[sym] && c.close > 0 && (isMinuteTimeframe || dateKey >= startDate)) {
               buyHoldStart[sym] = c.close;
             }
           });
+
+          // Warmup gate (daily): indicators above were fed pre-startDate history so
+          // EMA200 etc. are seeded, but do not trade or record equity until startDate.
+          if (!isMinuteTimeframe && dateKey < startDate) continue;
 
           // ─── DMA BACKTEST: simple EMA21/EMA50 crossover ───
           if (isDmaBacktest) {
@@ -2613,6 +2698,13 @@ wss.on('connection', function(ws) {
   ws.on('message', function(raw) {
     try {
       var msg = JSON.parse(raw);
+      // Gate state-mutating commands behind the admin token (when configured).
+      if (msg.type === 'reset' || msg.type === 'resume' || msg.type === 'updateConfig') {
+        if (!isAuthorized(msg.token)) {
+          try { ws.send(JSON.stringify({ type: 'error', error: 'Unauthorized: admin token required' })); } catch (e) {}
+          return;
+        }
+      }
       if (msg.type === 'reset' && msg.id) {
         resetPortfolio(msg.id);
         broadcast();
@@ -2644,11 +2736,40 @@ wss.on('connection', function(ws) {
   ws.on('close', function() { console.log('Client disconnected. Total: ' + wss.clients.size); });
 });
 
+// Lightweight per-tick delta: only the fields that change every 2s. The client
+// merges this into the last full snapshot, so we avoid re-sending the ~800KB
+// candle/indicator/order payload 30x per minute (was ~1.4GB/hr per client).
+function getPriceDelta() {
+  var prices = {};
+  Object.keys(COINS).forEach(function(sym) { prices[sym] = marketData[sym].cur; });
+  var pfs = portfolios.map(function(pf) {
+    var hVal = Object.entries(pf.holdings).reduce(function(s, entry) {
+      return s + ((entry[1] && entry[1].qty) || 0) * ((marketData[entry[0]] || {}).cur || 0);
+    }, 0);
+    return { id: pf.id, cash: pf.cash, hVal: hVal, totalValue: pf.cash + hVal, pnl: pf.cash + hVal - pf.startCash };
+  });
+  return { type: 'prices', prices: prices, portfolios: pfs, tick: tickCount };
+}
+
+// Send a full snapshot on connect, after any trade/reset, and periodically;
+// otherwise send the light delta. FULL_SNAPSHOT_EVERY * TICK_MS ≈ how stale the
+// heavy candle/indicator data can get (30 * 2s = 60s, matching the candle period).
+var broadcastCount = 0;
+var fullSnapshotDue = true;
+var FULL_SNAPSHOT_EVERY = 30;
 function broadcast() {
-  const state = JSON.stringify({ type: 'update', data: getState() });
+  broadcastCount++;
+  var sendFull = fullSnapshotDue || (broadcastCount % FULL_SNAPSHOT_EVERY === 0);
+  var payload;
+  if (sendFull) {
+    fullSnapshotDue = false;
+    payload = JSON.stringify({ type: 'update', data: getState() });
+  } else {
+    payload = JSON.stringify(getPriceDelta());
+  }
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(state);
+      client.send(payload);
     }
   });
 }
@@ -2679,6 +2800,19 @@ async function start() {
   // Restore saved state (portfolios, candles, indicators)
   const restored = loadState();
 
+  // One-time warm-start: seed the 4 scoring portfolios from ~1 year of daily history
+  // so they open showing "what if I had traded the last year on $100k", then the
+  // live tick continues. Runs once (flag persisted in state); set RESEED_FROM_HISTORY=1
+  // to force a re-seed on next start.
+  if (!seededFromHistory || process.env.RESEED_FROM_HISTORY === '1') {
+    var seedStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    console.log('\n  Warm-starting 4 portfolios from ~1 year of history (since ' + seedStart + ')...');
+    seedAllPortfoliosFromHistory(seedStart);
+    seededFromHistory = true;
+    saveState({ sync: true });
+    fullSnapshotDue = true;
+  }
+
   server.listen(PORT, () => {
     console.log('\n  TradeSimBot Server running at http://localhost:' + PORT);
     var cryptoCount = Object.values(COINS).filter(function(c) { return c.type === 'crypto'; }).length;
@@ -2686,6 +2820,7 @@ async function start() {
     console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
     console.log('  5 portfolios (4 scoring + 1 DMA) | ' + cryptoCount + ' crypto + ' + stockCount + ' stocks | 1min candles');
     if (restored) console.log('  State restored from disk');
+    if (!ADMIN_TOKEN) console.log('  ⚠ ADMIN_TOKEN not set — portfolio reset/config are PUBLIC. Set ADMIN_TOKEN in .env to require a token for mutations.');
     console.log('');
   });
 
@@ -2704,9 +2839,23 @@ async function start() {
   // Save state to disk every 30 seconds
   setInterval(saveState, STATE_SAVE_INTERVAL);
 
-  // Save state on shutdown
-  process.on('SIGINT', () => { saveState(); console.log('\nState saved. Goodbye!'); process.exit(0); });
-  process.on('SIGTERM', () => { saveState(); process.exit(0); });
+  // Save state on shutdown (sync so the write completes before exit)
+  process.on('SIGINT', () => { saveState({ sync: true }); console.log('\nState saved. Goodbye!'); process.exit(0); });
+  process.on('SIGTERM', () => { saveState({ sync: true }); process.exit(0); });
+
+  // Last-resort safety net: persist state on an unhandled error, then exit so the
+  // process supervisor (systemd Restart=always) brings the bot back cleanly rather
+  // than leaving it dead. Without this, a single stray throw permanently kills it.
+  process.on('uncaughtException', (err) => {
+    console.error('[FATAL] uncaughtException:', err && err.stack ? err.stack : err);
+    try { saveState({ sync: true }); } catch (e) {}
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[FATAL] unhandledRejection:', reason && reason.stack ? reason.stack : reason);
+    try { saveState({ sync: true }); } catch (e) {}
+    process.exit(1);
+  });
 }
 
 start();

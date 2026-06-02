@@ -1716,6 +1716,7 @@ const server = http.createServer((req, res) => {
         var profileId = params.profile || 'moderate';
         var symbols = params.symbols || [];
         var startDate = params.startDate || '2020-01-01';
+        var endDate = params.endDate || '2099-12-31';  // daily out-of-sample window upper bound; default = no limit
         var startCash = params.startCash || 100000;
 
         var timeframe = params.timeframe || '1d';
@@ -2213,6 +2214,9 @@ const server = http.createServer((req, res) => {
         // Process each date/timestamp
         for (var dayIdx = 0; dayIdx < sortedDates.length; dayIdx++) {
           var dateKey = sortedDates[dayIdx];
+          // Stop once past the requested window end (daily out-of-sample). Indicators
+          // have already built; no trading/equity beyond endDate.
+          if (!isMinuteTimeframe && dateKey > endDate) break;
 
           // Send progress for minute-based backtests
           if (isMinuteTimeframe) {
@@ -2653,9 +2657,10 @@ const server = http.createServer((req, res) => {
           var pos = holdings[sym];
           if (!pos || pos.qty <= 0) return;
           var lastCandles = allCandles[sym];
-          var lastPrice = lastCandles && lastCandles.length > 0 ? lastCandles[lastCandles.length - 1].close : 0;
+          // Value/close at the price as of the window end (endDate), not the data end.
+          var lastPrice = lastClose[sym] || (lastCandles && lastCandles.length > 0 ? lastCandles[lastCandles.length - 1].close : 0);
           if (lastPrice <= 0) return;
-          var lastDate = lastCandles[lastCandles.length - 1].date;
+          var lastDate = (lastCandles && lastCandles.length > 0) ? lastCandles[lastCandles.length - 1].date : endDate;
           var btSlippage = (profile.overrides && profile.overrides.slippage !== undefined) ? profile.overrides.slippage : SLIPPAGE_PCT;
           var closeFillPrice = lastPrice * (1 - btSlippage);
           var closeQty = pos.qty;
@@ -2693,7 +2698,7 @@ const server = http.createServer((req, res) => {
           Object.keys(buyHoldStart).forEach(function(sym) {
             var startPrice = buyHoldStart[sym];
             var endCandles = allCandles[sym];
-            var endPrice = endCandles && endCandles.length > 0 ? endCandles[endCandles.length - 1].close : startPrice;
+            var endPrice = lastClose[sym] || (endCandles && endCandles.length > 0 ? endCandles[endCandles.length - 1].close : startPrice);
             buyHoldValue += perSymCash * (endPrice / startPrice);
           });
         }

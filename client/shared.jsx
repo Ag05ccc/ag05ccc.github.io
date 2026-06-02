@@ -8,6 +8,10 @@ const BacktestAuditPanel = (props) => {
   const Component = window.BacktestAuditPanel;
   return Component ? <Component {...props} /> : null;
 };
+const BacktestDiagnosticsPanel = (props) => {
+  const Component = window.BacktestDiagnosticsPanel;
+  return Component ? <Component {...props} /> : null;
+};
 const DataQualityPanel = (props) => {
   const Component = window.DataQualityPanel;
   return Component ? <Component {...props} /> : null;
@@ -201,7 +205,7 @@ Object.assign(window, {
   ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter,
   XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend,
   Brush, PieChart, Pie, Cell,
-  BacktestQualityPanel, BacktestAuditPanel, DataQualityPanel,
+  BacktestQualityPanel, BacktestAuditPanel, BacktestDiagnosticsPanel, DataQualityPanel,
   ZoomChart, COINS_META, symColor, fmt, fK, pc, fmtTime,
   getAdminToken, adminFetch, IndBadge, groupCandles, TIMEFRAMES,
 });

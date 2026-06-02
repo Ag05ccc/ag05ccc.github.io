@@ -189,7 +189,8 @@ function runBacktest(candles, profile, symbolName) {
       const riskPlan = buildRiskPlan({
         sd, profile, symbol: sym, price: buyFillPrice,
         cash, availableCash, startCash: DEFAULT_CASH,
-        cashPct: profile.cashPct, maxPerPosition,
+        portfolioValue: totalValue, cashPct: profile.cashPct, maxPerPosition,
+        regime,
       });
       const tradeValue = riskPlan.tradeValue;
       if (tradeValue < 10) continue;

@@ -238,13 +238,14 @@ function BacktestTab({ isMobile }) {
                 var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "backtest-"+btResult.profile+"-"+btResult.startDate+".csv"; a.click();
               }} className="bt" style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #1e293b", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontSize: 9, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>Export CSV</button>
               <button onClick={() => {
-                var blob = new Blob([JSON.stringify({metrics:btResult.metrics, quality:btResult.quality, metadata:btResult.metadata, trades:btResult.trades, equityCurve:btResult.equityCurve, profile:btResult.profile, symbols:btResult.symbols, startDate:btResult.startDate}, null, 2)], {type:"application/json"});
+                var blob = new Blob([JSON.stringify({metrics:btResult.metrics, quality:btResult.quality, diagnostics:btResult.diagnostics, metadata:btResult.metadata, trades:btResult.trades, equityCurve:btResult.equityCurve, profile:btResult.profile, symbols:btResult.symbols, startDate:btResult.startDate}, null, 2)], {type:"application/json"});
                 var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "backtest-"+btResult.profile+"-"+btResult.startDate+".json"; a.click();
               }} className="bt" style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid #1e293b", background: "rgba(99,102,241,0.1)", color: "#818cf8", fontSize: 9, fontWeight: 600, cursor: "pointer", fontFamily: "var(--m)" }}>Export JSON</button>
             </span>
           </div>
 
           <BacktestQualityPanel quality={q} metadata={meta} isMobile={isMobile} />
+          <BacktestDiagnosticsPanel diagnostics={btResult.diagnostics} isMobile={isMobile} />
           <BacktestAuditPanel result={btResult} selectedTrade={btAuditTrade} onSelectTrade={setBtAuditTrade} isMobile={isMobile} />
 
           {btResult.skippedSymbols && btResult.skippedSymbols.length > 0 && (

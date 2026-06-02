@@ -188,6 +188,7 @@ const SIGNALS = [
   { id: "dip_rsi_macd", label: "RSI+MACD Buy", side: "buy", category: "combo", weight: 2.5 },  // Best combo signal
   { id: "breakout_high", label: "Breakout", side: "buy", category: "momentum", weight: 0.8 },  // Reduced from 1.5: was 3713 trades
   { id: "ema200_trend", label: "EMA200 Trend", side: "buy", category: "trend", weight: 1.5 },
+  { id: "trend_follow", label: "Trend Follow", side: "buy", category: "momentum", weight: 1.8 },
   // Sell signals - weights boosted to fix buy/sell imbalance
   { id: "rsi_os", label: "RSI Overbought", side: "sell", category: "mean-reversion", weight: 1.2 },
   { id: "macd_cross_s", label: "MACD Cross Sell", side: "sell", category: "trend", weight: 1.8 },  // Boosted
@@ -276,6 +277,7 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
     case "sl_pct": if (pos && pos.qty > 0) { var pl2 = ((sd.cur - pos.avgCost) / pos.avgCost) * 100; if (pl2 <= -val) return 'SL ' + pl2.toFixed(1) + '%'; } break;
     case "trailing": if (pos && pos.qty > 0 && peakPrice) { var dr = ((peakPrice - sd.cur) / peakPrice) * 100; if (dr >= val) return 'Trail -' + dr.toFixed(1) + '%'; } break;
     case "ema200_trend": if (sd.ema200 > 0 && sd.cur > sd.ema200 && candles.length > 200) { var pc = (candles[candles.length - 2] || {}).c; if (pc && pc <= sd.ema200) return 'Above EMA200'; } break;
+    case "trend_follow": if (sd.ema200 > 0 && sd.ema21 > sd.ema50 && sd.cur > sd.ema200 && sd.adx >= val && candles.length >= 220) { var base = (candles[candles.length - 21] || {}).c; var ret20 = base > 0 ? ((sd.cur - base) / base) * 100 : 0; if (ret20 > 3) return 'Trend +' + ret20.toFixed(1) + '%'; } break;
     case "ema200_break": if (pos && pos.qty > 0 && sd.ema200 > 0 && sd.cur < sd.ema200 && candles.length > 200) { var pc2 = (candles[candles.length - 2] || {}).c; if (pc2 && pc2 >= sd.ema200) return 'Below EMA200'; } break;
   }
   return null;
@@ -295,6 +297,7 @@ const PROFILES = [
       tp_pct: 999, sl_pct: 4.0, trailing: 12.0,  // Ride trend; wide trailing caps give-back
       bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
       breakout_high: 25, breakdown: 15, dip_rsi_macd: 28, dip_rsi_macd_s: 72,
+      trend_follow: 20,
       vwap_sell: 0.03, vwap_buy: 0.05,
       slippage: 0.0003,
     } },
@@ -306,6 +309,7 @@ const PROFILES = [
       tp_pct: 999, sl_pct: 5.0, trailing: 14.0,  // Ride trend
       bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 1.2,
       breakout_high: 18, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
+      trend_follow: 18,
       vwap_sell: 0.05, vwap_buy: 0.08,
       slippage: 0.0005,
     } },
@@ -317,6 +321,7 @@ const PROFILES = [
       tp_pct: 999, sl_pct: 6.0, trailing: 12.0,  // Ride trend (tighter)
       bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.0,
       breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
+      trend_follow: 16,
       ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 22,
       slippage: 0.0007,
     } },
@@ -328,6 +333,7 @@ const PROFILES = [
       tp_pct: 999, sl_pct: 8.0, trailing: 22.0,  // Ride trend
       bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.2, vol_spike_s: 0.8,
       breakout_high: 8, breakdown: 5, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
+      trend_follow: 14,
       ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 18,
       slippage: 0.001,
     } },
@@ -369,10 +375,31 @@ function buildRiskPlan(opts) {
   var startCash = opts.startCash || 100000;
   var cash = opts.cash != null ? opts.cash : startCash;
   var availableCash = opts.availableCash != null ? opts.availableCash : cash;
+  var portfolioValue = opts.portfolioValue != null ? opts.portfolioValue : startCash;
+  if (!isFinite(portfolioValue) || portfolioValue <= 0) portfolioValue = startCash;
   var cashPct = opts.cashPct != null ? opts.cashPct : (profile.cashPct || 0.10);
   var maxPerPosition = opts.maxPerPosition != null ? opts.maxPerPosition : 0.10;
   var symType = opts.symType || ((COINS[opts.symbol] && COINS[opts.symbol].type) || 'crypto');
   var pr = PROFILE_RISK[profile.id] || PROFILE_RISK.moderate;
+  var regime = opts.regime || detectRegime(sd);
+  var trendAligned = !!(sd && sd.ema21 > 0 && sd.ema50 > 0 && sd.ema200 > 0 && price > sd.ema200 && sd.ema21 > sd.ema50);
+  var downtrend = !!(sd && sd.ema21 > 0 && price < sd.ema21);
+  var regimeRiskMult = 1.0;
+  var deploymentMult = 1.0;
+  if (regime.type === 'trending' && trendAligned) {
+    regimeRiskMult = 1.35;
+    deploymentMult = 1.25;
+  } else if (regime.type === 'trending') {
+    regimeRiskMult = 1.12;
+    deploymentMult = 1.10;
+  } else if (regime.type === 'ranging') {
+    regimeRiskMult = 0.75;
+    deploymentMult = 0.72;
+  }
+  if (downtrend) {
+    regimeRiskMult *= 0.65;
+    deploymentMult *= 0.65;
+  }
   var assetRiskMult = symType === 'commodity' ? 0.65 : (symType === 'stock' ? 0.80 : 1.0);
   var atr = sd.atr || 0;
   var atrPct = price > 0 && atr > 0 ? atr / price : 0;
@@ -380,9 +407,11 @@ function buildRiskPlan(opts) {
   if (symType === 'stock') fallbackStopPct *= 0.7;
   else if (symType === 'commodity') fallbackStopPct *= 0.5;
   var stopPct = clamp(Math.max(atrPct * pr.atrMult, fallbackStopPct), 0.004, symType === 'crypto' ? 0.18 : 0.08);
-  var riskBudget = startCash * pr.riskPct * assetRiskMult;
+  var riskBudget = portfolioValue * pr.riskPct * assetRiskMult * regimeRiskMult;
   var byRisk = stopPct > 0 ? riskBudget / stopPct : availableCash * cashPct;
-  var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95, startCash * maxPerPosition, byRisk);
+  var adjustedCashPct = clamp(cashPct * deploymentMult, 0.02, 0.50);
+  var adjustedMaxPerPosition = clamp(maxPerPosition * deploymentMult, 0.05, symType === 'crypto' ? 0.45 : 0.35);
+  var tradeValue = Math.min(availableCash * adjustedCashPct, availableCash * 0.95, portfolioValue * adjustedMaxPerPosition, byRisk);
   if (!isFinite(tradeValue) || tradeValue < 0) tradeValue = 0;
   var qty = price > 0 ? +(tradeValue / price).toFixed(6) : 0;
   var rewardRisk = pr.rewardRisk;
@@ -392,10 +421,16 @@ function buildRiskPlan(opts) {
     atrPct: atrPct,
     stopPct: stopPct,
     targetPct: targetPct,
-    riskPct: pr.riskPct * assetRiskMult,
+    riskPct: pr.riskPct * assetRiskMult * regimeRiskMult,
     riskBudget: riskBudget,
     tradeValue: tradeValue,
     qty: qty,
+    portfolioValue: portfolioValue,
+    cashPct: adjustedCashPct,
+    maxPerPosition: adjustedMaxPerPosition,
+    regimeRiskMult: regimeRiskMult,
+    deploymentMult: deploymentMult,
+    trendAligned: trendAligned,
     stopPrice: price > 0 ? +(price * (1 - stopPct)).toFixed(4) : 0,
     takeProfitPrice: price > 0 ? +(price * (1 + targetPct)).toFixed(4) : 0,
     rewardRisk: rewardRisk,

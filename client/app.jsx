@@ -414,7 +414,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.16"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.17"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1022,13 +1022,13 @@ function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 18 }}>&#x1F9E0;</span>
                   <span style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 16, color: "#f59e0b" }}>Module 1: Signal Scoring System</span>
-                  <span style={{ fontSize: 9, color: "#6b7280", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>30 signals</span>
+                  <span style={{ fontSize: 9, color: "#6b7280", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--m)" }}>31 signals</span>
                 </div>
 
                 <div style={{ fontSize: 12, color: "#94a3b8", fontFamily: "var(--m)", lineHeight: 1.7 }}>
                   <div style={{ fontFamily: "var(--h)", fontWeight: 600, fontSize: 11, color: "#e2e8f0", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>How it works</div>
                   <div style={{ padding: "0 0 0 12px", borderLeft: "2px solid rgba(245,158,11,0.2)", marginBottom: 12 }}>
-                    <div style={{ marginBottom: 4 }}>30 technical analysis signals each produce a weighted score</div>
+                    <div style={{ marginBottom: 4 }}>31 technical analysis signals each produce a weighted score</div>
                     <div style={{ marginBottom: 4 }}>Signals categorized: <span style={{ color: "#818cf8" }}>trend</span>, <span style={{ color: "#22c55e" }}>mean-reversion</span>, <span style={{ color: "#f59e0b" }}>momentum</span>, <span style={{ color: "#fb923c" }}>pattern</span>, <span style={{ color: "#e879f9" }}>combo</span></div>
                     <div style={{ marginBottom: 4 }}>Market regime (ADX) adjusts weights: trending boosts trend signals, ranging boosts mean-reversion</div>
                     <div style={{ marginBottom: 4 }}>Buy when total score &gt;= threshold, sell when sell score &gt;= threshold</div>
@@ -1222,6 +1222,13 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.17.0", date: "2026-06-02", changes: [
+                  "Risk sizing now uses current portfolio equity instead of fixed starting cash",
+                  "Position deployment scales up in aligned trends and scales down in ranging/downtrend regimes",
+                  "Added a trend-follow continuation signal so strong trends can still score after the original crossover",
+                  "Backtest diagnostics now report exposure, cash utilization, per-symbol P&L, exit P&L, and missed trends",
+                  "Backtest JSON exports include diagnostics for deeper strategy review",
+                ]},
                 { v: "1.16.0", date: "2026-06-02", changes: [
                   "Backtest audit panel now explains selected buy/sell decisions from the saved decision snapshot",
                   "Data manifest rows now show source range, freshness, and status in the backtest UI",
@@ -1321,7 +1328,7 @@ function App() {
                 ]},
                 { v: "1.0.0", date: "2026-03-22", changes: [
                   "Initial release - client-side trading simulator",
-                  "30 technical analysis signals",
+                  "31 technical analysis signals",
                   "BTC + ETH with simulated prices",
                 ]},
               ].map(r => (

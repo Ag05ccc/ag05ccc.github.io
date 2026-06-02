@@ -207,6 +207,145 @@ function buildBacktestQuality(equityCurve) {
   };
 }
 
+function createExposureStats() {
+  return { samples: 0, totalExposure: 0, totalCash: 0, totalOpenPositions: 0, maxExposure: 0, idleBars: 0, highCashBars: 0 };
+}
+
+function addExposureSample(stats, exposurePct, cashPct, openPositions) {
+  if (!stats) return;
+  exposurePct = Number.isFinite(exposurePct) ? exposurePct : 0;
+  cashPct = Number.isFinite(cashPct) ? cashPct : 0;
+  openPositions = openPositions || 0;
+  stats.samples++;
+  stats.totalExposure += exposurePct;
+  stats.totalCash += cashPct;
+  stats.totalOpenPositions += openPositions;
+  if (exposurePct > stats.maxExposure) stats.maxExposure = exposurePct;
+  if (exposurePct < 0.05) stats.idleBars++;
+  if (cashPct > 0.50) stats.highCashBars++;
+}
+
+function addMissedTrend(stats, sym, payload) {
+  if (!stats || !sym) return;
+  if (!stats[sym]) stats[sym] = { symbol: sym, days: 0, totalTrendReturnPct: 0, maxTrendReturnPct: 0, totalBuyScore: 0, reasons: {} };
+  var row = stats[sym];
+  var trendReturnPct = payload.trendReturnPct || 0;
+  row.days++;
+  row.totalTrendReturnPct += trendReturnPct;
+  if (trendReturnPct > row.maxTrendReturnPct) row.maxTrendReturnPct = trendReturnPct;
+  row.totalBuyScore += payload.buyScore || 0;
+  (payload.reasons || []).forEach(function(reason) {
+    row.reasons[reason] = (row.reasons[reason] || 0) + 1;
+  });
+}
+
+function classifyExitReason(trade) {
+  var reason = String((trade && trade.reason) || '');
+  var decision = (trade && trade.decision) || {};
+  var joined = (reason + ' ' + (decision.reason || '') + ' ' + (decision.exitTriggered || '') + ' ' + (decision.riskSellTriggered || '')).toLowerCase();
+  if (joined.indexOf('profit lock') >= 0) return 'profitLock';
+  if (joined.indexOf('signal reversal') >= 0) return 'signalReversal';
+  if (joined.indexOf('time exit') >= 0) return 'timeExit';
+  if (joined.indexOf('trail') >= 0) return 'trailingStop';
+  if (joined.indexOf('sl ') >= 0 || joined.indexOf('stop loss') >= 0) return 'stopLoss';
+  if (joined.indexOf('circuit breaker') >= 0) return 'circuitBreaker';
+  if (joined.indexOf('backtest end') >= 0) return 'forcedClose';
+  if (joined.indexOf('ema200') >= 0 || (trade && trade.regime === 'dma')) return 'dma';
+  if (decision.type === 'risk') return 'riskOther';
+  return 'scoreSell';
+}
+
+function summarizeBucket(bucket) {
+  var rows = Object.keys(bucket || {}).map(function(key) {
+    var r = bucket[key];
+    return {
+      key: key,
+      count: r.count,
+      pnl: +r.pnl.toFixed(2),
+      wins: r.wins,
+      losses: r.losses,
+      avgPnl: r.count ? +(r.pnl / r.count).toFixed(2) : 0,
+    };
+  });
+  rows.sort(function(a, b) { return Math.abs(b.pnl) - Math.abs(a.pnl); });
+  return rows;
+}
+
+function buildBacktestDiagnostics(opts) {
+  opts = opts || {};
+  var trades = opts.trades || [];
+  var exposure = opts.exposureStats || createExposureStats();
+  var perSymbol = {};
+  var exitReasons = {};
+
+  trades.forEach(function(t) {
+    if (!t || !t.symbol) return;
+    if (!perSymbol[t.symbol]) perSymbol[t.symbol] = { symbol: t.symbol, orders: 0, buys: 0, sells: 0, pnl: 0, wins: 0, losses: 0, commission: 0 };
+    var s = perSymbol[t.symbol];
+    s.orders++;
+    if (t.side === 'buy') s.buys++;
+    if (t.side === 'sell') {
+      s.sells++;
+      var pnl = Number(t.pnl) || 0;
+      s.pnl += pnl;
+      if (pnl > 0) s.wins++; else s.losses++;
+      var cls = classifyExitReason(t);
+      if (!exitReasons[cls]) exitReasons[cls] = { count: 0, pnl: 0, wins: 0, losses: 0 };
+      exitReasons[cls].count++;
+      exitReasons[cls].pnl += pnl;
+      if (pnl > 0) exitReasons[cls].wins++; else exitReasons[cls].losses++;
+    }
+    s.commission += Number(t.commission) || 0;
+  });
+
+  var perSymbolRows = Object.keys(perSymbol).map(function(sym) {
+    var r = perSymbol[sym];
+    return {
+      symbol: sym,
+      orders: r.orders,
+      buys: r.buys,
+      sells: r.sells,
+      pnl: +r.pnl.toFixed(2),
+      wins: r.wins,
+      losses: r.losses,
+      winRate: r.sells ? +((r.wins / r.sells) * 100).toFixed(1) : 0,
+      commission: +r.commission.toFixed(2),
+    };
+  });
+  perSymbolRows.sort(function(a, b) { return Math.abs(b.pnl) - Math.abs(a.pnl); });
+
+  var missedTrendRows = Object.keys(opts.missedTrendStats || {}).map(function(sym) {
+    var r = opts.missedTrendStats[sym];
+    var reasons = Object.keys(r.reasons || {}).map(function(reason) {
+      return { reason: reason, count: r.reasons[reason] };
+    }).sort(function(a, b) { return b.count - a.count; });
+    return {
+      symbol: sym,
+      days: r.days,
+      avgTrendReturnPct: r.days ? +(r.totalTrendReturnPct / r.days).toFixed(2) : 0,
+      maxTrendReturnPct: +r.maxTrendReturnPct.toFixed(2),
+      avgBuyScore: r.days ? +(r.totalBuyScore / r.days).toFixed(2) : 0,
+      topReasons: reasons.slice(0, 4),
+    };
+  });
+  missedTrendRows.sort(function(a, b) { return (b.days * b.avgTrendReturnPct) - (a.days * a.avgTrendReturnPct); });
+
+  return {
+    exposure: {
+      samples: exposure.samples,
+      avgExposurePct: exposure.samples ? +((exposure.totalExposure / exposure.samples) * 100).toFixed(2) : 0,
+      avgCashPct: exposure.samples ? +((exposure.totalCash / exposure.samples) * 100).toFixed(2) : 0,
+      maxExposurePct: +((exposure.maxExposure || 0) * 100).toFixed(2),
+      avgOpenPositions: exposure.samples ? +(exposure.totalOpenPositions / exposure.samples).toFixed(2) : 0,
+      idlePct: exposure.samples ? +((exposure.idleBars / exposure.samples) * 100).toFixed(2) : 0,
+      highCashPct: exposure.samples ? +((exposure.highCashBars / exposure.samples) * 100).toFixed(2) : 0,
+    },
+    perSymbol: perSymbolRows,
+    exitReasons: summarizeBucket(exitReasons),
+    missedTrends: missedTrendRows.slice(0, 12),
+  };
+}
+
 function buildBacktestParameterSet(opts) {
   opts = opts || {};
   var profile = opts.profile || {};
@@ -1219,7 +1358,7 @@ function runStrategies() {
         if (openPositionCount >= maxPositions) return;
         var buyFillPrice = price * (1 + slippagePct); // slippage: buy fills higher
         var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[pf.id] || 0.10;
-        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: buyFillPrice, cash: pf.cash, availableCash: availableCash, startCash: pf.startCash, cashPct: cashPct, maxPerPosition: maxPerPosition });
+        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: buyFillPrice, cash: pf.cash, availableCash: availableCash, startCash: pf.startCash, portfolioValue: totalValue, cashPct: cashPct, maxPerPosition: maxPerPosition, regime: regime });
         var tradeValue = riskPlan.tradeValue;
         var tq = riskPlan.qty;
         if (tq <= 0) return;
@@ -1604,7 +1743,7 @@ function seedPortfolioFromHistory(profile, startDate) {
         var availableCash = Math.max(0, cash - minCashReserve);
         if (availableCash < 100) return;
         var bFill = price * (1 + slippage);
-        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: bFill, cash: cash, availableCash: availableCash, startCash: DEFAULT_CASH, cashPct: cashPct, maxPerPosition: maxPerPosition });
+        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: bFill, cash: cash, availableCash: availableCash, startCash: DEFAULT_CASH, portfolioValue: totalValue, cashPct: cashPct, maxPerPosition: maxPerPosition, regime: decision.regime });
         var tradeValue = riskPlan.tradeValue;
         var tq = riskPlan.qty;
         if (tq <= 0) return;
@@ -2656,6 +2795,8 @@ const server = http.createServer((req, res) => {
         // Track buy & hold for comparison
         var buyHoldStart = {};
         var buyHoldStartCash = startCash;
+        var exposureStats = createExposureStats();
+        var missedTrendStats = {};
 
         // Equity curve sampling: for minute data, only record every ~1 day worth of bars
         var eqSampleInterval = isMinuteTimeframe ? Math.ceil(1440 / (tfMinutesGeneral || 1)) : 1;
@@ -2889,6 +3030,20 @@ const server = http.createServer((req, res) => {
             var buyReasons = decision.buyReasons, sellReasons = decision.sellReasons;
             var riskSellTriggered = decision.riskSellTriggered;
 
+            if (!pos && decision.action !== 'buy' && sd.candles.length >= 220) {
+              var recentTrend = sd.candles.slice(-20);
+              var trendBase = recentTrend[0] && recentTrend[0].c;
+              var trendReturnPct = trendBase > 0 ? ((price - trendBase) / trendBase) * 100 : 0;
+              var trendThreshold = assetType === 'crypto' ? 5 : assetType === 'commodity' ? 2 : 3;
+              var trendOpportunity = sd.ema200 > 0 && sd.ema21 > sd.ema50 && price > sd.ema200 && trendReturnPct >= trendThreshold;
+              if (trendOpportunity) {
+                var missedReasons = (decision.buyBlockedReasons || []).slice();
+                if (buyScore < buyThreshold) missedReasons.push('score below threshold');
+                if (!missedReasons.length) missedReasons.push('not selected');
+                addMissedTrend(missedTrendStats, sym, { trendReturnPct: trendReturnPct, buyScore: buyScore, reasons: missedReasons });
+              }
+            }
+
             // Volatility adjustment
             var volAdjust = regime.volatility > 3 ? 0.5 : (regime.volatility > 2 ? 0.75 : 1.0);
             var btSlippage = (profile.overrides && profile.overrides.slippage !== undefined) ? profile.overrides.slippage : SLIPPAGE_PCT;
@@ -2930,7 +3085,7 @@ const server = http.createServer((req, res) => {
               if (openPositionCount >= maxPositions) return;
               var btBuyFill = price * (1 + btSlippage);
               var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[profileId] || 0.10;
-              var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: btBuyFill, cash: cash, availableCash: availableCash, startCash: startCash, cashPct: cashPct, maxPerPosition: maxPerPosition });
+              var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: btBuyFill, cash: cash, availableCash: availableCash, startCash: startCash, portfolioValue: totalValue, cashPct: cashPct, maxPerPosition: maxPerPosition, regime: regime });
               var tradeValue = riskPlan.tradeValue;
               var tq = riskPlan.qty;
               if (tq <= 0) return;
@@ -3008,6 +3163,10 @@ const server = http.createServer((req, res) => {
             return s + ((h && h.qty) || 0) * hPrice;
           }, 0);
           var equity = cash + dayHoldingValue;
+          var endExposurePct = equity > 0 ? dayHoldingValue / equity : 0;
+          var endCashPct = equity > 0 ? cash / equity : 0;
+          var endOpenPositions = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
+          addExposureSample(exposureStats, endExposurePct, endCashPct, endOpenPositions);
           // For 1m data, only sample equity curve every eqSampleInterval candles
           if (isMinuteTimeframe) {
             if (dayIdx % eqSampleInterval === 0 || dayIdx === sortedDates.length - 1) {
@@ -3171,6 +3330,7 @@ const server = http.createServer((req, res) => {
           trades: trades,
           priceHistory: priceHistory,
           quality: buildBacktestQuality(equityCurve),
+          diagnostics: buildBacktestDiagnostics({ trades: trades, exposureStats: exposureStats, missedTrendStats: missedTrendStats }),
           profile: profileId,
           symbols: symbols,
           startDate: startDate,

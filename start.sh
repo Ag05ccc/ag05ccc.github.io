@@ -1,8 +1,12 @@
 #!/bin/bash
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "================================"
 echo "  TradeSimBot Trading Simulator"
 echo "================================"
 echo ""
+
+cd "$APP_DIR" || exit 1
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
@@ -19,4 +23,4 @@ fi
 
 echo "Starting server..."
 echo ""
-node server.js
+node "$APP_DIR/server.js"

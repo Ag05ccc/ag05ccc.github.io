@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test:data-quality": "node backtest/data-quality-tests.js"
   },
   "dependencies": {
     "ws": "^8.16.0"

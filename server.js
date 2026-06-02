@@ -120,7 +120,8 @@ let lastExternalPriceAttempt = {};
 let lastExternalPriceAttemptError = {};
 let priceSources = {};
 let priceSourceErrors = {};
-let seededFromHistory = false; // true once the 4 portfolios are warm-started from ~1yr of history (persisted)
+let seededFromHistory = false; // true once the 4 scoring portfolios are warm-started from ~1yr of history (persisted)
+let dmaSeededFromHistory = false; // true once KRAL Trend is warm-started from its own DMA backtest
 let backtestInProgress = false; // single-flight guard: only one backtest at a time (heavy reads block the loop)
 
 function recordPriceSourceError(source, err) {
@@ -471,6 +472,43 @@ portfolios.push({
   tradeCount: 0, wins: 0, losses: 0, totalCommission: 0,
 });
 
+function historyEntryTime(entry) {
+  if (!entry) return 0;
+  var raw = entry.t !== undefined ? entry.t : entry.time;
+  var n = Number(raw);
+  if (Number.isFinite(n)) return n;
+  var parsed = new Date(raw).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function historyEntryDay(entry) {
+  if (entry && typeof entry.day === 'string' && entry.day.length >= 10) return entry.day.slice(0, 10);
+  var t = historyEntryTime(entry);
+  if (!t) return null;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function normalizeHistoryByDay(history, maxDays) {
+  var byDay = {};
+  (Array.isArray(history) ? history : []).forEach(function(entry) {
+    if (!entry) return;
+    var value = Number(entry.value);
+    if (!Number.isFinite(value)) return;
+    var day = historyEntryDay(entry);
+    if (!day) return;
+    var t = historyEntryTime(entry) || new Date(day + 'T00:00:00Z').getTime();
+    var prev = byDay[day];
+    if (!prev || t >= prev.t) byDay[day] = { t: t, value: value, day: day };
+  });
+  var normalized = Object.keys(byDay).map(function(day) { return byDay[day]; }).sort(function(a, b) { return a.t - b.t; });
+  if (!normalized.length) {
+    var now = Date.now();
+    normalized = [{ t: now, value: DEFAULT_CASH, day: new Date(now).toISOString().slice(0, 10) }];
+  }
+  if (maxDays && normalized.length > maxDays) normalized = normalized.slice(-maxDays);
+  return normalized;
+}
+
 // ─── STATE PERSISTENCE ───
 // Atomic write: serialize -> write to a temp file -> rename onto state.json.
 // rename(2) is atomic on the same filesystem, so a crash mid-write can never
@@ -496,13 +534,14 @@ function buildStateSnapshot() {
       return {
         id: pf.id, cash: pf.cash, startCash: pf.startCash,
         holdings: pf.holdings, orders: pf.orders.slice(0, 100),
-        peaks: pf.peaks, history: pf.history.slice(-1000),
+        peaks: pf.peaks, history: normalizeHistoryByDay(pf.history, 1000),
         tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
         totalCommission: pf.totalCommission || 0,
       };
     }),
     marketData: savedMarket,
     seededFromHistory: seededFromHistory,
+    dmaSeededFromHistory: dmaSeededFromHistory,
     savedAt: new Date().toISOString(),
   };
 }
@@ -543,6 +582,7 @@ function saveState(opts) {
 
 function applyState(state) {
     seededFromHistory = !!state.seededFromHistory;
+    dmaSeededFromHistory = !!state.dmaSeededFromHistory;
     // Restore portfolios
     state.portfolios.forEach(saved => {
       const pf = portfolios.find(p => p.id === saved.id);
@@ -559,7 +599,7 @@ function applyState(state) {
       });
       pf.orders = saved.orders || [];
       pf.peaks = saved.peaks || {};
-      pf.history = saved.history || [{ t: Date.now(), value: DEFAULT_CASH }];
+      pf.history = normalizeHistoryByDay(saved.history || [{ t: Date.now(), value: DEFAULT_CASH }], 1200);
       pf.tradeCount = saved.tradeCount || 0;
       pf.wins = saved.wins || 0;
       pf.losses = saved.losses || 0;
@@ -645,9 +685,9 @@ function recordEquityPoint(pf, value) {
   var now = Date.now();
   var dayKey = new Date(now).toISOString().slice(0, 10);
   var last = pf.history[pf.history.length - 1];
-  if (last && last.day === dayKey) { last.value = value; last.t = now; }
+  if (last && historyEntryDay(last) === dayKey) { last.value = value; last.t = now; last.day = dayKey; }
   else { pf.history.push({ t: now, value: value, day: dayKey }); }
-  if (pf.history.length > 1200) pf.history = pf.history.slice(-1200);
+  if (pf.history.length > 1200) pf.history = normalizeHistoryByDay(pf.history, 1200);
 }
 
 // ─── FETCH REAL PRICES ───
@@ -1899,6 +1939,23 @@ function internalBacktest(profileId, assets, startDate) {
   });
 }
 
+function backtestDateToHistoryEntry(e) {
+  var date = String((e && e.date) || '').slice(0, 10);
+  var ms = date ? new Date(date + 'T00:00:00Z').getTime() : NaN;
+  if (!Number.isFinite(ms)) ms = Date.now();
+  return { t: ms, value: e.value, day: date || new Date(ms).toISOString().slice(0, 10) };
+}
+
+function backtestTradeToOrder(t) {
+  var date = String((t && t.date) || '').slice(0, 10);
+  return {
+    sym: t.symbol, side: t.side, qty: t.qty, price: t.price, total: t.total,
+    pnl: t.pnl || 0, pnlPct: t.pnlPct, commission: t.commission || 0,
+    time: (date || new Date().toISOString().slice(0, 10)) + 'T16:00:00.000Z',
+    strat: 'seed', why: t.reason || '', regime: t.regime || '', seeded: true,
+  };
+}
+
 // Seed the 4 scoring portfolios from their own 1-year backtest result so the opening
 // display equals the canonical backtest. The backtest force-closes at end, so holdings
 // start flat and cash = final equity; the live tick re-enters from there.
@@ -1914,16 +1971,8 @@ async function seedAllFromBacktest(startDate) {
       pf.cash = m.finalEquity;
       pf.holdings = {};
       pf.peaks = {};
-      pf.orders = (r.trades || []).slice().reverse().map(function(t) {
-        return { sym: t.symbol, side: t.side, qty: t.qty, price: t.price, total: t.total,
-          pnl: t.pnl || 0, pnlPct: t.pnlPct, commission: t.commission || 0,
-          time: (t.date || '') + 'T16:00:00.000Z', strat: 'seed', why: t.reason || '',
-          regime: t.regime || '', seeded: true };
-      }).slice(0, 200);
-      pf.history = (r.equityCurve || []).map(function(e) {
-        var ms = new Date((e.date || '') + 'T00:00:00Z').getTime();
-        return { t: isNaN(ms) ? Date.now() : ms, value: e.value, day: (e.date || '').slice(0, 10) };
-      });
+      pf.orders = (r.trades || []).slice().reverse().map(backtestTradeToOrder).slice(0, 200);
+      pf.history = normalizeHistoryByDay((r.equityCurve || []).map(backtestDateToHistoryEntry), 1000);
       if (!pf.history.length) pf.history = [{ t: Date.now(), value: DEFAULT_CASH }];
       pf.wins = m.wins; pf.losses = m.losses; pf.tradeCount = m.totalTrades;
       pf.totalCommission = m.totalCommission;
@@ -1932,6 +1981,40 @@ async function seedAllFromBacktest(startDate) {
       console.log('  seed failed for ' + profile.id + ': ' + e.message);
     }
   }
+}
+
+async function seedDmaFromBacktest(startDate) {
+  var pf = portfolios.find(function(p) { return p.id === 'dma'; });
+  if (!pf) return false;
+  try {
+    var r = await internalBacktest('dma', ['BTC'], startDate);
+    if (!r || !r.metrics) { console.log('  seed dma: backtest failed'); return false; }
+    var m = r.metrics;
+    pf.cash = m.finalEquity;
+    pf.holdings = {};
+    pf.peaks = {};
+    pf.orders = (r.trades || []).slice().reverse().map(backtestTradeToOrder).slice(0, 200);
+    pf.history = normalizeHistoryByDay((r.equityCurve || []).map(backtestDateToHistoryEntry), 1000);
+    if (!pf.history.length) pf.history = [{ t: Date.now(), value: DEFAULT_CASH }];
+    pf.wins = m.wins; pf.losses = m.losses; pf.tradeCount = m.totalTrades;
+    pf.totalCommission = m.totalCommission;
+    console.log('  seeded dma: ' + m.totalTrades + ' trades, $' + Math.round(m.finalEquity) + ' (' + m.totalReturn + '%)');
+    return true;
+  } catch (e) {
+    console.log('  seed failed for dma: ' + e.message);
+    return false;
+  }
+}
+
+function historyNeedsWarmStart(pf, startDate) {
+  if (!pf) return true;
+  var history = normalizeHistoryByDay(pf.history, 1200);
+  pf.history = history;
+  if (history.length < 30) return true;
+  var targetMs = new Date(startDate + 'T00:00:00Z').getTime();
+  if (!Number.isFinite(targetMs)) return false;
+  var graceMs = 14 * 24 * 60 * 60 * 1000;
+  return history[0].t > targetMs + graceMs;
 }
 
 // ─── BUILD CLIENT STATE ───
@@ -1955,7 +2038,7 @@ function getState() {
       id: pf.id, name: pf.name, color: pf.color, icon: pf.icon, desc: pf.desc,
       cash: pf.cash, startCash: pf.startCash, holdings: pf.holdings,
       orders: pf.orders.slice(0, 50),
-      history: pf.history.slice(-500),
+      history: normalizeHistoryByDay(pf.history, 500),
       tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
       totalCommission: pf.totalCommission || 0,
       totalValue: pf.cash + hVal, hVal, pnl: pf.cash + hVal - pf.startCash,
@@ -2299,7 +2382,7 @@ const server = http.createServer((req, res) => {
         name: pf.name, cash: pf.cash, startCash: pf.startCash,
         tradeCount: pf.tradeCount, wins: pf.wins, losses: pf.losses,
         totalCommission: pf.totalCommission || 0,
-        holdings: pf.holdings, orders: pf.orders, history: pf.history,
+        holdings: pf.holdings, orders: pf.orders, history: normalizeHistoryByDay(pf.history, 1000),
       };
     });
     res.writeHead(200, {
@@ -3558,14 +3641,35 @@ async function start() {
     // (same engine as the Backtest tab) so they open showing "what if I had traded the
     // last year", then the live tick continues. Runs after listen so the internal
     // backtest call works. Once-only (persisted flag); RESEED_FROM_HISTORY=1 forces it.
-    if (!seededFromHistory || process.env.RESEED_FROM_HISTORY === '1') {
-      var seedStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      console.log('  Warm-starting 4 portfolios from their 1-year backtest (since ' + seedStart + ')...');
+    var seedStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    var forceHistoryReseed = process.env.RESEED_FROM_HISTORY === '1';
+    if (!seededFromHistory || forceHistoryReseed) {
+      console.log('  Warm-starting 4 scoring portfolios from their 1-year backtest (since ' + seedStart + ')...');
       await seedAllFromBacktest(seedStart);
       seededFromHistory = true;
       saveState({ sync: true });
       fullSnapshotDue = true;
-      console.log('  Warm-start complete.');
+      console.log('  Scoring warm-start complete.');
+    }
+
+    var dmaPf = portfolios.find(function(p) { return p.id === 'dma'; });
+    if (forceHistoryReseed || !dmaSeededFromHistory || historyNeedsWarmStart(dmaPf, seedStart)) {
+      console.log('  Warm-starting KRAL Trend from its 1-year DMA backtest (since ' + seedStart + ')...');
+      if (await seedDmaFromBacktest(seedStart)) {
+        dmaSeededFromHistory = true;
+        saveState({ sync: true });
+        fullSnapshotDue = true;
+        console.log('  KRAL Trend warm-start complete.');
+      }
+    }
+    if (dmaPf && dmaSeededFromHistory) {
+      var dmaHVal = Object.entries(dmaPf.holdings).reduce(function(s, entry) {
+        var sym = entry[0], h = entry[1];
+        return s + ((h && h.qty) || 0) * ((marketData[sym] && marketData[sym].cur) || lastPrices[sym] || 0);
+      }, 0);
+      recordEquityPoint(dmaPf, dmaPf.cash + dmaHVal);
+      saveState({ sync: true });
+      fullSnapshotDue = true;
     }
   });
 

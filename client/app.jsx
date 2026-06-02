@@ -434,7 +434,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.20"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.21"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1242,6 +1242,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.21.0", date: "2026-06-02", changes: [
+                  "KRAL Trend now warm-starts from its own 1-year DMA backtest instead of starting from the first live tick",
+                  "Portfolio histories are normalized by day on load, save, export, and API responses",
+                  "Legacy dense KRAL history points no longer compress the yearly chart range",
+                ]},
                 { v: "1.20.0", date: "2026-06-02", changes: [
                   "Portfolio race chart now buckets histories by day and uses the latest value per portfolio per day",
                   "Dense DMA/live history points no longer stretch the right side of the yearly comparison chart",

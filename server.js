@@ -509,6 +509,50 @@ function normalizeHistoryByDay(history, maxDays) {
   return normalized;
 }
 
+var benchmarkCache = { goldMtimeMs: 0, goldHistory: [] };
+
+function loadGoldBenchmarkHistory() {
+  var file = path.join(__dirname, 'backtest', 'data', 'GOLD_daily.csv');
+  try {
+    var stat = fs.statSync(file);
+    if (benchmarkCache.goldHistory.length && benchmarkCache.goldMtimeMs === stat.mtimeMs) {
+      return benchmarkCache.goldHistory;
+    }
+    var parsed = parseDailyCsv(fs.readFileSync(file, 'utf8'));
+    benchmarkCache.goldHistory = (parsed.candles || []).filter(function(c) {
+      return c && c.valid && Number.isFinite(c.close) && c.close > 0;
+    }).map(function(c) {
+      return { day: c.date, close: c.close, source: 'historical' };
+    });
+    benchmarkCache.goldMtimeMs = stat.mtimeMs;
+  } catch (e) {
+    benchmarkCache.goldHistory = [];
+    benchmarkCache.goldMtimeMs = 0;
+  }
+  return benchmarkCache.goldHistory;
+}
+
+function buildBenchmarksState() {
+  var goldHistory = loadGoldBenchmarkHistory().slice();
+  var liveGold = Number((marketData.GOLD && marketData.GOLD.cur) || lastPrices.GOLD);
+  if (Number.isFinite(liveGold) && liveGold > 0) {
+    var today = new Date().toISOString().slice(0, 10);
+    var last = goldHistory[goldHistory.length - 1];
+    var livePoint = { day: today, close: liveGold, source: priceSources.GOLD || 'live' };
+    if (last && last.day === today) goldHistory[goldHistory.length - 1] = livePoint;
+    else goldHistory.push(livePoint);
+  }
+  return {
+    gold: {
+      symbol: 'GOLD',
+      name: 'Gold Buy & Hold',
+      startCash: DEFAULT_CASH,
+      source: 'backtest/data/GOLD_daily.csv + live GOLD when available',
+      history: goldHistory.slice(-1000),
+    },
+  };
+}
+
 // ─── STATE PERSISTENCE ───
 // Atomic write: serialize -> write to a temp file -> rename onto state.json.
 // rename(2) is atomic on the same filesystem, so a crash mid-write can never
@@ -2053,7 +2097,7 @@ function getState() {
   // Add DMA profile config for UI
   profileConfigs.push({ id: 'dma', buyThreshold: 0, sellThreshold: 0, cashPct: 0.15, assets: Object.keys(COINS), overrides: {} });
 
-  return { prices: prices, portfolios: pfs, scores: lastScores, profiles: profileConfigs, signals: SIGNALS.map(function(s) { return { id: s.id, label: s.label, side: s.side, category: s.category, weight: s.weight }; }), tick: tickCount, serverTime: new Date().toISOString() };
+  return { prices: prices, portfolios: pfs, benchmarks: buildBenchmarksState(), scores: lastScores, profiles: profileConfigs, signals: SIGNALS.map(function(s) { return { id: s.id, label: s.label, side: s.side, category: s.category, weight: s.weight }; }), tick: tickCount, serverTime: new Date().toISOString() };
 }
 
 function broadcastBacktestProgress(pct) {

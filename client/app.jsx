@@ -279,12 +279,33 @@ function App() {
     return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null;
   }
 
+  function buildGoldBuyHoldBenchmark(benchmark, startDay) {
+    const rows = ((benchmark && benchmark.history) || []).map(row => {
+      const day = String(row.day || row.date || "").slice(0, 10);
+      const close = Number(row.close || row.value);
+      const ts = day ? new Date(day + "T00:00:00Z").getTime() : NaN;
+      return { day, close, ts };
+    }).filter(row => row.day && Number.isFinite(row.ts) && Number.isFinite(row.close) && row.close > 0)
+      .sort((a, b) => a.ts - b.ts);
+    const filtered = startDay ? rows.filter(row => row.day >= startDay) : rows;
+    if (!filtered.length) return [];
+    const baseClose = filtered[0].close;
+    const startCash = Number(benchmark && benchmark.startCash) || 100000;
+    return filtered.map(row => ({
+      day: row.day,
+      t: row.ts,
+      value: +(startCash * (row.close / baseClose)).toFixed(2),
+    }));
+  }
+
   // Comparison chart: merge portfolio histories by day and keep each portfolio's
   // last value for that day. Mixing daily backtest-seeded histories with dense
   // live/DMA intraday histories made the right side consume most of the chart.
   const compDateMap = {};
   const compareStartDay = compareStart || null;
+  const compareSeriesNames = {};
   pfStats.forEach(pf => {
+    compareSeriesNames[pf.id] = pf.name;
     const latestByDay = {};
     (pf.history || []).forEach(h => {
       const ts = historyTimestamp(h);
@@ -297,6 +318,12 @@ function App() {
       if (!compDateMap[day]) compDateMap[day] = { t: new Date(day + "T00:00:00Z").getTime(), label: day };
       compDateMap[day][pf.id] = latestByDay[day].value;
     });
+  });
+  const goldBenchmarkData = buildGoldBuyHoldBenchmark(state.benchmarks && state.benchmarks.gold, compareStartDay);
+  if (goldBenchmarkData.length) compareSeriesNames.goldHold = "Gold Buy & Hold ($100K)";
+  goldBenchmarkData.forEach(pt => {
+    if (!compDateMap[pt.day]) compDateMap[pt.day] = { t: pt.t, label: pt.day };
+    compDateMap[pt.day].goldHold = pt.value;
   });
   const compData = Object.values(compDateMap).sort((a, b) => a.t - b.t);
 
@@ -434,7 +461,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.21"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.22"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -551,15 +578,16 @@ function App() {
                 ) : compData.length > 2 ? (
                   <ZoomChart dataKey="t" dataLength={compData.length}>
                   <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                    <ComposedChart data={compData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="t" hide />
                       <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={v => `$${fK(v)}`} />
-                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={(v, payload) => payload && payload[0] && payload[0].payload ? payload[0].payload.label : ""} formatter={(v) => [`$${fK(v)}`, ""]} />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={(v, payload) => payload && payload[0] && payload[0].payload ? payload[0].payload.label : ""} formatter={(v, name) => [`$${fK(v)}`, compareSeriesNames[name] || name]} />
                       {pfStats.map(pf => (
                         <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={true} />
                       ))}
-                    </AreaChart>
+                      {goldBenchmarkData.length > 0 && <Line type="monotone" dataKey="goldHold" name="Gold Buy & Hold ($100K)" stroke="#fbbf24" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls={true} />}
+                    </ComposedChart>
                   </ResponsiveContainer>
                   </ZoomChart>
                 ) : (
@@ -574,6 +602,14 @@ function App() {
                     <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#818cf8", fontWeight: 700, marginLeft: 6 }}>Replay {simReplayPct}%</span>
                     <button onClick={simReplayPlaying ? stopSimulationReplay : playSimulationReplay} className="bt" style={{ padding: "2px 7px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 9, fontFamily: "var(--m)", fontWeight: 700, cursor: "pointer" }}>{simReplayPlaying ? "Pause" : "Play"}</button>
                     <button onClick={showFullSimulationReplay} className="bt" style={{ padding: "2px 7px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontFamily: "var(--m)", fontWeight: 700, cursor: "pointer" }}>Full</button>
+                  </div>
+                )}
+                {!simResults && goldBenchmarkData.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+                    {pfStats.map(pf => (
+                      <span key={pf.id} style={{ fontSize: 9, fontFamily: "var(--m)", color: pf.color, fontWeight: 600 }}>{"\u25CF"} {pf.name}</span>
+                    ))}
+                    <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#fbbf24", fontWeight: 700 }}>{"\u25AC"} Gold Buy & Hold ($100K)</span>
                   </div>
                 )}
               </div>
@@ -1242,6 +1278,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.22.0", date: "2026-06-02", changes: [
+                  "Portfolio Race now includes a Gold Buy & Hold benchmark based on $100K from the selected From date",
+                  "Gold benchmark uses historical GOLD daily data and extends to the live GOLD price when available",
+                  "Compare chart tooltip now shows series names for portfolios and benchmarks",
+                ]},
                 { v: "1.21.0", date: "2026-06-02", changes: [
                   "KRAL Trend now warm-starts from its own 1-year DMA backtest instead of starting from the first live tick",
                   "Portfolio histories are normalized by day on load, save, export, and API responses",

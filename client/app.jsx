@@ -155,6 +155,10 @@ function App() {
     setChartZoom(null);
   }, [selected]);
 
+  useEffect(function() {
+    setChartZoom(null);
+  }, [tf]);
+
   // Chart zoom refs — must be before early return to maintain hooks order
   const chartRef = useRef(null);
   const chartZoomRef = useRef({ allLen: 0, zoomStart: 0, zoomEnd: 0 });
@@ -202,34 +206,58 @@ function App() {
   const ch = sd.cur - (sd.candles[0]?.o || sd.cur);
   const chP = sd.candles.length > 0 ? ch / (sd.candles[0]?.o || sd.cur) : 0;
 
-  // Build merged candles: historical daily + live
-  var mergedSourceCandles = [];
+  // Keep intraday and daily candles in separate chart modes. Mixing months of
+  // daily history with a few hours of live candles makes the live chart look flat.
+  var histPart = [];
   if (histData && histData.symbol === selected && histData.candles) {
-    mergedSourceCandles = histData.candles.map(function(c) {
-      return { t: c.date || c.d || '', o: c.o, h: c.h, l: c.l, c: c.c, v: c.v || 0, isDaily: true };
+    histPart = histData.candles.map(function(c) {
+      return { t: c.date || c.d || '', o: c.o, h: c.h, l: c.l, c: c.c, v: c.v || 0, isDaily: true, source: "daily" };
     });
   }
-  // Append live candles (more recent, 1-min granularity)
+  var livePart = [];
   if (sd.candles && sd.candles.length > 0) {
     sd.candles.forEach(function(c) {
-      mergedSourceCandles.push({ t: c.t || 0, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v || 0, isDaily: false });
+      livePart.push({ t: c.t || 0, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v || 0, isDaily: false, source: "live" });
     });
   }
-
-  // Group candles by timeframe (only groups live/minute candles; daily candles pass through for larger TFs)
   const tfObj = TIMEFRAMES.find(t => t.label === tf) || TIMEFRAMES[1];
-  // For daily historical candles, grouping by minute-factor doesn't apply, so split and handle
-  var histPart = mergedSourceCandles.filter(function(c) { return c.isDaily; });
-  var livePart = mergedSourceCandles.filter(function(c) { return !c.isDaily; });
-  var groupedLive = groupCandles(livePart, tfObj.factor);
-  // For 1D timeframe, group live candles into a single day candle if any exist
-  var combinedGrouped = histPart.concat(groupedLive);
+  const isDailyChart = tfObj.label === "1D";
+  function liveDayCandle(candles) {
+    if (!candles.length) return null;
+    const last = candles[candles.length - 1];
+    const day = last.t ? new Date(last.t).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const sameDay = candles.filter(c => c.t && new Date(c.t).toISOString().slice(0, 10) === day);
+    const rows = sameDay.length ? sameDay : candles;
+    return {
+      t: day, o: rows[0].o, h: Math.max(...rows.map(c => c.h)), l: Math.min(...rows.map(c => c.l)),
+      c: rows[rows.length - 1].c, v: rows.reduce((a, c) => a + (c.v || 0), 0), isDaily: true, source: "live-day",
+    };
+  }
+  var liveDaily = liveDayCandle(livePart);
+  var groupedLive = groupCandles(livePart, tfObj.factor).map(c => Object.assign({}, c, { isDaily: false, source: "live" }));
+  var chartDataMode = isDailyChart ? "daily" : (groupedLive.length >= 2 ? "intraday" : "daily-fallback");
+  var combinedGrouped = [];
+  if (isDailyChart) {
+    combinedGrouped = histPart.slice();
+    if (liveDaily) {
+      combinedGrouped = combinedGrouped.filter(c => String(c.t).slice(0, 10) !== liveDaily.t).concat([liveDaily]);
+    }
+  } else if (groupedLive.length >= 2) {
+    combinedGrouped = groupedLive;
+  } else {
+    combinedGrouped = histPart.slice(-120);
+  }
   // Keep all candles, not just last 200 — zoom controls the visible range
   const allChartCandles = combinedGrouped.map((c, i) => ({
     t: c.isDaily ? (c.t || `${i}`) : (c.t ? new Date(c.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `${i}`),
     rawT: c.t || 0,
-    o: c.o, h: c.h, l: c.l, c: c.c, v: c.v,
+    o: c.o, h: c.h, l: c.l, c: c.c, v: c.v, source: c.source,
   }));
+  const chartSourceLabel = chartDataMode === "intraday"
+    ? `${allChartCandles.length} ${tfObj.label} live candles (${livePart.length} raw 1m)`
+    : chartDataMode === "daily"
+      ? `${histPart.length} daily + ${liveDaily ? 1 : 0} live day candle`
+      : `${allChartCandles.length} daily history candles`;
   // Reset zoom when symbol changes (chartZoom state declared at top with other hooks)
   const defaultShow = Math.min(120, allChartCandles.length);
   const zoomStart = chartZoom ? chartZoom[0] : Math.max(0, allChartCandles.length - defaultShow);
@@ -461,7 +489,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.22"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.23"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -786,7 +814,7 @@ function App() {
                 </div>
               )}
               {histData && histData.symbol === selected && !histLoading && (
-                <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--m)", marginBottom: 4, textAlign: "right" }}>{histData.candles.length} daily + {(sd.candles || []).length} live candles</div>
+                <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "var(--m)", marginBottom: 4, textAlign: "right" }}>{chartSourceLabel}</div>
               )}
 
               {chartCandles.length > 2 ? (
@@ -831,17 +859,37 @@ function App() {
                       s += `<line x1="${x}" y1="${mt + ph}" x2="${x}" y2="${mt + ph + 5}" stroke="#334155" stroke-width="0.5"/>`;
                       s += `<text x="${x}" y="${mt + ph + 18}" fill="#64748b" font-size="9" font-family="'JetBrains Mono',monospace" text-anchor="middle">${t}</text>`;
                     }
-                    // EMA lines as smooth paths
-                    const ema9pts = [], ema21pts = [];
-                    chartCandles.forEach((c, i) => { if (i >= 9) ema9pts.push(`${xS(i)},${yS(c.c)}`); if (i >= 21) ema21pts.push(`${xS(i)},${yS(c.c)}`); });
+                    function emaValues(period) {
+                      const values = chartCandles.map(c => c.c);
+                      const out = new Array(values.length).fill(null);
+                      if (values.length < period) return out;
+                      const k = 2 / (period + 1);
+                      let emaVal = values.slice(0, period).reduce((a, v) => a + v, 0) / period;
+                      out[period - 1] = emaVal;
+                      for (let i = period; i < values.length; i++) {
+                        emaVal = values[i] * k + emaVal * (1 - k);
+                        out[i] = emaVal;
+                      }
+                      return out;
+                    }
+                    function drawSeries(values, color, label) {
+                      const pts = [];
+                      values.forEach((v, i) => { if (Number.isFinite(v)) pts.push([xS(i), yS(v), v]); });
+                      if (pts.length < 2) return;
+                      s += `<path d="${pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="${color}" stroke-width="1.1" opacity="0.85"/>`;
+                      const last = pts[pts.length - 1];
+                      s += `<text x="${Math.max(ml + 4, last[0] - 28)}" y="${last[1] - 4}" fill="${color}" font-size="7" font-family="'JetBrains Mono',monospace" opacity="0.85">${label}</text>`;
+                    }
+                    const ema9vals = emaValues(9);
+                    const ema21vals = emaValues(21);
                     // BB band fill
                     if (bbU > 0 && bbL > 0) {
                       s += `<rect x="${ml}" y="${yS(bbU)}" width="${pw}" height="${Math.abs(yS(bbL) - yS(bbU))}" fill="rgba(99,102,241,0.04)" rx="2"/>`;
                       s += `<line x1="${ml}" y1="${yS(bbU)}" x2="${ml+pw}" y2="${yS(bbU)}" stroke="#6366f1" stroke-dasharray="4 2" stroke-width="0.7" opacity="0.4"/>`;
                       s += `<line x1="${ml}" y1="${yS(bbL)}" x2="${ml+pw}" y2="${yS(bbL)}" stroke="#6366f1" stroke-dasharray="4 2" stroke-width="0.7" opacity="0.4"/>`;
                     }
-                    if (sd.ema9 > 0) s += `<line x1="${ml}" y1="${yS(sd.ema9)}" x2="${ml+pw}" y2="${yS(sd.ema9)}" stroke="#22d3ee" stroke-dasharray="3 2" stroke-width="0.7" opacity="0.5"/>`;
-                    if (sd.ema21 > 0) s += `<line x1="${ml}" y1="${yS(sd.ema21)}" x2="${ml+pw}" y2="${yS(sd.ema21)}" stroke="#f59e0b" stroke-dasharray="3 2" stroke-width="0.7" opacity="0.5"/>`;
+                    drawSeries(ema9vals, "#22d3ee", "EMA9");
+                    drawSeries(ema21vals, "#f59e0b", "EMA21");
                     // Candles with glow
                     chartCandles.forEach((c, i) => {
                       const x = xS(i), g = c.c >= c.o;
@@ -861,9 +909,6 @@ function App() {
                     s += `<line x1="${ml}" y1="${curY}" x2="${ml+pw}" y2="${curY}" stroke="#f59e0b" stroke-dasharray="2 2" stroke-width="0.8" opacity="0.8"/>`;
                     s += `<rect x="${ml+pw+2}" y="${curY - 8}" width="50" height="16" fill="#f59e0b" rx="3"/>`;
                     s += `<text x="${ml+pw+27}" y="${curY + 4}" fill="#0a0e17" font-size="8" font-family="'JetBrains Mono',monospace" text-anchor="middle" font-weight="600">$${fmt(sd.cur)}</text>`;
-                    // EMA labels
-                    if (sd.ema9 > 0) { const ey = yS(sd.ema9); s += `<text x="${ml + 4}" y="${ey - 4}" fill="#22d3ee" font-size="7" font-family="'JetBrains Mono',monospace" opacity="0.7">EMA9</text>`; }
-                    if (sd.ema21 > 0) { const ey = yS(sd.ema21); s += `<text x="${ml + 4}" y="${ey - 4}" fill="#f59e0b" font-size="7" font-family="'JetBrains Mono',monospace" opacity="0.7">EMA21</text>`; }
                     s += `</svg>`;
                     el.innerHTML = s;
                   }} style={{ background: "#0f172a", borderRadius: 10, padding: "8px", border: "1px solid rgba(255,255,255,0.06)" }} />
@@ -1278,6 +1323,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.23.0", date: "2026-06-02", changes: [
+                  "Chart tab now separates intraday live candles from daily historical candles so BTC no longer appears flattened on 5m/15m views",
+                  "1D chart mode still shows daily history and appends the current live day candle",
+                  "EMA9/EMA21 overlays now render as per-candle series for the visible chart instead of stale horizontal reference lines",
+                ]},
                 { v: "1.22.0", date: "2026-06-02", changes: [
                   "Portfolio Race now includes a Gold Buy & Hold benchmark based on $100K from the selected From date",
                   "Gold benchmark uses historical GOLD daily data and extends to the live GOLD price when available",

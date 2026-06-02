@@ -13,10 +13,17 @@ function App() {
   const [simLoading, setSimLoading] = useState(false);
   const [simResults, setSimResults] = useState(null);
   const [simError, setSimError] = useState(null);
+  const [simReplayData, setSimReplayData] = useState([]);
+  const [simReplayIndex, setSimReplayIndex] = useState(0);
+  const [simReplayPlaying, setSimReplayPlaying] = useState(false);
   const [histData, setHistData] = useState(null);
   const [histLoading, setHistLoading] = useState(false);
+  const [dataQuality, setDataQuality] = useState(null);
+  const [dataQualityLoading, setDataQualityLoading] = useState(false);
+  const [dataQualityError, setDataQualityError] = useState(null);
   const [assetFilter, setAssetFilter] = useState("ALL");
   const wsRef = useRef(null);
+  const simReplayTimerRef = useRef(null);
 
   // WebSocket connection
   useEffect(() => {
@@ -81,6 +88,45 @@ function App() {
     }
   }, []);
   const resetPf = useCallback(function(id) { sendWs({ type: 'reset', id: id }); }, [sendWs]);
+
+  const stopSimulationReplay = useCallback(function() {
+    if (simReplayTimerRef.current) {
+      clearInterval(simReplayTimerRef.current);
+      simReplayTimerRef.current = null;
+    }
+    setSimReplayPlaying(false);
+  }, []);
+
+  const loadDataQuality = useCallback(function() {
+    setDataQualityLoading(true);
+    setDataQualityError(null);
+    fetch('/api/data-quality')
+      .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(resp) {
+        setDataQualityLoading(false);
+        if (!resp.ok || resp.data.error) {
+          setDataQualityError(resp.data.error || 'Data quality check failed');
+          return;
+        }
+        setDataQuality(resp.data);
+      })
+      .catch(function(e) {
+        setDataQualityLoading(false);
+        setDataQualityError(e.message || 'Data quality check failed');
+      });
+  }, []);
+
+  useEffect(function() {
+    loadDataQuality();
+    var id = setInterval(loadDataQuality, 60000);
+    return function() { clearInterval(id); };
+  }, [loadDataQuality]);
+
+  useEffect(function() {
+    return function() {
+      if (simReplayTimerRef.current) clearInterval(simReplayTimerRef.current);
+    };
+  }, []);
 
   function loadHistorical(sym, startDate) {
     const s = sym || selected;
@@ -243,40 +289,12 @@ function App() {
     { id: "dma", name: "KRAL Trend", color: "#8b5cf6" },
   ];
   const cryptoSymbols = Object.entries(COINS_META).filter(([, c]) => c.type === "crypto").map(([s]) => s);
-  const allSymbolsMeta = Object.keys(COINS_META);
+  const allSymbolsMeta = Object.keys(prices);
 
-  function runSimulation() {
-    if (!compareStart) return;
-    setSimLoading(true);
-    setSimError(null);
-    setSimResults(null);
-    Promise.all(simProfiles.map(p =>
-      adminFetch('/api/backtest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: p.id, symbols: allSymbolsMeta, startDate: compareStart }),
-      }).then(r => r.json())
-    )).then(results => {
-      setSimLoading(false);
-      const err = results.find(r => r.error);
-      if (err) { setSimError(err.error); return; }
-      setSimResults(results);
-    }).catch(e => { setSimLoading(false); setSimError(e.message || 'Simulation failed'); });
-  }
-
-  function clearSimulation() {
-    setSimResults(null);
-    setSimError(null);
-    setSimLoading(false);
-  }
-
-  // Note: click Simulate button to run comparison
-
-  // Build simulation chart data by merging equity curves by date
-  const simChartData = (() => {
-    if (!simResults) return [];
+  function buildSimulationChartData(results) {
+    if (!results) return [];
     const dateMap = {};
-    simResults.forEach((res, i) => {
+    results.forEach((res, i) => {
       const pid = simProfiles[i].id;
       (res.equityCurve || []).forEach(pt => {
         if (!dateMap[pt.date]) dateMap[pt.date] = { date: pt.date };
@@ -284,7 +302,7 @@ function App() {
       });
     });
     // Add buy & hold reference: normalize to 100k start
-    const firstResult = simResults[0];
+    const firstResult = results[0];
     const startCash = (firstResult && firstResult.metrics) ? firstResult.metrics.startCash : 100000;
     const bhReturn = (firstResult && firstResult.metrics) ? firstResult.metrics.buyHoldReturn / 100 : 0;
     const dates = Object.keys(dateMap).sort();
@@ -296,7 +314,82 @@ function App() {
       });
     }
     return dates.map(d => dateMap[d]);
-  })();
+  }
+
+  function startSimulationReplay(chartData, startIndex) {
+    stopSimulationReplay();
+    const data = chartData || [];
+    setSimReplayData(data);
+    const firstFrame = Math.min(data.length, Math.max(2, startIndex || 2));
+    setSimReplayIndex(firstFrame);
+    if (data.length <= 2) return;
+    setSimReplayPlaying(true);
+    const step = Math.max(1, Math.ceil(data.length / 180));
+    simReplayTimerRef.current = setInterval(function() {
+      setSimReplayIndex(function(cur) {
+        const next = Math.min(data.length, cur + step);
+        if (next >= data.length) {
+          if (simReplayTimerRef.current) {
+            clearInterval(simReplayTimerRef.current);
+            simReplayTimerRef.current = null;
+          }
+          setSimReplayPlaying(false);
+        }
+        return next;
+      });
+    }, 70);
+  }
+
+  function playSimulationReplay() {
+    if (!simReplayData.length) return;
+    var startAt = simReplayIndex >= simReplayData.length ? 2 : simReplayIndex;
+    startSimulationReplay(simReplayData, startAt);
+  }
+
+  function showFullSimulationReplay() {
+    stopSimulationReplay();
+    setSimReplayIndex(simReplayData.length);
+  }
+
+  function runSimulation() {
+    if (!compareStart) return;
+    setSimLoading(true);
+    setSimError(null);
+    setSimResults(null);
+    stopSimulationReplay();
+    setSimReplayData([]);
+    setSimReplayIndex(0);
+    Promise.all(simProfiles.map(p =>
+      adminFetch('/api/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: p.id, symbols: allSymbolsMeta, startDate: compareStart }),
+      }).then(r => r.json())
+    )).then(results => {
+      setSimLoading(false);
+      const err = results.find(r => r.error);
+      if (err) { setSimError(err.error); return; }
+      setSimResults(results);
+      startSimulationReplay(buildSimulationChartData(results));
+    }).catch(e => { setSimLoading(false); setSimError(e.message || 'Simulation failed'); });
+  }
+
+  function clearSimulation() {
+    stopSimulationReplay();
+    setSimResults(null);
+    setSimError(null);
+    setSimLoading(false);
+    setSimReplayData([]);
+    setSimReplayIndex(0);
+  }
+
+  // Note: click Simulate button to run comparison
+
+  // Build simulation chart data by merging equity curves by date, then replay it progressively.
+  const simChartDataFull = simReplayData.length ? simReplayData : buildSimulationChartData(simResults);
+  const simReplayVisibleIndex = simResults ? Math.max(2, Math.min(simReplayIndex || simChartDataFull.length, simChartDataFull.length)) : 0;
+  const simChartData = simResults ? simChartDataFull.slice(0, simReplayVisibleIndex) : [];
+  const simReplayPct = simChartDataFull.length ? Math.round((simChartData.length / simChartDataFull.length) * 100) : 0;
 
   return (
     <div style={{ "--m": "'JetBrains Mono',monospace", "--h": "'Space Grotesk',sans-serif", minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'Space Grotesk',sans-serif" }}>
@@ -321,7 +414,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.15"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.16"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -397,7 +490,9 @@ function App() {
           {tab === "compare" && (
             <div style={{ padding: 20 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>Portfolio Race</div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>4 risk profiles trading on real market data · Server-side 24/7</div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>5 risk profiles trading on real market data · Server-side 24/7</div>
+
+              <DataQualityPanel data={dataQuality} loading={dataQualityLoading} error={dataQualityError} onRefresh={loadDataQuality} isMobile={isMobile} />
 
               <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)", padding: 16, marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
@@ -416,7 +511,7 @@ function App() {
                 {simLoading ? (
                   <div style={{ height: 280, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
                     <div style={{ display: "inline-block", width: 32, height: 32, border: "3px solid #1e293b", borderTop: "3px solid #f59e0b", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--m)" }}>Running 4 backtests from {compareStart}...</div>
+                    <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "var(--m)" }}>Running 5 backtests from {compareStart}...</div>
                   </div>
                 ) : simResults && simChartData.length > 2 ? (
                   <ZoomChart dataKey="date" dataLength={simChartData.length}>
@@ -451,11 +546,14 @@ function App() {
                   <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: "#374151" }}>Warming up... strategies trigger on candle close</div>
                 )}
                 {simResults && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
                     {simProfiles.map(p => (
                       <span key={p.id} style={{ fontSize: 9, fontFamily: "var(--m)", color: p.color, fontWeight: 600 }}>{"\u25CF"} {p.name}</span>
                     ))}
                     <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#6b7280", fontWeight: 600 }}>{"\u25CF"} Buy & Hold (dashed)</span>
+                    <span style={{ fontSize: 9, fontFamily: "var(--m)", color: "#818cf8", fontWeight: 700, marginLeft: 6 }}>Replay {simReplayPct}%</span>
+                    <button onClick={simReplayPlaying ? stopSimulationReplay : playSimulationReplay} className="bt" style={{ padding: "2px 7px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#94a3b8", fontSize: 9, fontFamily: "var(--m)", fontWeight: 700, cursor: "pointer" }}>{simReplayPlaying ? "Pause" : "Play"}</button>
+                    <button onClick={showFullSimulationReplay} className="bt" style={{ padding: "2px 7px", borderRadius: 4, border: "1px solid #1e293b", background: "transparent", color: "#6b7280", fontSize: 9, fontFamily: "var(--m)", fontWeight: 700, cursor: "pointer" }}>Full</button>
                   </div>
                 )}
               </div>
@@ -1124,6 +1222,12 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.16.0", date: "2026-06-02", changes: [
+                  "Backtest audit panel now explains selected buy/sell decisions from the saved decision snapshot",
+                  "Data manifest rows now show source range, freshness, and status in the backtest UI",
+                  "Data quality endpoint and test added for live source freshness plus historical candle anomalies",
+                  "Portfolio simulation chart now replays results progressively instead of drawing the full curve at once",
+                ]},
                 { v: "1.15.0", date: "2026-06-02", changes: [
                   "client.html reduced to shell and script loader",
                   "Shared helpers, BacktestTab, App, and bootstrap moved into client/*.jsx modules",

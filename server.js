@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const https = require('https');
 const { fork } = require('child_process');
 const crypto = require('crypto');
+const { inspectHistoricalData, parseDailyCsv, parseDateMs } = require('./data-quality');
 
 // Load .env file
 const envPath = path.resolve(__dirname, '.env');
@@ -112,8 +113,29 @@ let marketData = {};  // { BTC: { cur, candles, building, rsi, macd, ... }, ... 
 let portfolios = [];
 let tickCount = 0;
 let lastPrices = {}; // last fetched real prices
+let lastExternalPriceUpdate = {}; // { BTC: timestamp } from Binance/CoinGecko/TwelveData
+let lastExternalPriceValue = {};
+let priceSources = {};
+let priceSourceErrors = {};
 let seededFromHistory = false; // true once the 4 portfolios are warm-started from ~1yr of history (persisted)
 let backtestInProgress = false; // single-flight guard: only one backtest at a time (heavy reads block the loop)
+
+function recordPriceSourceError(source, err) {
+  priceSourceErrors[source] = {
+    lastError: err && err.message ? err.message : String(err || 'unknown error'),
+    lastErrorAt: new Date().toISOString(),
+  };
+}
+
+function applyExternalPrice(sym, price, source) {
+  var p = parseFloat(price);
+  if (!COINS[sym] || !Number.isFinite(p) || p <= 0) return false;
+  lastPrices[sym] = p;
+  lastExternalPriceUpdate[sym] = Date.now();
+  lastExternalPriceValue[sym] = p;
+  priceSources[sym] = source;
+  return true;
+}
 
 // Read only the last `maxBytes` of a (time-sorted) file, dropping the partial first
 // line. Used so a multi-hundred-MB 1m .jsonl isn't loaded whole into memory (that
@@ -213,6 +235,8 @@ function compactDecisionSnapshot(decision) {
     reason: decision.reason || decision.riskSellTriggered || '',
     buyScore: +(decision.buyScore || 0).toFixed(2),
     sellScore: +(decision.sellScore || 0).toFixed(2),
+    buyReasons: decision.buyReasons || [],
+    sellReasons: decision.sellReasons || [],
     regime: decision.regime && decision.regime.type,
     exposurePct: +((decision.exposurePct || 0) * 100).toFixed(2),
     exitTriggered: decision.exitTriggered || null,
@@ -235,17 +259,27 @@ function candleLabel(c) {
 
 function buildDataManifest(symbols, allCandles, opts) {
   opts = opts || {};
+  var nowMs = Date.now();
   return {
     timeframe: opts.timeframe,
     source: opts.source,
     skippedSymbols: opts.skippedSymbols || [],
     symbols: (symbols || []).map(function(sym) {
       var rows = (allCandles && allCandles[sym]) || [];
+      var first = rows.length ? candleLabel(rows[0]) : null;
+      var last = rows.length ? candleLabel(rows[rows.length - 1]) : null;
+      var lastMs = parseDateMs(last);
+      var type = COINS[sym] && COINS[sym].type;
+      var staleAfterDays = type === 'crypto' ? 3 : 7;
+      var lastAgeDays = lastMs ? Math.max(0, Math.floor((nowMs - lastMs) / (24 * 60 * 60 * 1000))) : null;
       return {
         symbol: sym,
+        type: type || 'unknown',
         rows: rows.length,
-        first: rows.length ? candleLabel(rows[0]) : null,
-        last: rows.length ? candleLabel(rows[rows.length - 1]) : null,
+        first: first,
+        last: last,
+        lastAgeDays: lastAgeDays,
+        status: rows.length === 0 ? 'missing' : (lastAgeDays !== null && lastAgeDays > staleAfterDays ? 'stale' : 'ok'),
       };
     }),
   };
@@ -521,7 +555,8 @@ function connectBinance() {
         // Find our symbol key
         for (var sym in BINANCE_SYMBOLS) {
           if (BINANCE_SYMBOLS[sym] === symbol.toLowerCase()) {
-            lastPrices[sym] = parseFloat(msg.p);
+            var tradePrice = parseFloat(msg.p);
+            applyExternalPrice(sym, tradePrice, 'binance');
             // Track real volume
             if (marketData[sym] && msg.q) {
               marketData[sym].building.v += parseFloat(msg.q);
@@ -555,18 +590,20 @@ async function fetchCoinGeckoPrices() {
     var cgIds = Object.entries(COINS).filter(function(e) { return e[1].cgId; }).map(function(e) { return e[1].cgId; }).join(',');
     var prices = await fetchJSON('https://api.coingecko.com/api/v3/simple/price?ids=' + cgIds + '&vs_currencies=usd');
     var updated = 0;
+    var now = Date.now();
     Object.entries(COINS).forEach(function(entry) {
       var sym = entry[0], c = entry[1];
       if (c.cgId && prices[c.cgId] && prices[c.cgId].usd) {
-        // Only use CoinGecko if Binance hasn't updated this price recently
-        if (!lastPrices[sym] || lastPrices[sym] === c.price) {
-          lastPrices[sym] = prices[c.cgId].usd;
-          updated++;
+        // Only use CoinGecko if Binance has not updated this symbol recently.
+        var recentBinance = priceSources[sym] === 'binance' && lastExternalPriceUpdate[sym] && (now - lastExternalPriceUpdate[sym]) < 60 * 1000;
+        if (!recentBinance) {
+          if (applyExternalPrice(sym, prices[c.cgId].usd, 'coingecko')) updated++;
         }
       }
     });
     if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] CoinGecko fallback updated ' + updated + ' prices');
   } catch(e) {
+    recordPriceSourceError('coingecko', e);
     console.log('CoinGecko fetch failed:', e.message);
   }
 }
@@ -603,12 +640,12 @@ async function fetchTwelveDataBatch() {
     batch.forEach(b => {
       const entry = data[b.tdSymbol] || data;
       if (entry && entry.price && !entry.code) {
-        lastPrices[b.sym] = parseFloat(entry.price);
-        updated++;
+        if (applyExternalPrice(b.sym, entry.price, 'twelvedata')) updated++;
       }
     });
     if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] TwelveData batch ' + (tdBatchIndex) + ': updated ' + updated + ' prices (' + batch.map(b => b.sym).join(',') + ')');
   } catch(e) {
+    recordPriceSourceError('twelvedata', e);
     console.log('TwelveData fetch failed:', e.message);
   }
 }
@@ -746,7 +783,8 @@ function checkDataFreshness() {
   var staleSyms = {};
 
   Object.keys(COINS).forEach(function(sym) {
-    if (lastPriceUpdate[sym] && (now - lastPriceUpdate[sym]) > staleThreshold) {
+    var sourceTs = lastExternalPriceUpdate[sym] || lastPriceUpdate[sym];
+    if (sourceTs && (now - sourceTs) > staleThreshold) {
       staleSyms[sym] = true;
     }
   });
@@ -764,6 +802,111 @@ function checkDataFreshness() {
     var hasStale = profile.assets.some(function(sym) { return staleSyms[sym]; });
     portfolioStates[pf.id] = hasStale ? 'DEGRADED' : 'RUNNING';
   });
+}
+
+function isUsMarketOpen(date) {
+  var d = date || new Date();
+  var day = d.getUTCDay();
+  var utcH = d.getUTCHours();
+  var utcM = d.getUTCMinutes();
+  return day >= 1 && day <= 5 && (utcH > 14 || (utcH === 14 && utcM >= 30)) && utcH < 21;
+}
+
+function liveFreshnessThresholdSec(assetMeta, marketOpen) {
+  if (!assetMeta) return 15 * 60;
+  if (assetMeta.type === 'crypto') return 3 * 60;
+  if (assetMeta.type === 'commodity') return 60 * 60;
+  return marketOpen ? 45 * 60 : 3 * 24 * 60 * 60;
+}
+
+function buildLiveDataQuality(nowMs) {
+  nowMs = nowMs || Date.now();
+  var marketOpen = isUsMarketOpen(new Date(nowMs));
+  var symbols = Object.keys(COINS).map(function(sym) {
+    var c = COINS[sym] || {};
+    var updatedAt = lastExternalPriceUpdate[sym] || null;
+    var ageSec = updatedAt ? Math.round((nowMs - updatedAt) / 1000) : null;
+    var thresholdSec = liveFreshnessThresholdSec(c, marketOpen);
+    var source = priceSources[sym] || (c.type === 'crypto' ? 'binance/coingecko' : (c.tdSymbol ? 'twelvedata' : 'unknown'));
+    var status = 'ok';
+    var note = '';
+    if (c.tdSymbol && !TWELVEDATA_KEY) {
+      status = 'missing-key';
+      note = 'TWELVEDATA_API_KEY is not configured';
+    } else if (!updatedAt) {
+      status = 'missing';
+      note = 'No external source update recorded since server start';
+    } else if (ageSec > thresholdSec) {
+      status = 'stale';
+      note = 'Last source update exceeds freshness threshold';
+    }
+    return {
+      symbol: sym,
+      name: c.name,
+      type: c.type || 'unknown',
+      configuredSource: c.type === 'crypto' ? 'Binance WebSocket + CoinGecko fallback' : (c.tdSymbol ? 'Twelve Data ' + c.tdSymbol : 'unknown'),
+      activeSource: source,
+      price: lastExternalPriceValue[sym] || lastPrices[sym] || null,
+      updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null,
+      updateAgeSec: ageSec,
+      thresholdSec: thresholdSec,
+      status: status,
+      note: note,
+    };
+  });
+  var bad = symbols.filter(function(s) { return s.status !== 'ok'; });
+  var lastUpdatedAt = null;
+  symbols.forEach(function(s) {
+    if (s.updatedAt && (!lastUpdatedAt || s.updatedAt > lastUpdatedAt)) lastUpdatedAt = s.updatedAt;
+  });
+  return {
+    marketOpen: marketOpen,
+    sources: {
+      crypto: 'Binance WebSocket primary, CoinGecko fallback',
+      stockCommodity: 'Twelve Data price endpoint',
+      twelveDataKeyConfigured: !!TWELVEDATA_KEY,
+      errors: priceSourceErrors,
+    },
+    summary: {
+      status: bad.length ? 'attention' : 'ok',
+      symbols: symbols.length,
+      ok: symbols.length - bad.length,
+      stale: symbols.filter(function(s) { return s.status === 'stale'; }).length,
+      missing: symbols.filter(function(s) { return s.status === 'missing' || s.status === 'missing-key'; }).length,
+      lastUpdatedAt: lastUpdatedAt,
+    },
+    symbols: symbols,
+  };
+}
+
+function buildDataQualitySnapshot() {
+  var nowMs = Date.now();
+  var historical = inspectHistoricalData({
+    dataDir: path.join(__dirname, 'backtest', 'data'),
+    coins: COINS,
+    nowMs: nowMs,
+  });
+  var live = buildLiveDataQuality(nowMs);
+  var status = 'ok';
+  if (live.summary.status !== 'ok' || historical.summary.status === 'attention') status = 'attention';
+  else if (historical.summary.status === 'stale') status = 'stale';
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    summary: {
+      status: status,
+      liveStatus: live.summary.status,
+      historicalStatus: historical.summary.status,
+      liveStale: live.summary.stale,
+      liveMissing: live.summary.missing,
+      historicalStale: historical.summary.stale,
+      historicalAnomalies: historical.summary.anomalies,
+      historicalMissing: historical.summary.missing,
+      lastLiveUpdateAt: live.summary.lastUpdatedAt,
+      lastHistoricalUpdateAt: historical.summary.lastUpdatedAt,
+    },
+    live: live,
+    historical: historical,
+  };
 }
 
 function resumePortfolio(id) {
@@ -1852,6 +1995,12 @@ const server = http.createServer((req, res) => {
     };
     res.writeHead(systemDegraded ? 503 : 200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(health));
+  } else if (reqPath === '/api/data-quality') {
+    try {
+      sendJson(res, 200, buildDataQualitySnapshot());
+    } catch (e) {
+      sendJson(res, 500, { error: e.message || 'Data quality check failed' });
+    }
   } else if (reqPath.indexOf('/api/reset/') === 0) {
     var resetPath = decodeURIComponent(reqPath.replace('/api/reset/', ''));
     if (!isAuthorized(getRequestToken(req))) {
@@ -1974,14 +2123,10 @@ const server = http.createServer((req, res) => {
         try {
           var symbol = f.replace('_daily.csv', '');
           var content = fs.readFileSync(path.join(dataDir, f), 'utf8');
-          var lines = content.split('\n').filter(function(l) { return l.trim().length > 0; });
-          // Skip header URL line and column header line
-          var dataLines = lines.slice(2);
-          if (dataLines.length < 2) return;
-          // CSV is sorted descending (newest first), so last data line is oldest
-          var newest = dataLines[0].split(',')[1] || '';
-          var oldest = dataLines[dataLines.length - 1].split(',')[1] || '';
-          assets.push({ symbol: symbol, file: f, rows: dataLines.length, startDate: oldest.trim(), endDate: newest.trim() });
+          var parsed = parseDailyCsv(content);
+          var candles = parsed.candles || [];
+          if (candles.length < 2) return;
+          assets.push({ symbol: symbol, file: f, rows: candles.length, startDate: candles[0].date, endDate: candles[candles.length - 1].date });
         } catch(e2) {}
       });
     } catch(e) {}

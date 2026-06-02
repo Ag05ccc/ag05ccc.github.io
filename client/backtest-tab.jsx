@@ -9,6 +9,7 @@ function BacktestTab({ isMobile }) {
   const [btError, setBtError] = useState(null);
   const [btTradeFilter, setBtTradeFilter] = useState("all");
   const [btChartSym, setBtChartSym] = useState("");
+  const [btAuditTrade, setBtAuditTrade] = useState(null);
   const [btProgress, setBtProgress] = useState(0);
   // Expose setter globally so WebSocket handler in App can update progress
   useEffect(function() { window._setBtProgress = setBtProgress; return function() { window._setBtProgress = null; }; }, []);
@@ -24,6 +25,15 @@ function BacktestTab({ isMobile }) {
       })
       .catch(function() {});
   }, []);
+
+  useEffect(function() {
+    if (!btResult) {
+      setBtAuditTrade(null);
+      return;
+    }
+    var firstAuditTrade = (btResult.trades || []).find(function(t) { return t.decision; }) || (btResult.trades || [])[0] || null;
+    setBtAuditTrade(firstAuditTrade);
+  }, [btResult]);
 
   function toggleSymbol(sym) {
     setBtSymbols(function(prev) {
@@ -235,6 +245,7 @@ function BacktestTab({ isMobile }) {
           </div>
 
           <BacktestQualityPanel quality={q} metadata={meta} isMobile={isMobile} />
+          <BacktestAuditPanel result={btResult} selectedTrade={btAuditTrade} onSelectTrade={setBtAuditTrade} isMobile={isMobile} />
 
           {btResult.skippedSymbols && btResult.skippedSymbols.length > 0 && (
             <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "6px 12px", marginBottom: 12, fontSize: 11, color: "#f59e0b", fontFamily: "var(--m)" }}>Skipped (no 1m data): {btResult.skippedSymbols.join(", ")}</div>
@@ -511,8 +522,9 @@ function BacktestTab({ isMobile }) {
               )}
               {filteredTrades.slice(0, 200).map(function(t, i) {
                 var pnlColor = t.pnl > 0 ? "#22c55e" : t.pnl < 0 ? "#ef4444" : "#6b7280";
+                var isSelectedAudit = btAuditTrade === t;
                 return (
-                  <div key={i} className="sr" style={{ display: "grid", gridTemplateColumns: isMobile ? "65px 35px 40px 55px 55px 50px" : "80px 45px 50px 70px 50px 70px 65px 1fr 60px", padding: "5px 12px", fontSize: isMobile ? 9 : 10, fontFamily: "var(--m)", borderBottom: "1px solid rgba(255,255,255,0.02)", background: t.pnl > 0 ? "rgba(34,197,94,0.02)" : t.pnl < 0 ? "rgba(239,68,68,0.02)" : "transparent" }}>
+                  <div key={i} className="sr" onClick={function() { setBtAuditTrade(t); }} title="Show decision audit" style={{ display: "grid", gridTemplateColumns: isMobile ? "65px 35px 40px 55px 55px 50px" : "80px 45px 50px 70px 50px 70px 65px 1fr 60px", padding: "5px 12px", fontSize: isMobile ? 9 : 10, fontFamily: "var(--m)", borderBottom: "1px solid rgba(255,255,255,0.02)", cursor: "pointer", background: isSelectedAudit ? "rgba(129,140,248,0.12)" : (t.pnl > 0 ? "rgba(34,197,94,0.02)" : t.pnl < 0 ? "rgba(239,68,68,0.02)" : "transparent"), boxShadow: isSelectedAudit ? "inset 2px 0 0 #818cf8" : "none" }}>
                     <span style={{ color: "#6b7280" }}>{t.date}</span>
                     <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: t.side === "buy" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: t.side === "buy" ? "#22c55e" : "#ef4444", fontWeight: 700, textAlign: "center", alignSelf: "center" }}>{t.side === "buy" ? "BUY" : "SELL"}</span>
                     <span style={{ color: symColor(t.symbol), fontWeight: 600 }}>{t.symbol}</span>

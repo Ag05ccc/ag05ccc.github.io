@@ -101,6 +101,18 @@ With the server running, use the UI Backtest tab or call:
 node backtest/basic-tests.js
 ```
 
+Data quality checks:
+
+```bash
+npm run test:data-quality
+```
+
+This checks daily historical CSVs for missing files, invalid OHLC rows,
+duplicate dates, missing expected candles, and stale last-update dates. If the
+server is running, it also reads `/api/data-quality` to report live feed
+freshness for Binance/CoinGecko and TwelveData. Stale data is reported as a
+warning; hard file anomalies fail the test.
+
 Standalone CLI backtest:
 
 ```bash

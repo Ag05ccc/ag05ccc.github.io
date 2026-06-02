@@ -4,6 +4,14 @@ const BacktestQualityPanel = (props) => {
   const Component = window.BacktestQualityPanel;
   return Component ? <Component {...props} /> : null;
 };
+const BacktestAuditPanel = (props) => {
+  const Component = window.BacktestAuditPanel;
+  return Component ? <Component {...props} /> : null;
+};
+const DataQualityPanel = (props) => {
+  const Component = window.DataQualityPanel;
+  return Component ? <Component {...props} /> : null;
+};
 
 // ZoomChart - wraps chart container, slices data on mouse wheel zoom
 // Children receive sliced data via render prop pattern, but simpler: we slice the data prop of the chart
@@ -193,6 +201,7 @@ Object.assign(window, {
   ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter,
   XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend,
   Brush, PieChart, Pie, Cell,
-  BacktestQualityPanel, ZoomChart, COINS_META, symColor, fmt, fK, pc, fmtTime,
+  BacktestQualityPanel, BacktestAuditPanel, DataQualityPanel,
+  ZoomChart, COINS_META, symColor, fmt, fK, pc, fmtTime,
   getAdminToken, adminFetch, IndBadge, groupCandles, TIMEFRAMES,
 });

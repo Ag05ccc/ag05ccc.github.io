@@ -4,6 +4,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const https = require('https');
 const { fork } = require('child_process');
+const crypto = require('crypto');
 
 // Load .env file
 const envPath = path.resolve(__dirname, '.env');
@@ -59,6 +60,18 @@ function getRequestToken(req) {
 function sendJson(res, status, payload) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(payload));
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+  return '{' + Object.keys(value).sort().filter(function(k) { return value[k] !== undefined; }).map(function(k) {
+    return JSON.stringify(k) + ':' + stableStringify(value[k]);
+  }).join(',') + '}';
+}
+
+function hashObject(value) {
+  return crypto.createHash('sha256').update(stableStringify(value)).digest('hex').slice(0, 12);
 }
 
 function requireAdminRequest(req, res) {
@@ -117,6 +130,79 @@ function readTailUtf8(filePath, maxBytes) {
     var nl = s.indexOf('\n');
     return nl >= 0 ? s.slice(nl + 1) : s;
   } finally { fs.closeSync(fd); }
+}
+
+function calcEquitySegment(points) {
+  if (!points || points.length < 2) {
+    return { startDate: null, endDate: null, bars: 0, totalReturn: 0, maxDrawdown: 0, sharpe: 0 };
+  }
+  var start = points[0].value || 0;
+  var end = points[points.length - 1].value || 0;
+  var maxVal = start;
+  var maxDd = 0;
+  var returns = [];
+  for (var i = 1; i < points.length; i++) {
+    var prev = points[i - 1].value;
+    var cur = points[i].value;
+    if (cur > maxVal) maxVal = cur;
+    if (maxVal > 0) maxDd = Math.max(maxDd, (maxVal - cur) / maxVal);
+    if (prev > 0 && cur > 0) returns.push(Math.log(cur / prev));
+  }
+  var avg = returns.length ? returns.reduce(function(a, b) { return a + b; }, 0) / returns.length : 0;
+  var std = 0;
+  if (returns.length > 1) {
+    std = Math.sqrt(returns.reduce(function(a, b) { return a + Math.pow(b - avg, 2); }, 0) / (returns.length - 1));
+  }
+  return {
+    startDate: points[0].date,
+    endDate: points[points.length - 1].date,
+    bars: points.length,
+    totalReturn: start > 0 ? +(((end - start) / start) * 100).toFixed(2) : 0,
+    maxDrawdown: +(maxDd * 100).toFixed(2),
+    sharpe: std > 0 ? +((avg / std) * Math.sqrt(252)).toFixed(3) : 0,
+  };
+}
+
+function buildBacktestQuality(equityCurve) {
+  var points = equityCurve || [];
+  if (points.length < 4) {
+    return { splitRatio: 0.70, inSample: calcEquitySegment(points), outOfSample: calcEquitySegment([]), walkForward: [] };
+  }
+  var splitIdx = Math.max(1, Math.min(points.length - 2, Math.floor((points.length - 1) * 0.70)));
+  var windows = [];
+  var windowCount = Math.min(4, Math.max(1, Math.floor((points.length - 1) / 2)));
+  for (var w = 0; w < windowCount; w++) {
+    var startIdx = Math.floor(w * (points.length - 1) / windowCount);
+    var endIdx = Math.floor((w + 1) * (points.length - 1) / windowCount);
+    if (endIdx <= startIdx) endIdx = startIdx + 1;
+    windows.push(Object.assign({ window: w + 1 }, calcEquitySegment(points.slice(startIdx, endIdx + 1))));
+  }
+  return {
+    splitRatio: 0.70,
+    inSample: calcEquitySegment(points.slice(0, splitIdx + 1)),
+    outOfSample: calcEquitySegment(points.slice(splitIdx, points.length)),
+    walkForward: windows,
+  };
+}
+
+function buildBacktestParameterSet(opts) {
+  opts = opts || {};
+  var profile = opts.profile || {};
+  return {
+    profile: profile.id || opts.profileId,
+    buyThreshold: profile.buyThreshold,
+    sellThreshold: profile.sellThreshold,
+    cashPct: profile.cashPct,
+    overrides: profile.overrides || {},
+    symbols: opts.symbols || [],
+    startDate: opts.startDate,
+    endDate: opts.endDate,
+    timeframe: opts.timeframe,
+    commission: COMMISSION_RATE,
+    slippage: SLIPPAGE_PCT,
+    signals: SIGNALS.map(function(s) { return { id: s.id, side: s.side, category: s.category, weight: s.weight }; }),
+    engine: 'evaluateTradeDecision@v3',
+  };
 }
 
 // Initialize market data
@@ -2108,6 +2194,8 @@ const server = http.createServer((req, res) => {
             stdR = Math.sqrt(dailyReturns.reduce(function(a, b) { return a + Math.pow(b - avgR, 2); }, 0) / (dailyReturns.length - 1));
           }
           var sharpe = stdR > 0 ? (avgR / stdR) * Math.sqrt(252) : 0;
+          var dmaParameterSet = buildBacktestParameterSet({ profile: profile, profileId: profileId, symbols: ['BTC'], startDate: startDate, endDate: null, timeframe: timeframe });
+          var dmaQuality = buildBacktestQuality(equityCurve);
 
           var result = {
             metrics: {
@@ -2135,6 +2223,7 @@ const server = http.createServer((req, res) => {
             equityCurve: equityCurve,
             trades: trades,
             priceHistory: { BTC: btcPriceHistory },
+            quality: dmaQuality,
             profile: profileId,
             symbols: ['BTC'],
             startDate: startDate,
@@ -2144,6 +2233,8 @@ const server = http.createServer((req, res) => {
               executionMode: BACKTEST_WORKER_MODE ? 'worker' : 'inline',
               dataSource: 'backtest/data/1m/BTC.jsonl',
               endDate: null,
+              parameterHash: hashObject(dmaParameterSet),
+              parameterSet: dmaParameterSet,
             },
           };
 
@@ -2868,6 +2959,7 @@ const server = http.createServer((req, res) => {
           equityCurve: equityCurve,
           trades: trades,
           priceHistory: priceHistory,
+          quality: buildBacktestQuality(equityCurve),
           profile: profileId,
           symbols: symbols,
           startDate: startDate,
@@ -2880,6 +2972,8 @@ const server = http.createServer((req, res) => {
             dataSource: isMinuteTimeframe ? 'backtest/data/1m/*.jsonl' : 'backtest/data/*_daily.csv',
             requestedSymbols: params.symbols || [],
             effectiveSymbols: symbols,
+            parameterHash: hashObject(buildBacktestParameterSet({ profile: profile, profileId: profileId, symbols: symbols, startDate: startDate, endDate: endDate, timeframe: timeframe })),
+            parameterSet: buildBacktestParameterSet({ profile: profile, profileId: profileId, symbols: symbols, startDate: startDate, endDate: endDate, timeframe: timeframe }),
           },
         };
         if (isMinuteTimeframe) sendGenProgress(100);

@@ -21,6 +21,23 @@ const DEFAULT_CASH = 100000;
 const COOLDOWN_BARS = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
 const MAX_HOLD_BARS = { conservative: 90, moderate: 60, aggressive: 45, yolo: 30 };
 
+function compactDecisionSnapshot(decision) {
+  return {
+    action: decision.action,
+    type: decision.type,
+    reason: decision.reason || decision.riskSellTriggered || '',
+    buyScore: +(decision.buyScore || 0).toFixed(2),
+    sellScore: +(decision.sellScore || 0).toFixed(2),
+    regime: decision.regime && decision.regime.type,
+    exposurePct: +((decision.exposurePct || 0) * 100).toFixed(2),
+    exitTriggered: decision.exitTriggered || null,
+    riskSellTriggered: decision.riskSellTriggered || null,
+    holdingBars: decision.holdingBars,
+    maxHoldBars: decision.maxHoldBars,
+    pnlPct: +((decision.pnlPct || 0) * 100).toFixed(2),
+  };
+}
+
 // ─── LOAD CSV DATA ───
 function loadCSV(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8');
@@ -156,7 +173,7 @@ function runBacktest(candles, profile, symbolName) {
       const commission = total * COMMISSION_RATE;
       const pnl = (sellFillPrice - pos.avgCost) * sellQty - commission;
       cash += total - commission;
-      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: decision.riskSellTriggered, regime: regime.type, score: 0, type: 'risk' });
+      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: decision.riskSellTriggered, regime: regime.type, decision: compactDecisionSnapshot(decision), score: 0, type: 'risk' });
       delete holdings[sym];
       delete peaks[sym];
       lastTradeBar = i;
@@ -192,7 +209,7 @@ function runBacktest(candles, profile, symbolName) {
         bar: i, date: candles[i].date, side: 'buy', price: buyFillPrice,
         bracketTP: riskPlan.takeProfitPrice, bracketSL: riskPlan.stopPrice,
         qty, total: tradeValue, pnl: 0, reason: buyReasons.join(', '),
-        regime: regime.type, score: buyScore, type: 'score',
+        regime: regime.type, decision: compactDecisionSnapshot(decision), score: buyScore, type: 'score',
         atr: sd.atr || 0, riskPct: riskPlan.riskPct,
         stopPct: riskPlan.stopPct, targetPct: riskPlan.targetPct,
       });
@@ -206,7 +223,7 @@ function runBacktest(candles, profile, symbolName) {
       const pnl = (sellFillPrice - pos.avgCost) * sellQty - commission;
       cash += total - commission;
 
-      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: sellReasons.join(', '), regime: regime.type, score: -sellScore, type: 'score' });
+      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: sellReasons.join(', '), regime: regime.type, decision: compactDecisionSnapshot(decision), score: -sellScore, type: 'score' });
       delete holdings[sym];
       delete peaks[sym];
       lastTradeBar = i;

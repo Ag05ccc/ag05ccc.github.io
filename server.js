@@ -205,6 +205,52 @@ function buildBacktestParameterSet(opts) {
   };
 }
 
+function compactDecisionSnapshot(decision) {
+  if (!decision) return null;
+  return {
+    action: decision.action,
+    type: decision.type,
+    reason: decision.reason || decision.riskSellTriggered || '',
+    buyScore: +(decision.buyScore || 0).toFixed(2),
+    sellScore: +(decision.sellScore || 0).toFixed(2),
+    regime: decision.regime && decision.regime.type,
+    exposurePct: +((decision.exposurePct || 0) * 100).toFixed(2),
+    exitTriggered: decision.exitTriggered || null,
+    riskSellTriggered: decision.riskSellTriggered || null,
+    holdingBars: decision.holdingBars,
+    maxHoldBars: decision.maxHoldBars,
+    pnlPct: +((decision.pnlPct || 0) * 100).toFixed(2),
+    buyBlockedReasons: decision.buyBlockedReasons || [],
+    sellBlockedReasons: decision.sellBlockedReasons || [],
+  };
+}
+
+function candleLabel(c) {
+  if (!c) return null;
+  if (c.date) return c.date;
+  if (c.timestamp) return new Date(c.timestamp).toISOString();
+  if (c.t) return typeof c.t === 'number' ? new Date(c.t).toISOString() : String(c.t);
+  return null;
+}
+
+function buildDataManifest(symbols, allCandles, opts) {
+  opts = opts || {};
+  return {
+    timeframe: opts.timeframe,
+    source: opts.source,
+    skippedSymbols: opts.skippedSymbols || [],
+    symbols: (symbols || []).map(function(sym) {
+      var rows = (allCandles && allCandles[sym]) || [];
+      return {
+        symbol: sym,
+        rows: rows.length,
+        first: rows.length ? candleLabel(rows[0]) : null,
+        last: rows.length ? candleLabel(rows[rows.length - 1]) : null,
+      };
+    }),
+  };
+}
+
 // Initialize market data
 Object.entries(COINS).forEach(([sym, c]) => {
   const price = c.price || 0;
@@ -1008,6 +1054,7 @@ function runStrategies() {
           signalPrice: price, slippage: slippagePct,
           commission: riskComm.toFixed(2), time: new Date().toISOString(),
           strat: 'Risk Mgmt', why: riskSellTriggered,
+          decision: compactDecisionSnapshot(decision),
           score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
           pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
           avgCost: +pos.avgCost.toFixed(2),
@@ -1070,6 +1117,7 @@ function runStrategies() {
           bracketTP: bracketTP, bracketSL: bracketSL,
           commission: commission.toFixed(2), time: new Date().toISOString(),
           strat: buyReasons.length + ' signals', why: buyReasons.join(', '),
+          decision: compactDecisionSnapshot(decision),
           score: '+' + buyScore.toFixed(1), regime: regime.type, trend15m: trend15m,
           pnl: 0, pnlPct: 0,
           avgCost: +((pf.holdings[sym] || {}).avgCost || price).toFixed(2),
@@ -1112,6 +1160,7 @@ function runStrategies() {
           signalPrice: price, slippage: slippagePct,
           commission: sellComm.toFixed(2), time: new Date().toISOString(),
           strat: sellReasons.length + ' signals', why: sellReasons.join(', '),
+          decision: compactDecisionSnapshot(decision),
           score: '-' + sellScore.toFixed(1), regime: regime.type, trend15m: trend15m,
           pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
           avgCost: +pos.avgCost.toFixed(2),
@@ -1399,7 +1448,7 @@ function seedPortfolioFromHistory(profile, startDate) {
         var rNet = rPnl - rComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
         cash += rTotal - rComm; totalCommission += rComm;
         if (rNet > 0) wins++; else losses++;
-        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +rFill.toFixed(4), total: +rTotal.toFixed(2), pnl: +rPnl.toFixed(2), commission: +rComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: 'Risk Mgmt', why: decision.riskSellTriggered, score: 0, regime: decision.regime.type, seeded: true });
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +rFill.toFixed(4), total: +rTotal.toFixed(2), pnl: +rPnl.toFixed(2), commission: +rComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: 'Risk Mgmt', why: decision.riskSellTriggered, decision: compactDecisionSnapshot(decision), score: 0, regime: decision.regime.type, seeded: true });
         delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
         return;
       }
@@ -1438,7 +1487,7 @@ function seedPortfolioFromHistory(profile, startDate) {
           bracketSL: +riskPlan.stopPrice.toFixed(2),
           time: date + 'T16:00:00.000Z', strat: decision.buyReasons.length + ' signals',
           why: decision.buyReasons.join(', '), score: +decision.buyScore.toFixed(1),
-          regime: decision.regime.type, seeded: true,
+          decision: compactDecisionSnapshot(decision), regime: decision.regime.type, seeded: true,
           atr: +((sd.atr || 0).toFixed(4)), riskPct: +(riskPlan.riskPct * 100).toFixed(2),
           stopPct: +(riskPlan.stopPct * 100).toFixed(2), targetPct: +(riskPlan.targetPct * 100).toFixed(2),
         });
@@ -1452,7 +1501,7 @@ function seedPortfolioFromHistory(profile, startDate) {
         var sNet = sPnl - sComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
         cash += sTotal - sComm; totalCommission += sComm;
         if (sNet > 0) wins++; else losses++;
-        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +sFill.toFixed(4), total: +sTotal.toFixed(2), pnl: +sPnl.toFixed(2), commission: +sComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: decision.sellReasons.length + ' signals', why: decision.sellReasons.join(', '), score: +(-decision.sellScore).toFixed(1), regime: decision.regime.type, seeded: true });
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +sFill.toFixed(4), total: +sTotal.toFixed(2), pnl: +sPnl.toFixed(2), commission: +sComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: decision.sellReasons.length + ' signals', why: decision.sellReasons.join(', '), decision: compactDecisionSnapshot(decision), score: +(-decision.sellScore).toFixed(1), regime: decision.regime.type, seeded: true });
         delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
       }
     });
@@ -1844,7 +1893,7 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify(exportData, null, 2));
     } else {
       // CSV export
-      var csvOut = 'section,symbol,side,time,qty,price,total,avgCost,pnl,pnlPct,commission,strategy,reason,score,regime\n';
+      var csvOut = 'section,symbol,side,time,qty,price,total,avgCost,pnl,pnlPct,commission,strategy,reason,score,regime,decisionAction,decisionType\n';
       // Holdings section
       Object.entries(exportPf.holdings).forEach(function(entry) {
         var sym = entry[0], h = entry[1];
@@ -1852,18 +1901,18 @@ const server = http.createServer((req, res) => {
         var curPrice = (marketData[sym] || {}).cur || 0;
         var val = h.qty * curPrice;
         var uPnl = (curPrice - h.avgCost) * h.qty;
-        csvOut += ['holding', sym, '', '', h.qty.toFixed(6), curPrice.toFixed(2), val.toFixed(2), h.avgCost.toFixed(2), uPnl.toFixed(2), ((uPnl / (h.avgCost * h.qty)) * 100).toFixed(2), '', '', '', '', ''].join(',') + '\n';
+        csvOut += ['holding', sym, '', '', h.qty.toFixed(6), curPrice.toFixed(2), val.toFixed(2), h.avgCost.toFixed(2), uPnl.toFixed(2), ((uPnl / (h.avgCost * h.qty)) * 100).toFixed(2), '', '', '', '', '', '', ''].join(',') + '\n';
         // Lots
         if (h.lots) {
           h.lots.forEach(function(lot) {
             var lotPnl = (curPrice - lot.cost) * lot.qty;
-            csvOut += ['lot', sym, 'buy', lot.date || '', lot.qty.toFixed(6), lot.cost.toFixed(2), (lot.qty * lot.cost).toFixed(2), '', lotPnl.toFixed(2), ((lotPnl / (lot.cost * lot.qty)) * 100).toFixed(2), '', '', '', '', ''].join(',') + '\n';
+            csvOut += ['lot', sym, 'buy', lot.date || '', lot.qty.toFixed(6), lot.cost.toFixed(2), (lot.qty * lot.cost).toFixed(2), '', lotPnl.toFixed(2), ((lotPnl / (lot.cost * lot.qty)) * 100).toFixed(2), '', '', '', '', '', '', ''].join(',') + '\n';
           });
         }
       });
       // Trades section
       (exportPf.orders || []).forEach(function(o) {
-        csvOut += ['trade', o.sym || '', o.side || '', o.time || '', (o.qty || 0).toFixed(6), (o.price || 0).toFixed(2), (o.total || 0).toFixed(2), o.avgCost || 0, o.pnl || 0, o.pnlPct || 0, o.commission || 0, '"' + (o.strat || '').replace(/"/g, '""') + '"', '"' + (o.why || '').replace(/"/g, '""') + '"', o.score || '', o.regime || ''].join(',') + '\n';
+        csvOut += ['trade', o.sym || '', o.side || '', o.time || '', (o.qty || 0).toFixed(6), (o.price || 0).toFixed(2), (o.total || 0).toFixed(2), o.avgCost || 0, o.pnl || 0, o.pnlPct || 0, o.commission || 0, '"' + (o.strat || '').replace(/"/g, '""') + '"', '"' + (o.why || '').replace(/"/g, '""') + '"', o.score || '', o.regime || '', (o.decision && o.decision.action) || '', (o.decision && o.decision.type) || ''].join(',') + '\n';
       });
       res.writeHead(200, {
         'Content-Type': 'text/csv',
@@ -1874,7 +1923,7 @@ const server = http.createServer((req, res) => {
     }
   } else if (reqPath === '/api/logs') {
     // Download all trade logs as CSV
-    var csv = 'time,portfolio,symbol,side,qty,price,total,commission,pnl,pnlPct,avgCost,strategy,reason,score,regime,trend15m,exposure,volatility,rsi,macdHist,adx,cashBefore,cashAfter,holdingBefore,candleCount,blackSwan\n';
+    var csv = 'time,portfolio,symbol,side,qty,price,total,commission,pnl,pnlPct,avgCost,strategy,reason,score,regime,trend15m,exposure,volatility,rsi,macdHist,adx,cashBefore,cashAfter,holdingBefore,candleCount,blackSwan,decisionAction,decisionType,decisionReason\n';
     portfolios.forEach(function(pf) {
       (pf.orders || []).forEach(function(o) {
         csv += [
@@ -1886,7 +1935,9 @@ const server = http.createServer((req, res) => {
           o.score || '', o.regime || '', o.trend15m || '',
           o.exposure || '', o.volatility || '', o.rsi || '', o.macdHist || '', o.adx || '',
           o.cashBefore || '', o.cashAfter || '', o.holdingBefore || '',
-          o.candleCount || '', o.blackSwan ? 'true' : 'false'
+          o.candleCount || '', o.blackSwan ? 'true' : 'false',
+          (o.decision && o.decision.action) || '', (o.decision && o.decision.type) || '',
+          '"' + (((o.decision && o.decision.reason) || '').replace(/"/g, '""')) + '"'
         ].join(',') + '\n';
       });
     });
@@ -2246,6 +2297,7 @@ const server = http.createServer((req, res) => {
               endDate: null,
               parameterHash: hashObject(dmaParameterSet),
               parameterSet: dmaParameterSet,
+              dataManifest: buildDataManifest(['BTC'], { BTC: candles }, { timeframe: timeframe, source: 'backtest/data/1m/BTC.jsonl', skippedSymbols: [] }),
             },
           };
 
@@ -2714,6 +2766,7 @@ const server = http.createServer((req, res) => {
                 qty: +riskQty.toFixed(6), total: +riskTotal.toFixed(2),
                 pnl: +riskPnl.toFixed(2), pnlPct: +((riskPnl / (pos.avgCost * riskQty)) * 100).toFixed(2),
                 reason: riskSellTriggered, regime: regime.type,
+                decision: compactDecisionSnapshot(decision),
                 commission: +riskComm.toFixed(2),
               });
               delete holdings[sym];
@@ -2763,6 +2816,7 @@ const server = http.createServer((req, res) => {
                 qty: +tq.toFixed(6), total: +total.toFixed(2),
                 pnl: 0, pnlPct: 0,
                 reason: buyReasons.join(', '), regime: regime.type,
+                decision: compactDecisionSnapshot(decision),
                 commission: +commission.toFixed(2),
                 atr: +((sd.atr || 0).toFixed(4)), riskPct: +(riskPlan.riskPct * 100).toFixed(2),
                 stopPct: +(riskPlan.stopPct * 100).toFixed(2), targetPct: +(riskPlan.targetPct * 100).toFixed(2),
@@ -2786,6 +2840,7 @@ const server = http.createServer((req, res) => {
                 qty: +sq.toFixed(6), total: +sellTotal.toFixed(2),
                 pnl: +sellPnl.toFixed(2), pnlPct: +((sellPnl / (pos.avgCost * sq)) * 100).toFixed(2),
                 reason: sellReasons.join(', '), regime: regime.type,
+                decision: compactDecisionSnapshot(decision),
                 commission: +sellComm.toFixed(2),
               });
               delete holdings[sym];
@@ -2985,6 +3040,7 @@ const server = http.createServer((req, res) => {
             effectiveSymbols: symbols,
             parameterHash: hashObject(buildBacktestParameterSet({ profile: profile, profileId: profileId, symbols: symbols, startDate: startDate, endDate: endDate, timeframe: timeframe })),
             parameterSet: buildBacktestParameterSet({ profile: profile, profileId: profileId, symbols: symbols, startDate: startDate, endDate: endDate, timeframe: timeframe }),
+            dataManifest: buildDataManifest(symbols, allCandles, { timeframe: timeframe, source: isMinuteTimeframe ? 'backtest/data/1m/*.jsonl' : 'backtest/data/*_daily.csv', skippedSymbols: skippedSymbols }),
           },
         };
         if (isMinuteTimeframe) sendGenProgress(100);

@@ -1,11 +1,12 @@
 window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRefresh, isMobile }) {
   function colorFor(status) {
     if (status === "ok") return "#22c55e";
-    if (status === "stale" || status === "unconfigured" || status === "missing-key" || status === "attention") return "#f59e0b";
+    if (status === "stale" || status === "pending" || status === "rate-limited" || status === "unconfigured" || status === "missing-key" || status === "attention") return "#f59e0b";
     return "#ef4444";
   }
   function labelFor(status) {
     if (status === "unconfigured" || status === "missing-key") return "CONFIG";
+    if (status === "rate-limited") return "RATE LIMIT";
     return (status || "unknown").replace("-", " ").toUpperCase();
   }
   function displaySymbolFor(s) {
@@ -32,7 +33,9 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
   const historicalSymbols = historical.symbols || [];
   const liveAttention = liveSymbols.filter(function(s) { return s.status !== "ok"; });
   const liveUnconfigured = liveAttention.filter(function(s) { return s.status === "unconfigured" || s.status === "missing-key"; });
-  const liveSourceAttention = liveAttention.filter(function(s) { return s.status !== "unconfigured" && s.status !== "missing-key"; });
+  const livePending = liveAttention.filter(function(s) { return s.status === "pending"; });
+  const liveRateLimited = liveAttention.filter(function(s) { return s.status === "rate-limited"; });
+  const liveSourceAttention = liveAttention.filter(function(s) { return s.status !== "unconfigured" && s.status !== "missing-key" && s.status !== "pending" && s.status !== "rate-limited"; });
   const historicalAttention = historicalSymbols.filter(function(s) { return s.status !== "ok"; });
   const stockGoldRows = liveSymbols.filter(function(s) { return s.type === "stock" || s.type === "commodity"; }).slice(0, isMobile ? 6 : 10);
 
@@ -64,7 +67,7 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
             {[
               { label: "Live Feed", value: labelFor(summary.liveStatus), color: colorFor(summary.liveStatus) },
-              { label: "Live M/S/Config", value: (summary.liveMissing || 0) + " / " + (summary.liveStale || 0) + " / " + (summary.liveUnconfigured || 0), color: summary.liveMissing ? "#ef4444" : ((summary.liveStale || summary.liveUnconfigured) ? "#f59e0b" : "#22c55e") },
+              { label: "Live M/S/P/C", value: (summary.liveMissing || 0) + " / " + (summary.liveStale || 0) + " / " + (summary.livePending || 0) + " / " + (summary.liveUnconfigured || 0), color: summary.liveMissing ? "#ef4444" : ((summary.liveStale || summary.livePending || summary.liveRateLimited || summary.liveUnconfigured) ? "#f59e0b" : "#22c55e") },
               { label: "History Stale", value: "" + (summary.historicalStale || 0), color: summary.historicalStale ? "#f59e0b" : "#22c55e" },
               { label: "History Last", value: summary.lastHistoricalUpdateAt || "n/a", color: "#94a3b8" },
             ].map(function(m) {
@@ -84,6 +87,16 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
                 {liveUnconfigured.length > 0 && (
                   <div style={{ color: "#f59e0b", fontSize: 10, fontFamily: "var(--m)", marginBottom: 6 }}>
                     Twelve Data key missing: {liveUnconfigured.length} stock/GOLD assets are config-only warnings.
+                  </div>
+                )}
+                {livePending.length > 0 && (
+                  <div style={{ color: "#f59e0b", fontSize: 10, fontFamily: "var(--m)", marginBottom: 6 }}>
+                    Waiting for scheduled Twelve Data batch: {livePending.length} assets.
+                  </div>
+                )}
+                {liveRateLimited.length > 0 && (
+                  <div style={{ color: "#f59e0b", fontSize: 10, fontFamily: "var(--m)", marginBottom: 6 }}>
+                    Twelve Data minute limit reached: {liveRateLimited.length} assets will retry on the next batch.
                   </div>
                 )}
                 {liveSourceAttention.length === 0 ? (

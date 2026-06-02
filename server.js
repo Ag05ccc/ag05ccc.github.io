@@ -34,6 +34,7 @@ const COMMISSION_RATE = envNum('COMMISSION_RATE', 0.001); // 0.1% commission per
 const SLIPPAGE_PCT = envNum('SLIPPAGE_PCT', 0.0005); // 0.05% default slippage
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
+const TWELVEDATA_WARMUP_DELAY_MS = 65000; // free tier allows 8 credits/min; batches use 7 credits
 // Admin token. In local/dev mode it can be omitted for convenience; in production
 // (or REQUIRE_ADMIN_TOKEN=1) the server refuses to start without it.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -115,6 +116,8 @@ let tickCount = 0;
 let lastPrices = {}; // last fetched real prices
 let lastExternalPriceUpdate = {}; // { BTC: timestamp } from Binance/CoinGecko/TwelveData
 let lastExternalPriceValue = {};
+let lastExternalPriceAttempt = {};
+let lastExternalPriceAttemptError = {};
 let priceSources = {};
 let priceSourceErrors = {};
 let seededFromHistory = false; // true once the 4 portfolios are warm-started from ~1yr of history (persisted)
@@ -132,6 +135,8 @@ function applyExternalPrice(sym, price, source) {
   if (!COINS[sym] || !Number.isFinite(p) || p <= 0) return false;
   lastPrices[sym] = p;
   lastExternalPriceUpdate[sym] = Date.now();
+  lastExternalPriceAttempt[sym] = lastExternalPriceUpdate[sym];
+  delete lastExternalPriceAttemptError[sym];
   lastExternalPriceValue[sym] = p;
   priceSources[sym] = source;
   return true;
@@ -759,43 +764,73 @@ for (let i = 0; i < tdSymbols.length; i += 7) {
 }
 let tdBatchIndex = 0;
 
-async function fetchTwelveDataBatch() {
+async function fetchTwelveDataBatch(opts) {
+  opts = opts || {};
   if (!TWELVEDATA_KEY || TD_BATCHES.length === 0) return;
   // US market hours: Mon-Fri 14:30-21:00 UTC (skip weekends + off-hours to save credits)
   var now = new Date();
   var utcH = now.getUTCHours(), utcM = now.getUTCMinutes(), day = now.getUTCDay();
   var marketOpen = day >= 1 && day <= 5 && (utcH > 14 || (utcH === 14 && utcM >= 30)) && utcH < 21;
   // During market hours: fetch every interval. Off-hours: fetch only GOLD batch (index 0) every 3rd cycle
-  if (!marketOpen) {
+  if (!marketOpen && !opts.force) {
     if (tdBatchIndex % 3 !== 0) { tdBatchIndex++; return; } // Only GOLD batch off-hours
   }
-  var batchIdx = marketOpen ? (tdBatchIndex % TD_BATCHES.length) : 0; // Off-hours: only first batch (includes GOLD)
+  var explicitBatch = typeof opts.batchIndex === 'number';
+  var batchIdx = explicitBatch ? (opts.batchIndex % TD_BATCHES.length) : (marketOpen ? (tdBatchIndex % TD_BATCHES.length) : 0); // Off-hours: only first batch (includes GOLD)
   var batch = TD_BATCHES[batchIdx];
-  tdBatchIndex++;
+  if (explicitBatch) tdBatchIndex = Math.max(tdBatchIndex, batchIdx + 1);
+  else tdBatchIndex++;
   const symbols = batch.map(b => b.tdSymbol).join(',');
+  var attemptMs = Date.now();
+  batch.forEach(function(b) {
+    lastExternalPriceAttempt[b.sym] = attemptMs;
+    delete lastExternalPriceAttemptError[b.sym];
+  });
   try {
     const data = await fetchJSON('https://api.twelvedata.com/price?symbol=' + symbols + '&apikey=' + TWELVEDATA_KEY);
+    if (data && data.code) {
+      var msg = data.message || String(data.code);
+      batch.forEach(function(b) { lastExternalPriceAttemptError[b.sym] = msg; });
+      recordPriceSourceError('twelvedata', new Error(msg));
+      console.log('TwelveData batch ' + (batchIdx + 1) + ' failed: ' + msg);
+      return;
+    }
     let updated = 0;
     batch.forEach(b => {
       const entry = data[b.tdSymbol] || data;
       if (entry && entry.price && !entry.code) {
         if (applyExternalPrice(b.sym, entry.price, 'twelvedata')) updated++;
+      } else if (entry && entry.code) {
+        lastExternalPriceAttemptError[b.sym] = entry.message || String(entry.code);
+      } else {
+        lastExternalPriceAttemptError[b.sym] = 'No valid price returned';
       }
     });
-    if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] TwelveData batch ' + (tdBatchIndex) + ': updated ' + updated + ' prices (' + batch.map(b => b.sym).join(',') + ')');
+    if (updated > 0) console.log('[' + new Date().toLocaleTimeString() + '] TwelveData batch ' + (batchIdx + 1) + (opts.reason ? ' ' + opts.reason : '') + ': updated ' + updated + ' prices (' + batch.map(b => b.sym).join(',') + ')');
   } catch(e) {
+    batch.forEach(function(b) { lastExternalPriceAttemptError[b.sym] = e.message || String(e); });
     recordPriceSourceError('twelvedata', e);
     console.log('TwelveData fetch failed:', e.message);
   }
 }
 
-// Rotate batches: 1 batch per minute, full cycle every 3 minutes
+// Rotate batches conservatively after startup; warmup handles the first full cycle.
 if (!BACKTEST_WORKER_MODE) setInterval(fetchTwelveDataBatch, TWELVEDATA_INTERVAL);
+
+function scheduleTwelveDataWarmup() {
+  if (!TWELVEDATA_KEY || TD_BATCHES.length <= 1) return;
+  for (let i = 1; i < TD_BATCHES.length; i++) {
+    setTimeout(function() {
+      fetchTwelveDataBatch({ batchIndex: i, force: true, reason: 'warmup' });
+    }, TWELVEDATA_WARMUP_DELAY_MS * i);
+  }
+}
 
 async function fetchRealPrices() {
   await fetchCoinGeckoPrices();
   // Fetch first batch of stocks/gold immediately
-  await fetchTwelveDataBatch();
+  await fetchTwelveDataBatch({ batchIndex: 0, force: true, reason: 'startup' });
+  scheduleTwelveDataWarmup();
   console.log('[' + new Date().toLocaleTimeString() + '] Prices loaded: BTC=$' + lastPrices.BTC + ' ETH=$' + lastPrices.ETH + ' AAPL=$' + (lastPrices.AAPL || '?') + ' GOLD=$' + (lastPrices.GOLD || '?'));
 }
 
@@ -964,6 +999,8 @@ function buildLiveDataQuality(nowMs) {
   var symbols = Object.keys(COINS).map(function(sym) {
     var c = COINS[sym] || {};
     var updatedAt = lastExternalPriceUpdate[sym] || null;
+    var attemptedAt = lastExternalPriceAttempt[sym] || null;
+    var attemptError = lastExternalPriceAttemptError[sym] || '';
     var ageSec = updatedAt ? Math.round((nowMs - updatedAt) / 1000) : null;
     var thresholdSec = liveFreshnessThresholdSec(c, marketOpen);
     var displaySymbol = c.displaySymbol || sym;
@@ -975,8 +1012,16 @@ function buildLiveDataQuality(nowMs) {
       status = 'unconfigured';
       note = 'TWELVEDATA_API_KEY is not configured';
     } else if (!updatedAt) {
-      status = 'missing';
-      note = 'No external source update recorded since server start';
+      if (c.tdSymbol && TWELVEDATA_KEY && !attemptedAt) {
+        status = 'pending';
+        note = 'Waiting for scheduled Twelve Data batch';
+      } else if (attemptError && /429|credit|rate/i.test(attemptError)) {
+        status = 'rate-limited';
+        note = 'Twelve Data minute credit limit reached; next scheduled batch will retry';
+      } else {
+        status = 'missing';
+        note = c.tdSymbol && TWELVEDATA_KEY ? 'Configured source returned no valid price' : 'No external source update recorded since server start';
+      }
     } else if (ageSec > thresholdSec) {
       status = 'stale';
       note = 'Last source update exceeds freshness threshold';
@@ -991,6 +1036,7 @@ function buildLiveDataQuality(nowMs) {
       activeSource: source,
       price: lastExternalPriceValue[sym] || lastPrices[sym] || null,
       updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null,
+      attemptedAt: attemptedAt ? new Date(attemptedAt).toISOString() : null,
       updateAgeSec: ageSec,
       thresholdSec: thresholdSec,
       status: status,
@@ -1016,6 +1062,8 @@ function buildLiveDataQuality(nowMs) {
       ok: symbols.length - bad.length,
       stale: symbols.filter(function(s) { return s.status === 'stale'; }).length,
       missing: symbols.filter(function(s) { return s.status === 'missing'; }).length,
+      pending: symbols.filter(function(s) { return s.status === 'pending'; }).length,
+      rateLimited: symbols.filter(function(s) { return s.status === 'rate-limited'; }).length,
       unconfigured: symbols.filter(function(s) { return s.status === 'unconfigured'; }).length,
       lastUpdatedAt: lastUpdatedAt,
     },
@@ -1042,6 +1090,8 @@ function buildDataQualitySnapshot() {
       historicalStatus: historical.summary.status,
       liveStale: live.summary.stale,
       liveMissing: live.summary.missing,
+      livePending: live.summary.pending,
+      liveRateLimited: live.summary.rateLimited,
       liveUnconfigured: live.summary.unconfigured,
       historicalStale: historical.summary.stale,
       historicalAnomalies: historical.summary.anomalies,

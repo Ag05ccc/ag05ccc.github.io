@@ -1226,6 +1226,7 @@ function App() {
                   "Polygon live pricing now follows the POL market/source ids while preserving the internal MATIC key for historical compatibility",
                   "Data quality now separates real missing live feeds from missing Twelve Data configuration",
                   "Live feed rows expose source symbols so Binance/CoinGecko/Twelve Data mappings are easier to audit",
+                  "Twelve Data startup batches now show pending/rate-limit states and warm up remaining stock batches safely",
                 ]},
                 { v: "1.17.0", date: "2026-06-02", changes: [
                   "Risk sizing now uses current portfolio equity instead of fixed starting cash",

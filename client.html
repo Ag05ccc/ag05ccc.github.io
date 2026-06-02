@@ -185,6 +185,14 @@ function fmt(n) { return n < 1 ? n.toFixed(4) : n < 100 ? n.toFixed(2) : n.toLoc
 function fK(n) { if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + "M"; if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + "K"; return fmt(n); }
 function pc(n) { return (n >= 0 ? "+" : "") + (n * 100).toFixed(2) + "%"; }
 function fmtTime(iso) { return new Date(iso).toLocaleTimeString(); }
+function getAdminToken() { try { return new URLSearchParams(window.location.search).get('token') || ''; } catch (e) { return ''; } }
+function adminFetch(url, opts) {
+  opts = opts || {};
+  const token = getAdminToken();
+  const headers = Object.assign({}, opts.headers || {});
+  if (token) headers['X-Admin-Token'] = token;
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
 
 const IndBadge = ({ label, value, color }) => (
   <div style={{ background: "#0f172a", borderRadius: 4, padding: "3px 8px", display: "inline-flex", gap: 4, alignItems: "center", fontSize: 10, fontFamily: "var(--m)" }}>
@@ -261,7 +269,7 @@ function BacktestTab({ isMobile }) {
     setBtResult(null);
     setBtProgress(0);
     // All timeframes use standard JSON response. Progress sent via WebSocket.
-    fetch('/api/backtest', {
+    adminFetch('/api/backtest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile: btProfile, symbols: btSymbols, startDate: btStartDate, timeframe: btTimeframe }),
@@ -823,8 +831,7 @@ function App() {
       // Attach the admin token (if the operator opened the page with ?token=...).
       // Mutating commands (reset/resume/updateConfig) are rejected server-side
       // without it when an ADMIN_TOKEN is configured.
-      var adminToken = '';
-      try { adminToken = new URLSearchParams(window.location.search).get('token') || ''; } catch (e) {}
+      var adminToken = getAdminToken();
       wsRef.current.send(JSON.stringify(adminToken ? Object.assign({}, msg, { token: adminToken }) : msg));
     }
   }, []);
@@ -835,7 +842,7 @@ function App() {
     const sd2 = startDate || "2020-01-01";
     setHistLoading(true);
     setHistData(null);
-    fetch('/api/backtest', {
+    adminFetch('/api/backtest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile: "moderate", symbols: [s], startDate: sd2 }),
@@ -999,7 +1006,7 @@ function App() {
     setSimError(null);
     setSimResults(null);
     Promise.all(simProfiles.map(p =>
-      fetch('/api/backtest', {
+      adminFetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile: p.id, symbols: allSymbolsMeta, startDate: compareStart }),
@@ -1069,7 +1076,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.7"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.8"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1872,6 +1879,12 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.8.0", date: "2026-06-02", changes: [
+                  "Backtests now run in a short-lived worker process to keep live ticks and WebSocket updates responsive",
+                  "Admin token controls added for protected actions and backtest requests",
+                  "Health endpoint now separates system health from portfolio risk state",
+                  "Project docs, env template, and startup scripts updated to match the current server architecture",
+                ]},
                 { v: "1.7.0", date: "2026-03-25", changes: [
                   "All prices now real: Twelve Data API for 20 stocks + Gold (XAU/USD)",
                   "Smart API usage: market hours vs off-hours batching (~500/800 daily credits)",

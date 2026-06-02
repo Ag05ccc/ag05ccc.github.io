@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 const https = require('https');
+const { fork } = require('child_process');
 
 // Load .env file
 const envPath = path.resolve(__dirname, '.env');
@@ -17,7 +18,12 @@ if (fs.existsSync(envPath)) {
 // on a different port, with different capital, or different fee/slippage assumptions
 // without editing source (e.g. PORT=3999 node server.js for a test instance).
 function envNum(name, def) { var v = parseFloat(process.env[name]); return isNaN(v) ? def : v; }
-const PORT = parseInt(process.env.PORT, 10) || 3000;
+function envBool(name, def) {
+  if (process.env[name] === undefined) return def;
+  return /^(1|true|yes|on)$/i.test(String(process.env[name]).trim());
+}
+const parsedPort = parseInt(process.env.PORT, 10);
+const PORT = Number.isFinite(parsedPort) ? parsedPort : 3000;
 const TICK_MS = envNum('TICK_MS', 2000);
 const CANDLE_TICKS = envNum('CANDLE_TICKS', 30); // 30 ticks x 2s = 60 seconds = 1 minute candles
 const PRICE_FETCH_INTERVAL = 30000;
@@ -26,11 +32,46 @@ const COMMISSION_RATE = envNum('COMMISSION_RATE', 0.001); // 0.1% commission per
 const SLIPPAGE_PCT = envNum('SLIPPAGE_PCT', 0.0005); // 0.05% default slippage
 const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || '';
 const TWELVEDATA_INTERVAL = 600000; // 1 batch every 10 minutes (~600 credits/day, under 800 limit)
-// Optional admin token. When set, state-MUTATING actions (portfolio reset, resume,
-// live config changes) require a matching token; reads stay public (shared demo).
-// When unset, behaviour is unchanged (a startup warning is logged).
+// Admin token. In local/dev mode it can be omitted for convenience; in production
+// (or REQUIRE_ADMIN_TOKEN=1) the server refuses to start without it.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-function isAuthorized(token) { return !ADMIN_TOKEN || token === ADMIN_TOKEN; }
+const REQUIRE_ADMIN_TOKEN = envBool('REQUIRE_ADMIN_TOKEN', process.env.NODE_ENV === 'production');
+const BACKTEST_REQUIRES_ADMIN = envBool('BACKTEST_REQUIRES_ADMIN', !!ADMIN_TOKEN || REQUIRE_ADMIN_TOKEN);
+const BACKTEST_WORKER_MODE = process.env.BACKTEST_WORKER_MODE === '1';
+const BACKTEST_WORKER_ENABLED = envBool('BACKTEST_WORKER_ENABLED', true);
+const BACKTEST_TIMEOUT_MS = envNum('BACKTEST_TIMEOUT_MS', 10 * 60 * 1000);
+function isAuthorized(token) { return ADMIN_TOKEN ? token === ADMIN_TOKEN : !REQUIRE_ADMIN_TOKEN; }
+
+function getRequestToken(req) {
+  try {
+    var u = new URL(req.url || '/', 'http://localhost');
+    var qToken = u.searchParams.get('token');
+    if (qToken) return qToken;
+  } catch (e) {}
+  var headerToken = req.headers['x-admin-token'];
+  if (Array.isArray(headerToken)) headerToken = headerToken[0];
+  if (headerToken) return String(headerToken);
+  var auth = req.headers.authorization || '';
+  var m = String(auth).match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : '';
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(payload));
+}
+
+function requireAdminRequest(req, res) {
+  if (!ADMIN_TOKEN) {
+    sendJson(res, 403, { error: 'Unauthorized: ADMIN_TOKEN is not configured' });
+    return false;
+  }
+  if (!isAuthorized(getRequestToken(req))) {
+    sendJson(res, 403, { error: 'Unauthorized: admin token required' });
+    return false;
+  }
+  return true;
+}
 // Cooldown per profile (ms) - increased based on backtest (1h data = all negative)
 // Fewer trades = less commission drag = better returns
 // Cooldowns very high — commission was killing all returns
@@ -440,7 +481,7 @@ async function fetchTwelveDataBatch() {
 }
 
 // Rotate batches: 1 batch per minute, full cycle every 3 minutes
-setInterval(fetchTwelveDataBatch, TWELVEDATA_INTERVAL);
+if (!BACKTEST_WORKER_MODE) setInterval(fetchTwelveDataBatch, TWELVEDATA_INTERVAL);
 
 async function fetchRealPrices() {
   await fetchCoinGeckoPrices();
@@ -1426,8 +1467,10 @@ function seedAllPortfoliosFromHistory(startDate) {
 function internalBacktest(profileId, assets, startDate) {
   return new Promise(function(resolve) {
     var body = JSON.stringify({ profile: profileId, symbols: assets, startDate: startDate, timeframe: '1d' });
+    var headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+    if (ADMIN_TOKEN) headers['X-Admin-Token'] = ADMIN_TOKEN;
     var req = http.request({ host: '127.0.0.1', port: PORT, path: '/api/backtest', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, function(res) {
+      headers: headers }, function(res) {
       var d = ''; res.on('data', function(c) { d += c; });
       res.on('end', function() { try { resolve(JSON.parse(d)); } catch (e) { resolve(null); } });
     });
@@ -1510,9 +1553,166 @@ function getState() {
   return { prices: prices, portfolios: pfs, scores: lastScores, profiles: profileConfigs, signals: SIGNALS.map(function(s) { return { id: s.id, label: s.label, side: s.side, category: s.category, weight: s.weight }; }), tick: tickCount, serverTime: new Date().toISOString() };
 }
 
+function broadcastBacktestProgress(pct) {
+  if (typeof wss === 'undefined' || !wss || !wss.clients) return;
+  wss.clients.forEach(function(client) {
+    if (client.readyState === WebSocket.OPEN) {
+      try { client.send(JSON.stringify({ type: 'backtestProgress', pct: pct })); } catch (e) {}
+    }
+  });
+}
+
+function sendBacktestProgress(pct) {
+  if (BACKTEST_WORKER_MODE && process.send) {
+    try { process.send({ type: 'backtestProgress', pct: pct }); } catch (e) {}
+    return;
+  }
+  broadcastBacktestProgress(pct);
+}
+
+function cleanupBacktestWorker(child) {
+  if (!child || child.killed) return;
+  try { if (child.connected) child.send({ type: 'shutdown' }); } catch (e) {}
+  setTimeout(function() {
+    if (!child.killed) {
+      try { child.kill('SIGKILL'); } catch (e) {}
+    }
+  }, 1000).unref();
+}
+
+function proxyBacktestToWorker(req, res) {
+  if (backtestInProgress) {
+    sendJson(res, 429, { error: 'A backtest is already running - please wait for it to finish.' });
+    return;
+  }
+
+  backtestInProgress = true;
+  var finished = false;
+  function release() {
+    if (finished) return;
+    finished = true;
+    backtestInProgress = false;
+  }
+
+  var body = '';
+  var bodyAborted = false;
+  req.on('data', function(chunk) {
+    body += chunk;
+    if (body.length > 65536) {
+      bodyAborted = true;
+      release();
+      sendJson(res, 413, { error: 'Request body too large' });
+      req.destroy();
+    }
+  });
+
+  req.on('end', function() {
+    if (bodyAborted) return;
+
+    var child = fork(__filename, [], {
+      env: Object.assign({}, process.env, {
+        BACKTEST_WORKER_MODE: '1',
+        BACKTEST_WORKER_ENABLED: '0',
+        BACKTEST_REQUIRES_ADMIN: '0',
+        REQUIRE_ADMIN_TOKEN: '0',
+        PORT: '0',
+      }),
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    });
+    if (child.stdout) child.stdout.on('data', function() {});
+    if (child.stderr) child.stderr.on('data', function(chunk) {
+      var s = String(chunk || '').trim();
+      if (s) console.log('[backtest-worker] ' + s);
+    });
+
+    var responded = false;
+    var ready = false;
+    var workerReq = null;
+    var timer = setTimeout(function() {
+      if (!responded) {
+        responded = true;
+        cleanupBacktestWorker(child);
+        release();
+        sendJson(res, ready ? 504 : 503, { error: ready ? 'Backtest timed out' : 'Backtest worker did not become ready' });
+      }
+    }, BACKTEST_TIMEOUT_MS);
+    timer.unref();
+
+    function fail(status, error) {
+      if (responded) return;
+      responded = true;
+      clearTimeout(timer);
+      cleanupBacktestWorker(child);
+      release();
+      sendJson(res, status, { error: error });
+    }
+
+    function runOnWorker(port) {
+      var headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+      workerReq = http.request({
+        host: '127.0.0.1',
+        port: port,
+        path: '/api/backtest',
+        method: 'POST',
+        headers: headers,
+      }, function(workerRes) {
+        var chunks = [];
+        workerRes.on('data', function(chunk) { chunks.push(chunk); });
+        workerRes.on('end', function() {
+          if (responded) return;
+          responded = true;
+          clearTimeout(timer);
+          cleanupBacktestWorker(child);
+          release();
+          var payload = Buffer.concat(chunks);
+          res.writeHead(workerRes.statusCode || 500, {
+            'Content-Type': workerRes.headers['content-type'] || 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(payload);
+        });
+      });
+      workerReq.on('error', function(err) { fail(502, 'Backtest worker request failed: ' + err.message); });
+      workerReq.write(body);
+      workerReq.end();
+    }
+
+    child.on('message', function(msg) {
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'ready' && msg.port) {
+        ready = true;
+        runOnWorker(msg.port);
+      } else if (msg.type === 'backtestProgress') {
+        broadcastBacktestProgress(msg.pct);
+      }
+    });
+
+    child.on('error', function(err) { fail(500, 'Backtest worker failed: ' + err.message); });
+    child.on('exit', function(code, signal) {
+      if (!responded) fail(500, 'Backtest worker exited before completing (code ' + code + ', signal ' + signal + ')');
+    });
+
+    res.on('close', function() {
+      if (responded) return;
+      if (workerReq) try { workerReq.destroy(); } catch (e) {}
+      cleanupBacktestWorker(child);
+      release();
+    });
+  });
+
+  req.on('error', function(err) {
+    release();
+    if (!res.headersSent) sendJson(res, 400, { error: 'Backtest request failed: ' + err.message });
+  });
+  req.on('aborted', function() {
+    release();
+  });
+}
+
 // ─── HTTP SERVER ───
 const server = http.createServer((req, res) => {
-  if (req.url === '/' || req.url === '/index.html') {
+  const reqPath = (req.url || '/').split('?')[0];
+  if (reqPath === '/' || reqPath === '/index.html') {
     const filePath = path.join(__dirname, 'client.html');
     fs.readFile(filePath, (err, data) => {
       if (err) {
@@ -1523,48 +1723,53 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(data);
     });
-  } else if (req.url === '/api/state') {
+  } else if (reqPath === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(getState()));
-  } else if (req.url === '/api/health') {
+  } else if (reqPath === '/api/health') {
     // Lightweight liveness/health probe for uptime monitors and operators.
     var nowH = Date.now();
     var lastPx = 0;
     Object.keys(lastPriceUpdate).forEach(function(s) { if (lastPriceUpdate[s] > lastPx) lastPx = lastPriceUpdate[s]; });
-    var anyDegraded = portfolios.some(function(p) { return (portfolioStates[p.id] || 'RUNNING') !== 'RUNNING'; });
+    var priceFeedStale = !!(lastPx && (nowH - lastPx) > 10 * 60 * 1000);
+    var stateSaveStale = !!(lastStateSaveAt && (nowH - lastStateSaveAt) > Math.max(STATE_SAVE_INTERVAL * 5, 60000));
+    var systemDegraded = priceFeedStale || stateSaveStale;
+    var portfolioRisk = portfolios.map(function(p) { return { id: p.id, state: portfolioStates[p.id] || 'RUNNING' }; });
+    var anyPortfolioAttention = portfolioRisk.some(function(p) { return p.state !== 'RUNNING'; });
     var health = {
-      status: anyDegraded ? 'degraded' : 'ok',
+      status: systemDegraded ? 'degraded' : 'ok',
       uptimeSec: Math.round(process.uptime()),
-      wsClients: wss.clients.size,
-      binanceConnected: !!(binanceWs && binanceWs.readyState === 1),
-      lastPriceUpdateAgeSec: lastPx ? Math.round((nowH - lastPx) / 1000) : null,
-      lastStateSaveAgeSec: lastStateSaveAt ? Math.round((nowH - lastStateSaveAt) / 1000) : null,
-      rssMB: Math.round(process.memoryUsage().rss / 1048576),
+      system: {
+        wsClients: wss.clients.size,
+        binanceConnected: !!(binanceWs && binanceWs.readyState === 1),
+        lastPriceUpdateAgeSec: lastPx ? Math.round((nowH - lastPx) / 1000) : null,
+        lastStateSaveAgeSec: lastStateSaveAt ? Math.round((nowH - lastStateSaveAt) / 1000) : null,
+        priceFeedStale: priceFeedStale,
+        stateSaveStale: stateSaveStale,
+        rssMB: Math.round(process.memoryUsage().rss / 1048576),
+      },
+      portfolioRisk: {
+        status: anyPortfolioAttention ? 'attention' : 'ok',
+        portfolios: portfolioRisk,
+      },
+      // Backward-compatible summary for simple monitors.
+      portfolios: portfolioRisk,
       tick: tickCount,
-      portfolios: portfolios.map(function(p) { return { id: p.id, state: portfolioStates[p.id] || 'RUNNING' }; }),
       serverTime: new Date().toISOString(),
     };
-    res.writeHead(anyDegraded ? 503 : 200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.writeHead(systemDegraded ? 503 : 200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(health));
-  } else if (req.url && req.url.indexOf('/api/reset/') === 0) {
-    var resetPath = req.url.replace('/api/reset/', '');
-    var resetToken = '';
-    var qIdx = resetPath.indexOf('?');
-    if (qIdx >= 0) {
-      var rm = resetPath.slice(qIdx + 1).match(/(?:^|&)token=([^&]*)/);
-      if (rm) resetToken = decodeURIComponent(rm[1]);
-      resetPath = resetPath.slice(0, qIdx);
-    }
-    if (!isAuthorized(resetToken)) {
-      res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ error: 'Unauthorized: admin token required' }));
+  } else if (reqPath.indexOf('/api/reset/') === 0) {
+    var resetPath = decodeURIComponent(reqPath.replace('/api/reset/', ''));
+    if (!isAuthorized(getRequestToken(req))) {
+      sendJson(res, 403, { error: 'Unauthorized: admin token required' });
     } else {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ ok: resetPortfolio(resetPath) }));
     }
-  } else if (req.url && req.url.match && req.url.match(/^\/api\/portfolio\/[^/]+\/export\/(csv|json)$/)) {
+  } else if (reqPath.match && reqPath.match(/^\/api\/portfolio\/[^/]+\/export\/(csv|json)$/)) {
     // Portfolio export endpoints
-    var urlParts = req.url.split('/');
+    var urlParts = reqPath.split('/');
     var exportPfId = urlParts[3];
     var exportFormat = urlParts[5];
     var exportPf = portfolios.find(function(p) { return p.id === exportPfId; });
@@ -1623,7 +1828,7 @@ const server = http.createServer((req, res) => {
       });
       res.end(csvOut);
     }
-  } else if (req.url === '/api/logs') {
+  } else if (reqPath === '/api/logs') {
     // Download all trade logs as CSV
     var csv = 'time,portfolio,symbol,side,qty,price,total,commission,pnl,pnlPct,avgCost,strategy,reason,score,regime,trend15m,exposure,volatility,rsi,macdHist,adx,cashBefore,cashAfter,holdingBefore,candleCount,blackSwan\n';
     portfolios.forEach(function(pf) {
@@ -1647,7 +1852,7 @@ const server = http.createServer((req, res) => {
       'Access-Control-Allow-Origin': '*'
     });
     res.end(csv);
-  } else if (req.url === '/api/logs/json') {
+  } else if (reqPath === '/api/logs/json') {
     // Download all logs as JSON
     var logs = {};
     portfolios.forEach(function(pf) {
@@ -1664,7 +1869,7 @@ const server = http.createServer((req, res) => {
       'Access-Control-Allow-Origin': '*'
     });
     res.end(JSON.stringify(logs, null, 2));
-  } else if (req.url === '/api/backtest/assets') {
+  } else if (reqPath === '/api/backtest/assets') {
     // Return available historical data files with date ranges
     var dataDir = path.join(__dirname, 'backtest', 'data');
     var assets = [];
@@ -1687,7 +1892,12 @@ const server = http.createServer((req, res) => {
     } catch(e) {}
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(assets));
-  } else if (req.method === 'POST' && req.url === '/api/backtest') {
+  } else if (req.method === 'POST' && reqPath === '/api/backtest') {
+    if (BACKTEST_REQUIRES_ADMIN && !requireAdminRequest(req, res)) return;
+    if (!BACKTEST_WORKER_MODE && BACKTEST_WORKER_ENABLED) {
+      proxyBacktestToWorker(req, res);
+      return;
+    }
     // Single-flight: one backtest at a time. A heavy (sub-daily) backtest blocks the
     // event loop; stacking several froze the whole live site. Reject extras with 429.
     if (backtestInProgress) {
@@ -1760,11 +1970,7 @@ const server = http.createServer((req, res) => {
 
           // Send progress via WebSocket to all connected clients
           function sendProgress(pct) {
-            wss.clients.forEach(function(client) {
-              if (client.readyState === 1) {
-                try { client.send(JSON.stringify({ type: 'backtestProgress', pct: pct })); } catch(e) {}
-              }
-            });
+            sendBacktestProgress(pct);
           }
 
           // EMA200 incremental calculation
@@ -1986,6 +2192,12 @@ const server = http.createServer((req, res) => {
             symbols: ['BTC'],
             startDate: startDate,
             timeframe: timeframe,
+            metadata: {
+              generatedAt: new Date().toISOString(),
+              executionMode: BACKTEST_WORKER_MODE ? 'worker' : 'inline',
+              dataSource: 'backtest/data/1m/BTC.jsonl',
+              endDate: null,
+            },
           };
 
           sendProgress(100);
@@ -2198,11 +2410,7 @@ const server = http.createServer((req, res) => {
 
         // Send progress via WebSocket for minute-based backtests
         function sendGenProgress(pct) {
-          wss.clients.forEach(function(client) {
-            if (client.readyState === 1) {
-              try { client.send(JSON.stringify({ type: 'backtestProgress', pct: pct })); } catch(e) {}
-            }
-          });
+          sendBacktestProgress(pct);
         }
         var lastGenProgressPct = -1;
         // Last known close per symbol, carried forward to value holdings on days the
@@ -2765,8 +2973,16 @@ const server = http.createServer((req, res) => {
           profile: profileId,
           symbols: symbols,
           startDate: startDate,
+          endDate: endDate,
           timeframe: timeframe,
           skippedSymbols: skippedSymbols,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            executionMode: BACKTEST_WORKER_MODE ? 'worker' : 'inline',
+            dataSource: isMinuteTimeframe ? 'backtest/data/1m/*.jsonl' : 'backtest/data/*_daily.csv',
+            requestedSymbols: params.symbols || [],
+            effectiveSymbols: symbols,
+          },
         };
         if (isMinuteTimeframe) sendGenProgress(100);
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -2873,6 +3089,12 @@ function broadcast() {
 
 // ─── START ───
 async function start() {
+  if (REQUIRE_ADMIN_TOKEN && !ADMIN_TOKEN) {
+    console.error('ADMIN_TOKEN is required when NODE_ENV=production or REQUIRE_ADMIN_TOKEN=1.');
+    console.error('Set ADMIN_TOKEN in .env before starting the server.');
+    process.exit(1);
+  }
+
   console.log('Fetching initial real prices...');
   await fetchRealPrices();
 
@@ -2904,7 +3126,12 @@ async function start() {
     console.log('  BTC: $' + (lastPrices.BTC || 'N/A') + ' | ETH: $' + (lastPrices.ETH || 'N/A'));
     console.log('  5 portfolios (4 scoring + 1 DMA) | ' + cryptoCount + ' crypto + ' + stockCount + ' stocks | 1min candles');
     if (restored) console.log('  State restored from disk');
-    if (!ADMIN_TOKEN) console.log('  ⚠ ADMIN_TOKEN not set — portfolio reset/config are PUBLIC. Set ADMIN_TOKEN in .env to require a token for mutations.');
+    if (ADMIN_TOKEN) {
+      console.log('  Admin protection enabled | backtest protected: ' + (BACKTEST_REQUIRES_ADMIN ? 'yes' : 'no'));
+    } else {
+      console.log('  ADMIN_TOKEN not set - admin actions are public in this dev configuration.');
+      console.log('  Set ADMIN_TOKEN and REQUIRE_ADMIN_TOKEN=1 for any internet-exposed instance.');
+    }
     console.log('');
 
     // One-time warm-start: seed the 4 scoring portfolios from their OWN 1-year backtest
@@ -2956,4 +3183,27 @@ async function start() {
   });
 }
 
-start();
+function startBacktestWorker() {
+  server.listen(PORT, '127.0.0.1', function() {
+    var addr = server.address();
+    if (process.send) process.send({ type: 'ready', port: addr.port });
+  });
+
+  function shutdownWorker() {
+    try {
+      server.close(function() { process.exit(0); });
+    } catch (e) {
+      process.exit(0);
+    }
+    setTimeout(function() { process.exit(0); }, 1000).unref();
+  }
+
+  process.on('message', function(msg) {
+    if (msg && msg.type === 'shutdown') shutdownWorker();
+  });
+  process.on('SIGTERM', shutdownWorker);
+  process.on('SIGINT', shutdownWorker);
+}
+
+if (BACKTEST_WORKER_MODE) startBacktestWorker();
+else start();

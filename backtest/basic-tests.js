@@ -12,19 +12,33 @@ var http = require('http');
 var fs = require('fs');
 var path = require('path');
 
+var envPath = path.resolve(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(function(line) {
+    var idx = line.indexOf('=');
+    if (idx <= 0) return;
+    var k = line.slice(0, idx).trim();
+    var v = line.slice(idx + 1).trim();
+    if (k && process.env[k] === undefined) process.env[k] = v;
+  });
+}
+
 var RESULTS_DIR = path.join(__dirname, 'test-results');
 if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR);
 
 var SERVER_URL = 'http://localhost:3000';
+var ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 var passed = 0, failed = 0;
 var allResults = [];
 
 function postBacktest(params) {
   return new Promise(function(resolve, reject) {
     var body = JSON.stringify(params);
+    var headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+    if (ADMIN_TOKEN) headers['X-Admin-Token'] = ADMIN_TOKEN;
     var req = http.request(SERVER_URL + '/api/backtest', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      headers: headers,
     }, function(res) {
       var data = '';
       res.on('data', function(chunk) { data += chunk; });

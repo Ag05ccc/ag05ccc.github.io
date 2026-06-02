@@ -955,17 +955,17 @@ function runStrategies() {
       // --- SCORING-BASED BUY ---
       // Exposure limit: conservative/moderate cap at 80%, aggressive 90%, yolo 95%
       var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
-      if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
+      if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure && sd.cur > sd.ema200) {
         if (availableCash < 100) return;
         // Max position count limit
         var openPositionCount = Object.keys(pf.holdings).filter(function(k) { return pf.holdings[k] && pf.holdings[k].qty > 0; }).length;
-        var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[pf.id] || 5;
+        var maxPositions = { conservative: 4, moderate: 5, aggressive: 6, yolo: 4 }[pf.id] || 5;
         if (openPositionCount >= maxPositions) return;
         var buyFillPrice = price * (1 + slippagePct); // slippage: buy fills higher
         // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
         var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
         // Max per-position capital
-        var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[pf.id] || 0.10;
+        var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[pf.id] || 0.10;
         tradeValue = Math.min(tradeValue, pf.startCash * maxPerPosition);
         var tq = +(tradeValue / buyFillPrice).toFixed(6);
         if (tq <= 0) return;
@@ -1020,7 +1020,7 @@ function runStrategies() {
       }
 
       // --- SCORING-BASED SELL ---
-      else if (sellScore >= sellThreshold && pos && pos.qty > 0) {
+      else if (sellScore >= sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200) {
         var sellFillPrice = price * (1 - slippagePct); // slippage: sell fills lower
         var sq = pos.qty;
         var sellTotal = sellFillPrice * sq;
@@ -1265,8 +1265,8 @@ function seedPortfolioFromHistory(profile, startDate) {
 
   var COOLDOWN = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 }[profile.id] || 3;
   var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
-  var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[profile.id] || 5;
-  var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[profile.id] || 0.10;
+  var maxPositions = { conservative: 4, moderate: 5, aggressive: 6, yolo: 4 }[profile.id] || 5;
+  var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[profile.id] || 0.10;
   var slippage = (profile.overrides && profile.overrides.slippage) || SLIPPAGE_PCT;
   var cashPct = profile.cashPct || 0.15;
   var startMs = new Date(startDate + 'T00:00:00Z').getTime();
@@ -1333,7 +1333,7 @@ function seedPortfolioFromHistory(profile, startDate) {
       var openCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
 
       // SCORING buy
-      if (scored.buyScore >= profile.buyThreshold && scored.buyScore > scored.sellScore && exposurePct < maxExposure && openCount < maxPositions) {
+      if (scored.buyScore >= profile.buyThreshold && scored.buyScore > scored.sellScore && exposurePct < maxExposure && openCount < maxPositions && sd.cur > sd.ema200) {
         if (cash < 100) return;
         var bFill = price * (1 + slippage);
         var tradeValue = Math.min(cash * cashPct, cash * 0.95, DEFAULT_CASH * maxPerPosition);
@@ -1354,7 +1354,7 @@ function seedPortfolioFromHistory(profile, startDate) {
         lastTradeDay[sym] = di; tradeCount++;
       }
       // SCORING sell
-      else if (scored.sellScore >= profile.sellThreshold && pos && pos.qty > 0) {
+      else if (scored.sellScore >= profile.sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200) {
         var sFill = price * (1 - slippage);
         var sTotal = sFill * pos.qty, sComm = sTotal * COMMISSION_RATE;
         var sPnl = (sFill - pos.avgCost) * pos.qty;
@@ -1401,6 +1401,57 @@ function seedAllPortfoliosFromHistory(startDate) {
       console.log('  seed failed for ' + profile.id + ': ' + e.message);
     }
   });
+}
+
+// Internal call to this server's own /api/backtest, so portfolios are seeded from the
+// SAME engine that powers the Backtest tab (seeded baseline == canonical backtest).
+function internalBacktest(profileId, assets, startDate) {
+  return new Promise(function(resolve) {
+    var body = JSON.stringify({ profile: profileId, symbols: assets, startDate: startDate, timeframe: '1d' });
+    var req = http.request({ host: '127.0.0.1', port: PORT, path: '/api/backtest', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, function(res) {
+      var d = ''; res.on('data', function(c) { d += c; });
+      res.on('end', function() { try { resolve(JSON.parse(d)); } catch (e) { resolve(null); } });
+    });
+    req.on('error', function() { resolve(null); });
+    req.setTimeout(120000, function() { req.destroy(); resolve(null); });
+    req.write(body); req.end();
+  });
+}
+
+// Seed the 4 scoring portfolios from their own 1-year backtest result so the opening
+// display equals the canonical backtest. The backtest force-closes at end, so holdings
+// start flat and cash = final equity; the live tick re-enters from there.
+async function seedAllFromBacktest(startDate) {
+  for (var i = 0; i < PROFILES.length; i++) {
+    var profile = PROFILES[i];
+    var pf = portfolios.find(function(p) { return p.id === profile.id; });
+    if (!pf) continue;
+    try {
+      var r = await internalBacktest(profile.id, profile.assets, startDate);
+      if (!r || !r.metrics) { console.log('  seed ' + profile.id + ': backtest failed'); continue; }
+      var m = r.metrics;
+      pf.cash = m.finalEquity;
+      pf.holdings = {};
+      pf.peaks = {};
+      pf.orders = (r.trades || []).slice().reverse().map(function(t) {
+        return { sym: t.symbol, side: t.side, qty: t.qty, price: t.price, total: t.total,
+          pnl: t.pnl || 0, pnlPct: t.pnlPct, commission: t.commission || 0,
+          time: (t.date || '') + 'T16:00:00.000Z', strat: 'seed', why: t.reason || '',
+          regime: t.regime || '', seeded: true };
+      }).slice(0, 200);
+      pf.history = (r.equityCurve || []).map(function(e) {
+        var ms = new Date((e.date || '') + 'T00:00:00Z').getTime();
+        return { t: isNaN(ms) ? Date.now() : ms, value: e.value, day: (e.date || '').slice(0, 10) };
+      });
+      if (!pf.history.length) pf.history = [{ t: Date.now(), value: DEFAULT_CASH }];
+      pf.wins = m.wins; pf.losses = m.losses; pf.tradeCount = m.totalTrades;
+      pf.totalCommission = m.totalCommission;
+      console.log('  seeded ' + profile.id + ': ' + m.totalTrades + ' trades, $' + Math.round(m.finalEquity) + ' (' + m.totalReturn + '%)');
+    } catch (e) {
+      console.log('  seed failed for ' + profile.id + ': ' + e.message);
+    }
+  }
 }
 
 // ─── BUILD CLIENT STATE ───
@@ -1655,6 +1706,13 @@ const server = http.createServer((req, res) => {
         if (!ALLOWED_TIMEFRAMES[timeframe]) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown timeframe' })); return; }
         var invalidSymbols = symbols.filter(function(s) { return typeof s !== 'string' || !Object.prototype.hasOwnProperty.call(COINS, s); });
         if (invalidSymbols.length) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unknown symbol(s): ' + invalidSymbols.slice(0, 10).join(', ') })); return; }
+
+        // Restrict to the profile's own universe so a backtest reflects what that
+        // profile actually trades live (each scoring profile has a distinct asset set).
+        if (!isDmaBacktest && profile && Array.isArray(profile.assets)) {
+          var restricted = symbols.filter(function(s) { return profile.assets.indexOf(s) >= 0; });
+          if (restricted.length > 0) symbols = restricted;
+        }
 
         // ─── FAST PATH: DMA 1m backtest with incremental EMA200 ───
         if (isDmaBacktest && timeframe !== '1d') {
@@ -2095,12 +2153,12 @@ const server = http.createServer((req, res) => {
         }
         var dailyTradeLimit = { conservative: 2, moderate: 3, aggressive: 5, yolo: 8 };
         var dailyTradeCount = {}; // { "2022-01-15": 3 }
-        var cbThresholds = { conservative: 0.10, moderate: 0.15, aggressive: 0.20, yolo: 0.30 };
+        var cbThresholds = { conservative: 0.16, moderate: 0.22, aggressive: 0.30, yolo: 0.45, dma: 0.25 };
         var cbCooldownDays = isMinuteTimeframe ? Math.ceil(1440 * 10 / (tfMinutesGeneral || 1)) : 10; // 10 days in bars
         var cbTriggeredDay = -999;
         var dmaState = null; // For DMA backtest: { bought1, bought2, sold1, sold2 }
         var cbTriggerCount = 0;
-        var cbMaxTriggers = 3; // After 3 circuit breaker hits, stop permanently
+        var cbMaxTriggers = 99; // Re-arm: pause cbCooldownDays per hit, never permanently halt
 
         // Track buy & hold for comparison
         var buyHoldStart = {};
@@ -2118,6 +2176,11 @@ const server = http.createServer((req, res) => {
           });
         }
         var lastGenProgressPct = -1;
+        // Last known close per symbol, carried forward to value holdings on days the
+        // symbol has no candle (e.g. stocks on weekends while crypto trades). Without
+        // this, those holdings were valued at $0 -> phantom weekend crashes that trip
+        // the circuit breaker and freeze the book.
+        var lastClose = {};
 
         // Process each date/timestamp
         for (var dayIdx = 0; dayIdx < sortedDates.length; dayIdx++) {
@@ -2143,6 +2206,7 @@ const server = http.createServer((req, res) => {
             if (!allCandles[sym] || symDateIndex[sym][dateKey] === undefined) return;
             var idx = symDateIndex[sym][dateKey];
             var c = allCandles[sym][idx];
+            lastClose[sym] = c.close; // carry-forward mark for no-candle days
             var sh = symHistory[sym];
             sh.closes.push(c.close);
             sh.highs.push(c.high);
@@ -2377,7 +2441,7 @@ const server = http.createServer((req, res) => {
             // Exposure calculation
             var holdingValue = Object.keys(holdings).reduce(function(s, hs) {
               var h = holdings[hs];
-              var hPrice = (symData[hs] && symData[hs].cur) || 0;
+              var hPrice = (symData[hs] && symData[hs].cur) || lastClose[hs] || (holdings[hs] && holdings[hs].avgCost) || 0;
               return s + ((h && h.qty) || 0) * hPrice;
             }, 0);
             var totalValue = cash + holdingValue;
@@ -2422,16 +2486,16 @@ const server = http.createServer((req, res) => {
             }
 
             // Scoring-based buy (skip if in cooldown)
-            if (!inCooldown && buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure) {
+            if (!inCooldown && buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure && sd.cur > sd.ema200) {
               if (availableCash < 100) return;
               // Max position count limit
               var openPositionCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
-              var maxPositions = { conservative: 3, moderate: 5, aggressive: 8, yolo: 12 }[profileId] || 5;
+              var maxPositions = { conservative: 4, moderate: 5, aggressive: 6, yolo: 4 }[profileId] || 5;
               if (openPositionCount >= maxPositions) return;
               var btBuyFill = price * (1 + btSlippage);
               var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
               // Max per-position capital
-              var maxPerPosition = { conservative: 0.15, moderate: 0.12, aggressive: 0.10, yolo: 0.08 }[profileId] || 0.10;
+              var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[profileId] || 0.10;
               tradeValue = Math.min(tradeValue, startCash * maxPerPosition);
               var tq = +(tradeValue / btBuyFill).toFixed(6);
               if (tq <= 0) return;
@@ -2467,7 +2531,7 @@ const server = http.createServer((req, res) => {
               dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;
             }
             // Scoring-based sell (skip if in cooldown or minimum hold not met)
-            else if (!inCooldown && sellScore >= sellThreshold && pos && pos.qty > 0 && (!holdUntil[sym] || dayIdx >= holdUntil[sym])) {
+            else if (!inCooldown && sellScore >= sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200 && (!holdUntil[sym] || dayIdx >= holdUntil[sym])) {
               var btSellFill = price * (1 - btSlippage);
               var sq = pos.qty;
               var sellTotal = btSellFill * sq;
@@ -2500,7 +2564,7 @@ const server = http.createServer((req, res) => {
           // Calculate equity at end of day
           var dayHoldingValue = Object.keys(holdings).reduce(function(s, hs) {
             var h = holdings[hs];
-            var hPrice = (symData[hs] && symData[hs].cur) || 0;
+            var hPrice = (symData[hs] && symData[hs].cur) || lastClose[hs] || (holdings[hs] && holdings[hs].avgCost) || 0;
             return s + ((h && h.qty) || 0) * hPrice;
           }, 0);
           var equity = cash + dayHoldingValue;
@@ -2530,7 +2594,7 @@ const server = http.createServer((req, res) => {
             Object.keys(holdings).forEach(function(cbSym) {
               var cbPos = holdings[cbSym];
               if (!cbPos || cbPos.qty <= 0) return;
-              var cbPrice = (symData[cbSym] && symData[cbSym].cur) || 0;
+              var cbPrice = (symData[cbSym] && symData[cbSym].cur) || lastClose[cbSym] || (holdings[cbSym] && holdings[cbSym].avgCost) || 0;
               if (cbPrice <= 0) return;
               var cbSlippage = (profile.overrides && profile.overrides.slippage !== undefined) ? profile.overrides.slippage : SLIPPAGE_PCT;
               var cbFillPrice = cbPrice * (1 - cbSlippage);
@@ -2800,20 +2864,7 @@ async function start() {
   // Restore saved state (portfolios, candles, indicators)
   const restored = loadState();
 
-  // One-time warm-start: seed the 4 scoring portfolios from ~1 year of daily history
-  // so they open showing "what if I had traded the last year on $100k", then the
-  // live tick continues. Runs once (flag persisted in state); set RESEED_FROM_HISTORY=1
-  // to force a re-seed on next start.
-  if (!seededFromHistory || process.env.RESEED_FROM_HISTORY === '1') {
-    var seedStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    console.log('\n  Warm-starting 4 portfolios from ~1 year of history (since ' + seedStart + ')...');
-    seedAllPortfoliosFromHistory(seedStart);
-    seededFromHistory = true;
-    saveState({ sync: true });
-    fullSnapshotDue = true;
-  }
-
-  server.listen(PORT, () => {
+  server.listen(PORT, async () => {
     console.log('\n  TradeSimBot Server running at http://localhost:' + PORT);
     var cryptoCount = Object.values(COINS).filter(function(c) { return c.type === 'crypto'; }).length;
     var stockCount = Object.values(COINS).filter(function(c) { return c.type === 'stock'; }).length;
@@ -2822,6 +2873,20 @@ async function start() {
     if (restored) console.log('  State restored from disk');
     if (!ADMIN_TOKEN) console.log('  ⚠ ADMIN_TOKEN not set — portfolio reset/config are PUBLIC. Set ADMIN_TOKEN in .env to require a token for mutations.');
     console.log('');
+
+    // One-time warm-start: seed the 4 scoring portfolios from their OWN 1-year backtest
+    // (same engine as the Backtest tab) so they open showing "what if I had traded the
+    // last year", then the live tick continues. Runs after listen so the internal
+    // backtest call works. Once-only (persisted flag); RESEED_FROM_HISTORY=1 forces it.
+    if (!seededFromHistory || process.env.RESEED_FROM_HISTORY === '1') {
+      var seedStart = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      console.log('  Warm-starting 4 portfolios from their 1-year backtest (since ' + seedStart + ')...');
+      await seedAllFromBacktest(seedStart);
+      seededFromHistory = true;
+      saveState({ sync: true });
+      fullSnapshotDue = true;
+      console.log('  Warm-start complete.');
+    }
   });
 
   // Connect Binance WebSocket for real-time crypto

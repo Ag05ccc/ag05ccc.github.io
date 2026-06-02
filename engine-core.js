@@ -272,10 +272,10 @@ function evalSignal(sigId, val, sd, pos, peakPrice) {
 const PROFILES = [
   { id: "conservative", name: "Conservative", color: "#3b82f6", icon: "🛡️",
     desc: "Few high-conviction trades, tight risk control",
-    assets: Object.keys(COINS), cashPct: 0.15, buyThreshold: 4.5, sellThreshold: 1.0,
+    assets: ['GOLD','AAPL','MSFT','GOOGL','AMZN','NVDA','JPM','V','WMT','BTC','ETH'], cashPct: 0.36, buyThreshold: 4.5, sellThreshold: 1.0,
     overrides: {
       rsi_ob: 22, rsi_os: 78, stoch_ob: 15, stoch_os: 85,
-      tp_pct: 5.0, sl_pct: 2.0, trailing: 3.0,  // Wide trailing lets trends run
+      tp_pct: 999, sl_pct: 4.0, trailing: 12.0,  // Ride trend; wide trailing caps give-back
       bb_lower: 0.05, bb_upper: 0.02, vol_spike_b: 2.5, vol_spike_s: 1.5,
       breakout_high: 25, breakdown: 15, dip_rsi_macd: 28, dip_rsi_macd_s: 72,
       vwap_sell: 0.03, vwap_buy: 0.05,
@@ -283,10 +283,10 @@ const PROFILES = [
     } },
   { id: "moderate", name: "Moderate", color: "#22c55e", icon: "⚖️",
     desc: "Balanced approach, trend-following bias",
-    assets: Object.keys(COINS), cashPct: 0.20, buyThreshold: 4.0, sellThreshold: 1.0,
+    assets: ['GOLD','AAPL','MSFT','GOOGL','NVDA','AMD','META','JPM','V','WMT','BTC','ETH','SOL','LINK'], cashPct: 0.26, buyThreshold: 4.0, sellThreshold: 1.0,
     overrides: {
       rsi_ob: 28, rsi_os: 72, stoch_ob: 20, stoch_os: 80,
-      tp_pct: 8.0, sl_pct: 3.0, trailing: 4.0,  // Let winners run longer
+      tp_pct: 999, sl_pct: 5.0, trailing: 14.0,  // Ride trend
       bb_lower: 0.08, bb_upper: 0.05, vol_spike_b: 2.0, vol_spike_s: 1.2,
       breakout_high: 18, breakdown: 10, dip_rsi_macd: 32, dip_rsi_macd_s: 68,
       vwap_sell: 0.05, vwap_buy: 0.08,
@@ -294,10 +294,10 @@ const PROFILES = [
     } },
   { id: "aggressive", name: "Aggressive", color: "#f59e0b", icon: "🔥",
     desc: "Trend-following, wider stops, bigger moves",
-    assets: Object.keys(COINS), cashPct: 0.25, buyThreshold: 3.5, sellThreshold: 1.0,
+    assets: ['NVDA','AMD','GOOGL','META','INTC','AAPL','MSFT','GOLD','AMZN','BTC','ETH'], cashPct: 0.26, buyThreshold: 4.0, sellThreshold: 1.0,
     overrides: {
       rsi_ob: 32, rsi_os: 68, stoch_ob: 25, stoch_os: 75,
-      tp_pct: 12.0, sl_pct: 4.0, trailing: 5.0,  // Catch big moves
+      tp_pct: 999, sl_pct: 6.0, trailing: 12.0,  // Ride trend (tighter)
       bb_lower: 0.15, bb_upper: 0.1, vol_spike_b: 1.5, vol_spike_s: 1.0,
       breakout_high: 12, breakdown: 8, dip_rsi_macd: 38, dip_rsi_macd_s: 62,
       ema50_bounce: 0.5, vwap_buy: 0.1, vwap_sell: 0.08, adx_trend_b: 22,
@@ -305,10 +305,10 @@ const PROFILES = [
     } },
   { id: "yolo", name: "YOLO", color: "#ef4444", icon: "🚀",
     desc: "Maximum trend capture, high volatility tolerance",
-    assets: Object.keys(COINS), cashPct: 0.30, buyThreshold: 3.0, sellThreshold: 0.8,
+    assets: ['SOL','AVAX','DOGE','ARB','SUI','OP','APT','NEAR','LINK','UNI','COIN','TSLA'], cashPct: 0.35, buyThreshold: 3.0, sellThreshold: 0.8,
     overrides: {
       rsi_ob: 38, rsi_os: 62, stoch_ob: 30, stoch_os: 70,
-      tp_pct: 15.0, sl_pct: 5.0, trailing: 8.0,  // Very wide: catch full trends
+      tp_pct: 999, sl_pct: 8.0, trailing: 22.0,  // Ride trend
       bb_lower: 0.3, bb_upper: 0.15, vol_spike_b: 1.2, vol_spike_s: 0.8,
       breakout_high: 8, breakdown: 5, dip_rsi_macd: 42, dip_rsi_macd_s: 58,
       ema50_bounce: 1.0, vwap_buy: 0.05, vwap_sell: 0.03, adx_trend_b: 18,

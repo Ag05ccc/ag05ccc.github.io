@@ -90,8 +90,8 @@ const STATE_SAVE_INTERVAL = envNum('STATE_SAVE_INTERVAL', 10000); // Save state 
 // backtest/backtest.js. They now live in one module so the backtest provably
 // runs the same strategy logic as live trading.
 const {
-  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
-  SIGNALS, STRATS, detectRegime, PROFILES, evaluateTradeDecision,
+  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX, calcATR,
+  SIGNALS, STRATS, detectRegime, PROFILES, evaluateTradeDecision, buildRiskPlan,
 } = require("./engine-core");
 
 // ─── SERVER STATE ───
@@ -127,7 +127,7 @@ Object.entries(COINS).forEach(([sym, c]) => {
     building: { o: price, h: price, l: price, c: price, v: 0, tickCount: 0 },
     rsi: 50, macd: { macd: 0, signal: 0, hist: 0 }, bb: { upper: 0, mid: 0, lower: 0 },
     ema9: 0, ema21: 0, ema50: 0, ema200: 0,
-    stoch: { k: 50, d: 50 }, adx: 20, vwap: price, prevMacdHist: 0,
+    stoch: { k: 50, d: 50 }, adx: 20, atr: 0, vwap: price, prevMacdHist: 0,
   };
   lastPrices[sym] = price;
 });
@@ -178,7 +178,7 @@ function buildStateSnapshot() {
       candles: sd.candles.slice(-200), cur: sd.cur,
       rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
       ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
-      stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
+      stoch: sd.stoch, adx: sd.adx, atr: sd.atr, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
     };
   });
   return {
@@ -270,6 +270,7 @@ function applyState(state) {
       marketData[sym].ema200 = saved.ema200 || 0;
       marketData[sym].stoch = saved.stoch || { k: 50, d: 50 };
       marketData[sym].adx = saved.adx || 20;
+      marketData[sym].atr = saved.atr || 0;
       marketData[sym].vwap = saved.vwap || saved.cur || 0;
       marketData[sym].prevMacdHist = saved.prevMacdHist || 0;
     });
@@ -532,6 +533,7 @@ function priceTick() {
       sd.ema200 = ema(closes, 200) || np;
       sd.stoch = calcStoch(highs, lows, closes);
       sd.adx = calcADX(highs, lows, closes);
+      sd.atr = calcATR(highs, lows, closes);
       sd.vwap = closes.length > 0 ? closes.reduce((a, b) => a + b, 0) / closes.length : np;
       sd.prevMacdHist = prevMacdHist;
 
@@ -918,20 +920,17 @@ function runStrategies() {
         var maxPositions = { conservative: 4, moderate: 5, aggressive: 6, yolo: 4 }[pf.id] || 5;
         if (openPositionCount >= maxPositions) return;
         var buyFillPrice = price * (1 + slippagePct); // slippage: buy fills higher
-        // Size based on total portfolio value, not just cash — keeps trades large even when mostly in holdings
-        var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
-        // Max per-position capital
         var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[pf.id] || 0.10;
-        tradeValue = Math.min(tradeValue, pf.startCash * maxPerPosition);
-        var tq = +(tradeValue / buyFillPrice).toFixed(6);
+        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: buyFillPrice, cash: pf.cash, availableCash: availableCash, startCash: pf.startCash, cashPct: cashPct, maxPerPosition: maxPerPosition });
+        var tradeValue = riskPlan.tradeValue;
+        var tq = riskPlan.qty;
         if (tq <= 0) return;
         var total = buyFillPrice * tq;
         var commission = total * COMMISSION_RATE;
         if (total + commission > availableCash) return;
 
         // Commission-aware trade gate: expected profit must exceed 2x trade cost
-        var expectedTpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
-        var expectedProfit = total * (expectedTpPct / 100);
+        var expectedProfit = total * riskPlan.targetPct;
         var tradeCost = total * COMMISSION_RATE * 2; // buy + sell commission
         if (expectedProfit < tradeCost * 2) return; // skip: not enough profit potential
 
@@ -951,10 +950,8 @@ function runStrategies() {
         pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : buyFillPrice, lots: newLots };
         pf.peaks[sym] = price;
         // Bracket order targets
-        var tpPct = (profile.overrides && profile.overrides.tp_pct !== undefined) ? profile.overrides.tp_pct : 2.0;
-        var slPct = (profile.overrides && profile.overrides.sl_pct !== undefined) ? profile.overrides.sl_pct : 1.0;
-        var bracketTP = +(buyFillPrice * (1 + tpPct / 100)).toFixed(2);
-        var bracketSL = +(buyFillPrice * (1 - slPct / 100)).toFixed(2);
+        var bracketTP = +riskPlan.takeProfitPrice.toFixed(2);
+        var bracketSL = +riskPlan.stopPrice.toFixed(2);
         tradeCooldowns[coolKey] = now;
         pf.tradeCount++; ds.trades++;
         console.log('[' + new Date().toLocaleTimeString() + '] TRADE ' + pf.id + ' BUY ' + sym + ' qty=' + tq.toFixed(4) + ' $' + total.toFixed(0) + ' score=+' + buyScore.toFixed(1) + ' regime=' + regime.type + ' [' + buyReasons.join(', ') + '] TP=$' + bracketTP + ' SL=$' + bracketSL);
@@ -970,6 +967,8 @@ function runStrategies() {
           holdingBefore: +old.qty.toFixed(6),
           exposure: +(exposurePct * 100).toFixed(0), volatility: +regime.volatility.toFixed(2),
           rsi: +sd.rsi.toFixed(1), macdHist: +sd.macd.hist.toFixed(4), adx: +sd.adx.toFixed(1),
+          atr: +((sd.atr || 0).toFixed(4)), riskPct: +(riskPlan.riskPct * 100).toFixed(2),
+          stopPct: +(riskPlan.stopPct * 100).toFixed(2), targetPct: +(riskPlan.targetPct * 100).toFixed(2),
           cashBefore: +(pf.cash + total + commission).toFixed(0), cashAfter: +pf.cash.toFixed(0),
           candleCount: sd.candles.length, blackSwan: blackSwan,
         });
@@ -1247,6 +1246,7 @@ function seedPortfolioFromHistory(profile, startDate) {
         cur: c.c, candles: sh.candles, rsi: calcRSI(closes), macd: calcMACD(closes), bb: calcBB(closes),
         ema9: ema(closes, 9) || c.c, ema21: ema(closes, 21) || c.c, ema50: ema(closes, 50) || c.c, ema200: ema(closes, 200) || c.c,
         stoch: calcStoch(highs, lows, closes), adx: calcADX(highs, lows, closes),
+        atr: calcATR(highs, lows, closes),
         vwap: closes.reduce(function(a, b) { return a + b; }, 0) / closes.length, prevMacdHist: prevMacdHist,
       };
     });
@@ -1295,23 +1295,35 @@ function seedPortfolioFromHistory(profile, startDate) {
 
       // SCORING buy
       if (decision.action === 'buy' && openCount < maxPositions) {
-        if (cash < 100) return;
+        var minCashReserve = DEFAULT_CASH * 0.02;
+        var availableCash = Math.max(0, cash - minCashReserve);
+        if (availableCash < 100) return;
         var bFill = price * (1 + slippage);
-        var tradeValue = Math.min(cash * cashPct, cash * 0.95, DEFAULT_CASH * maxPerPosition);
-        var tq = +(tradeValue / bFill).toFixed(6);
+        var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: bFill, cash: cash, availableCash: availableCash, startCash: DEFAULT_CASH, cashPct: cashPct, maxPerPosition: maxPerPosition });
+        var tradeValue = riskPlan.tradeValue;
+        var tq = riskPlan.qty;
         if (tq <= 0) return;
         var bTotal = bFill * tq, bComm = bTotal * COMMISSION_RATE;
-        if (bTotal + bComm > cash) return;
+        if (bTotal + bComm > availableCash) return;
         // Commission-aware gate (same as live): expected profit must beat 2x round-trip cost
-        var tpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
-        if (bTotal * (tpPct / 100) < bTotal * COMMISSION_RATE * 2 * 2) return;
+        if (bTotal * riskPlan.targetPct < bTotal * COMMISSION_RATE * 2 * 2) return;
         cash -= bTotal + bComm; totalCommission += bComm;
         var old = holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
         if (!old.lots) old.lots = [];
         var nq = +(old.qty + tq).toFixed(6);
         holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + bTotal) / nq : bFill, lots: old.lots.concat([{ qty: tq, cost: bFill, date: date }]) };
         peaks[sym] = price;
-        orders.push({ sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4), total: +bTotal.toFixed(2), pnl: 0, commission: +bComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: decision.buyReasons.length + ' signals', why: decision.buyReasons.join(', '), score: +decision.buyScore.toFixed(1), regime: decision.regime.type, seeded: true });
+        orders.push({
+          sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4),
+          total: +bTotal.toFixed(2), pnl: 0, commission: +bComm.toFixed(2),
+          bracketTP: +riskPlan.takeProfitPrice.toFixed(2),
+          bracketSL: +riskPlan.stopPrice.toFixed(2),
+          time: date + 'T16:00:00.000Z', strat: decision.buyReasons.length + ' signals',
+          why: decision.buyReasons.join(', '), score: +decision.buyScore.toFixed(1),
+          regime: decision.regime.type, seeded: true,
+          atr: +((sd.atr || 0).toFixed(4)), riskPct: +(riskPlan.riskPct * 100).toFixed(2),
+          stopPct: +(riskPlan.stopPct * 100).toFixed(2), targetPct: +(riskPlan.targetPct * 100).toFixed(2),
+        });
         lastTradeDay[sym] = di; tradeCount++;
       }
       // SCORING sell
@@ -1428,6 +1440,7 @@ function getState() {
       rsi: sd.rsi, macd: sd.macd, bb: sd.bb,
       ema9: sd.ema9, ema21: sd.ema21, ema50: sd.ema50, ema200: sd.ema200,
       stoch: sd.stoch, adx: sd.adx, vwap: sd.vwap, prevMacdHist: sd.prevMacdHist,
+      atr: sd.atr,
     };
   });
 
@@ -2391,6 +2404,7 @@ const server = http.createServer((req, res) => {
               ema200: ema200val,
               stoch: stoch,
               adx: adx,
+              atr: calcATR(highs, lows, closes),
               vwap: vwap,
               prevMacdHist: prevMacdHist,
             };
@@ -2575,18 +2589,16 @@ const server = http.createServer((req, res) => {
               var maxPositions = { conservative: 4, moderate: 5, aggressive: 6, yolo: 4 }[profileId] || 5;
               if (openPositionCount >= maxPositions) return;
               var btBuyFill = price * (1 + btSlippage);
-              var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95);
-              // Max per-position capital
               var maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[profileId] || 0.10;
-              tradeValue = Math.min(tradeValue, startCash * maxPerPosition);
-              var tq = +(tradeValue / btBuyFill).toFixed(6);
+              var riskPlan = buildRiskPlan({ sd: sd, profile: profile, symbol: sym, price: btBuyFill, cash: cash, availableCash: availableCash, startCash: startCash, cashPct: cashPct, maxPerPosition: maxPerPosition });
+              var tradeValue = riskPlan.tradeValue;
+              var tq = riskPlan.qty;
               if (tq <= 0) return;
               var total = btBuyFill * tq;
               var commission = total * COMMISSION_RATE;
               if (total + commission > availableCash) return;
               // Commission-aware trade gate: expected profit must exceed 2x trade cost
-              var expectedTpPct = (profile.overrides && profile.overrides.tp_pct) || 5;
-              var expectedProfit = total * (expectedTpPct / 100);
+              var expectedProfit = total * riskPlan.targetPct;
               var tradeCost = total * COMMISSION_RATE * 2;
               if (expectedProfit < tradeCost * 2) return;
               cash -= total + commission;
@@ -2597,17 +2609,17 @@ const server = http.createServer((req, res) => {
               peaks[sym] = price;
               var buyAssetType = COINS[sym] ? COINS[sym].type : 'stock';
               holdUntil[sym] = dayIdx + (minHoldDays[buyAssetType] || 3);
-              var btTpPct = (profile.overrides && profile.overrides.tp_pct !== undefined) ? profile.overrides.tp_pct : 2.0;
-              var btSlPct = (profile.overrides && profile.overrides.sl_pct !== undefined) ? profile.overrides.sl_pct : 1.0;
               trades.push({
                 date: displayDate, side: 'buy', symbol: sym, price: +btBuyFill.toFixed(2),
                 signalPrice: +price.toFixed(2), slippage: btSlippage,
-                bracketTP: +(btBuyFill * (1 + btTpPct / 100)).toFixed(2),
-                bracketSL: +(btBuyFill * (1 - btSlPct / 100)).toFixed(2),
+                bracketTP: +riskPlan.takeProfitPrice.toFixed(2),
+                bracketSL: +riskPlan.stopPrice.toFixed(2),
                 qty: +tq.toFixed(6), total: +total.toFixed(2),
                 pnl: 0, pnlPct: 0,
                 reason: buyReasons.join(', '), regime: regime.type,
                 commission: +commission.toFixed(2),
+                atr: +((sd.atr || 0).toFixed(4)), riskPct: +(riskPlan.riskPct * 100).toFixed(2),
+                stopPct: +(riskPlan.stopPct * 100).toFixed(2), targetPct: +(riskPlan.targetPct * 100).toFixed(2),
               });
               lastTradeDay[sym] = dayIdx;
               dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;

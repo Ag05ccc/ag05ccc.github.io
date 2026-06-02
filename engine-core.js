@@ -149,6 +149,23 @@ function calcADX(highs, lows, closes, period = 14) {
   return adx;
 }
 
+function calcATR(highs, lows, closes, period = 14) {
+  var n = closes.length;
+  if (n < period + 1) return 0;
+  var trs = [];
+  for (var i = 1; i < n; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+  }
+  if (trs.length < period) return 0;
+  var atr = trs.slice(0, period).reduce(function(a, b) { return a + b; }, 0) / period;
+  for (var j = period; j < trs.length; j++) atr = ((atr * (period - 1)) + trs[j]) / period;
+  return atr;
+}
+
 // ─── SIGNAL DEFINITIONS ───
 // Each signal evaluates to a label (truthy) or null (no signal)
 // Signals are scored: buy signals = +1, sell signals = -1
@@ -328,6 +345,56 @@ const PROFILE_REGIME = {
   yolo:         { trendHigh: 1.2, trendLow: 0.8, mrHigh: 1.2, mrLow: 0.8 },
 };
 
+const PROFILE_RISK = {
+  conservative: { riskPct: 0.005, atrMult: 2.4, rewardRisk: 1.8 },
+  moderate:     { riskPct: 0.008, atrMult: 2.2, rewardRisk: 2.0 },
+  aggressive:   { riskPct: 0.012, atrMult: 2.0, rewardRisk: 2.2 },
+  yolo:         { riskPct: 0.018, atrMult: 1.8, rewardRisk: 2.5 },
+};
+
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+
+function buildRiskPlan(opts) {
+  opts = opts || {};
+  var profile = opts.profile || {};
+  var sd = opts.sd || {};
+  var price = opts.price || sd.cur || 0;
+  var startCash = opts.startCash || 100000;
+  var cash = opts.cash != null ? opts.cash : startCash;
+  var availableCash = opts.availableCash != null ? opts.availableCash : cash;
+  var cashPct = opts.cashPct != null ? opts.cashPct : (profile.cashPct || 0.10);
+  var maxPerPosition = opts.maxPerPosition != null ? opts.maxPerPosition : 0.10;
+  var symType = opts.symType || ((COINS[opts.symbol] && COINS[opts.symbol].type) || 'crypto');
+  var pr = PROFILE_RISK[profile.id] || PROFILE_RISK.moderate;
+  var assetRiskMult = symType === 'commodity' ? 0.65 : (symType === 'stock' ? 0.80 : 1.0);
+  var atr = sd.atr || 0;
+  var atrPct = price > 0 && atr > 0 ? atr / price : 0;
+  var fallbackStopPct = ((profile.overrides && profile.overrides.sl_pct) || 5) / 100;
+  if (symType === 'stock') fallbackStopPct *= 0.7;
+  else if (symType === 'commodity') fallbackStopPct *= 0.5;
+  var stopPct = clamp(Math.max(atrPct * pr.atrMult, fallbackStopPct), 0.004, symType === 'crypto' ? 0.18 : 0.08);
+  var riskBudget = startCash * pr.riskPct * assetRiskMult;
+  var byRisk = stopPct > 0 ? riskBudget / stopPct : availableCash * cashPct;
+  var tradeValue = Math.min(availableCash * cashPct, availableCash * 0.95, startCash * maxPerPosition, byRisk);
+  if (!isFinite(tradeValue) || tradeValue < 0) tradeValue = 0;
+  var qty = price > 0 ? +(tradeValue / price).toFixed(6) : 0;
+  var rewardRisk = pr.rewardRisk;
+  var targetPct = stopPct * rewardRisk;
+  return {
+    atr: atr,
+    atrPct: atrPct,
+    stopPct: stopPct,
+    targetPct: targetPct,
+    riskPct: pr.riskPct * assetRiskMult,
+    riskBudget: riskBudget,
+    tradeValue: tradeValue,
+    qty: qty,
+    stopPrice: price > 0 ? +(price * (1 - stopPct)).toFixed(4) : 0,
+    takeProfitPrice: price > 0 ? +(price * (1 + targetPct)).toFixed(4) : 0,
+    rewardRisk: rewardRisk,
+  };
+}
+
 // symType is the asset class ('crypto' | 'stock' | 'commodity') used to scale
 // risk (TP/SL/trailing) thresholds, matching live behaviour.
 function scoreSignals(sd, pos, peakPrice, profile, symType) {
@@ -469,7 +536,7 @@ function evaluateTradeDecision(opts) {
 }
 
 module.exports = {
-  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
+  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX, calcATR,
   SIGNALS, STRATS, detectRegime, evalSignal, PROFILES,
-  CATEGORY_CAP, PROFILE_REGIME, scoreSignals, evaluateTradeDecision,
+  CATEGORY_CAP, PROFILE_REGIME, PROFILE_RISK, scoreSignals, evaluateTradeDecision, buildRiskPlan,
 };

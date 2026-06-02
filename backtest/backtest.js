@@ -10,8 +10,8 @@ const path = require('path');
 // Shared strategy logic — the SAME module the live server (server.js) uses — so this
 // backtest provably reflects live trading instead of a drifted hand-copy.
 const {
-  COINS, ema, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
-  PROFILES, evaluateTradeDecision,
+  COINS, ema, calcRSI, calcMACD, calcBB, calcStoch, calcADX, calcATR,
+  PROFILES, evaluateTradeDecision, buildRiskPlan,
 } = require('../engine-core');
 
 const COMMISSION_RATE = 0.001;
@@ -71,6 +71,7 @@ function computeIndicators(candles) {
     ema200: ema(closes, 200) || 0,
     stoch: calcStoch(highs, lows, closes),
     adx: calcADX(highs, lows, closes),
+    atr: calcATR(highs, lows, closes),
     vwap,
   };
 }
@@ -161,10 +162,19 @@ function runBacktest(candles, profile, symbolName) {
     // Scoring decision
     if (decision.action === 'buy') {
       const buyFillPrice = price * (1 + slippage); // slippage: buy fills higher
-      const tradeValue = Math.min(cash * profile.cashPct, cash * 0.98); // Keep 2% reserve
+      const minCashReserve = DEFAULT_CASH * 0.02;
+      const availableCash = Math.max(0, cash - minCashReserve);
+      const maxPerPosition = { conservative: 0.30, moderate: 0.25, aggressive: 0.22, yolo: 0.30 }[profile.id] || 0.10;
+      const riskPlan = buildRiskPlan({
+        sd, profile, symbol: sym, price: buyFillPrice,
+        cash, availableCash, startCash: DEFAULT_CASH,
+        cashPct: profile.cashPct, maxPerPosition,
+      });
+      const tradeValue = riskPlan.tradeValue;
       if (tradeValue < 10) continue;
-      const qty = tradeValue / buyFillPrice;
+      const qty = riskPlan.qty;
       const commission = tradeValue * COMMISSION_RATE;
+      if (tradeValue + commission > availableCash) continue;
       cash -= tradeValue + commission;
 
       if (!holdings[sym]) holdings[sym] = { qty: 0, avgCost: buyFillPrice };
@@ -173,7 +183,14 @@ function runBacktest(candles, profile, symbolName) {
       h.qty += qty;
       peaks[sym] = price;
 
-      trades.push({ bar: i, date: candles[i].date, side: 'buy', price: buyFillPrice, qty, total: tradeValue, pnl: 0, reason: buyReasons.join(', '), regime: regime.type, score: buyScore, type: 'score' });
+      trades.push({
+        bar: i, date: candles[i].date, side: 'buy', price: buyFillPrice,
+        bracketTP: riskPlan.takeProfitPrice, bracketSL: riskPlan.stopPrice,
+        qty, total: tradeValue, pnl: 0, reason: buyReasons.join(', '),
+        regime: regime.type, score: buyScore, type: 'score',
+        atr: sd.atr || 0, riskPct: riskPlan.riskPct,
+        stopPct: riskPlan.stopPct, targetPct: riskPlan.targetPct,
+      });
       lastTradeBar = i;
 
     } else if (decision.action === 'sell') {

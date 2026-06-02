@@ -1756,6 +1756,17 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(data);
     });
+  } else if (/^\/client\/[a-zA-Z0-9._-]+\.jsx$/.test(reqPath)) {
+    const filePath = path.join(__dirname, reqPath);
+    fs.readFile(filePath, 'utf8', (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/babel' });
+      res.end(data);
+    });
   } else if (reqPath === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(getState()));

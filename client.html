@@ -38,9 +38,14 @@
         if (el) el.innerHTML = '<div style="color:red;font-family:monospace;font-size:14px">' + e.message + '</div>';
       });
     </script>
+    <script type="text/babel" src="/client/backtest-quality.jsx"></script>
     <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 const { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, Scatter, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid, LineChart, Legend, Brush, PieChart, Pie, Cell } = Recharts;
+const BacktestQualityPanel = (props) => {
+  const Component = window.BacktestQualityPanel;
+  return Component ? <Component {...props} /> : null;
+};
 
 // ZoomChart - wraps chart container, slices data on mouse wheel zoom
 // Children receive sliced data via render prop pattern, but simpler: we slice the data prop of the chart
@@ -460,26 +465,7 @@ function BacktestTab({ isMobile }) {
             </span>
           </div>
 
-          {q && (
-            <div style={{ background: "#0f172a", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(129,140,248,0.18)", marginBottom: 16, fontSize: 11, fontFamily: "var(--m)" }}>
-              <div style={{ color: "#818cf8", fontFamily: "var(--h)", fontWeight: 700, fontSize: 10, marginBottom: 8 }}>BACKTEST QUALITY</div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 8 }}>
-                <span style={{ color: "#6b7280" }}>In-sample: <span style={{ color: q.inSample.totalReturn >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{q.inSample.totalReturn >= 0 ? "+" : ""}{q.inSample.totalReturn}%</span> <span style={{ color: "#4b5563" }}>DD {q.inSample.maxDrawdown}%</span></span>
-                <span style={{ color: "#6b7280" }}>Out-of-sample: <span style={{ color: q.outOfSample.totalReturn >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{q.outOfSample.totalReturn >= 0 ? "+" : ""}{q.outOfSample.totalReturn}%</span> <span style={{ color: "#4b5563" }}>Sharpe {q.outOfSample.sharpe}</span></span>
-                <span style={{ color: "#6b7280" }}>Split: <span style={{ color: "#f8fafc" }}>{Math.round((q.splitRatio || 0.7) * 100)}% / {100 - Math.round((q.splitRatio || 0.7) * 100)}%</span></span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 6 }}>
-                {(q.walkForward || []).map(function(w) {
-                  return (
-                    <div key={w.window} style={{ background: "#0a0e17", borderRadius: 6, padding: "7px 8px", border: "1px solid rgba(255,255,255,0.04)" }}>
-                      <div style={{ color: "#6b7280", fontSize: 9, marginBottom: 3 }}>W{w.window} {w.startDate} - {w.endDate}</div>
-                      <div style={{ color: w.totalReturn >= 0 ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{w.totalReturn >= 0 ? "+" : ""}{w.totalReturn}%</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <BacktestQualityPanel quality={q} metadata={meta} isMobile={isMobile} />
 
           {btResult.skippedSymbols && btResult.skippedSymbols.length > 0 && (
             <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "6px 12px", marginBottom: 12, fontSize: 11, color: "#f59e0b", fontFamily: "var(--m)" }}>Skipped (no 1m data): {btResult.skippedSymbols.join(", ")}</div>
@@ -1101,7 +1087,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.12"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.13"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1904,6 +1890,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.13.0", date: "2026-06-02", changes: [
+                  "Backtest quality panel moved into a separate frontend module",
+                  "Server now serves scoped /client/*.jsx frontend module files",
+                  "Main client.html is smaller and ready for incremental component extraction",
+                ]},
                 { v: "1.12.0", date: "2026-06-02", changes: [
                   "Backtest results now include a stable parameter hash for reproducibility",
                   "Added in-sample/out-of-sample split metrics and 4-window walk-forward summaries",

@@ -59,6 +59,24 @@ let portfolios = [];
 let tickCount = 0;
 let lastPrices = {}; // last fetched real prices
 let seededFromHistory = false; // true once the 4 portfolios are warm-started from ~1yr of history (persisted)
+let backtestInProgress = false; // single-flight guard: only one backtest at a time (heavy reads block the loop)
+
+// Read only the last `maxBytes` of a (time-sorted) file, dropping the partial first
+// line. Used so a multi-hundred-MB 1m .jsonl isn't loaded whole into memory (that
+// spiked RSS to ~3.8GB and froze the event loop). The tail covers well over the
+// 1-year backtest window; older data isn't needed.
+function readTailUtf8(filePath, maxBytes) {
+  var stat = fs.statSync(filePath);
+  if (stat.size <= maxBytes) return fs.readFileSync(filePath, 'utf8');
+  var fd = fs.openSync(filePath, 'r');
+  try {
+    var buf = Buffer.allocUnsafe(maxBytes);
+    fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+    var s = buf.toString('utf8');
+    var nl = s.indexOf('\n');
+    return nl >= 0 ? s.slice(nl + 1) : s;
+  } finally { fs.closeSync(fd); }
+}
 
 // Initialize market data
 Object.entries(COINS).forEach(([sym, c]) => {
@@ -1670,6 +1688,16 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(assets));
   } else if (req.method === 'POST' && req.url === '/api/backtest') {
+    // Single-flight: one backtest at a time. A heavy (sub-daily) backtest blocks the
+    // event loop; stacking several froze the whole live site. Reject extras with 429.
+    if (backtestInProgress) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'A backtest is already running — please wait for it to finish.' }));
+      return;
+    }
+    backtestInProgress = true;
+    res.on('finish', function() { backtestInProgress = false; });
+    res.on('close', function() { backtestInProgress = false; });
     var body = '';
     var bodyAborted = false;
     req.on('data', function(chunk) {
@@ -1723,7 +1751,7 @@ const server = http.createServer((req, res) => {
             return;
           }
           var startTs = new Date(startDate + 'T00:00:00Z').getTime();
-          var content = fs.readFileSync(jsonlPath, 'utf8');
+          var content = readTailUtf8(jsonlPath, 150 * 1024 * 1024);
           var lines = content.split('\n');
 
           // Timeframe grouping: derive 5m/15m/1h/4h from 1m candles
@@ -1986,7 +2014,7 @@ const server = http.createServer((req, res) => {
               return;
             }
             var stat = fs.statSync(jsonlPath);
-            var content = fs.readFileSync(jsonlPath, 'utf8');
+            var content = readTailUtf8(jsonlPath, 150 * 1024 * 1024);
             var lines = content.split('\n');
             var candles = [];
             // If file > 500MB, compute cutoff to only keep last 2 years

@@ -19,6 +19,7 @@ const DEFAULT_CASH = 100000;
 // The live server uses ms-based cooldowns; the backtest is bar-stepped, so it uses
 // an equivalent expressed in bars.
 const COOLDOWN_BARS = { conservative: 5, moderate: 3, aggressive: 2, yolo: 2 };
+const MAX_HOLD_BARS = { conservative: 90, moderate: 60, aggressive: 45, yolo: 30 };
 
 // ─── LOAD CSV DATA ───
 function loadCSV(filePath) {
@@ -125,8 +126,8 @@ function runBacktest(candles, profile, symbolName) {
     // Circuit breaker: stop if drawdown > 20%
     if (dd > 20) continue;
 
-    // Cooldown check
-    if (i - lastTradeBar < (COOLDOWN_BARS[profile.id] || 3)) continue;
+    // Cooldown blocks new scoring entries/exits, but risk exits are still allowed.
+    const inCooldown = i - lastTradeBar < (COOLDOWN_BARS[profile.id] || 3);
 
     // Black swan filter
     const blackSwan = isBlackSwan(window);
@@ -136,6 +137,9 @@ function runBacktest(candles, profile, symbolName) {
       sd, pos, peakPrice, profile, symbol: sym,
       blackSwan, exposurePct: exposure,
       scoreExposureLimit: 0.85, buyExposureLimit: 0.85,
+      inCooldown,
+      holdingBars: pos && pos.openedBar !== undefined ? i - pos.openedBar : null,
+      maxHoldBars: MAX_HOLD_BARS[profile.id] || 60,
       requireAboveEma200ForBuy: false, requireBelowEma200ForSell: false,
       sellMustBeatBuy: true,
     });
@@ -177,8 +181,9 @@ function runBacktest(candles, profile, symbolName) {
       if (tradeValue + commission > availableCash) continue;
       cash -= tradeValue + commission;
 
-      if (!holdings[sym]) holdings[sym] = { qty: 0, avgCost: buyFillPrice };
+      if (!holdings[sym]) holdings[sym] = { qty: 0, avgCost: buyFillPrice, openedBar: i };
       const h = holdings[sym];
+      if (h.openedBar === undefined) h.openedBar = i;
       h.avgCost = ((h.avgCost * h.qty) + (buyFillPrice * qty)) / (h.qty + qty);
       h.qty += qty;
       peaks[sym] = price;

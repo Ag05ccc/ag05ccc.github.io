@@ -757,6 +757,25 @@ function consumeLotsFifo(lots, sellQty) {
   return newLots;
 }
 
+function getPositionOpenedMs(pos) {
+  if (!pos) return null;
+  if (pos.openedAt) {
+    var direct = Date.parse(pos.openedAt);
+    if (!isNaN(direct)) return direct;
+  }
+  if (pos.lots && pos.lots.length > 0 && pos.lots[0].date) {
+    var lotTs = Date.parse(pos.lots[0].date);
+    if (!isNaN(lotTs)) return lotTs;
+  }
+  return null;
+}
+
+function getHoldingAgeBars(pos, nowMs, barMs) {
+  var opened = getPositionOpenedMs(pos);
+  if (!opened) return null;
+  return Math.max(0, Math.floor((nowMs - opened) / Math.max(1, barMs || 60000)));
+}
+
 function runStrategies() {
   var now = Date.now();
   var today = new Date().toISOString().slice(0, 10);
@@ -824,7 +843,7 @@ function runStrategies() {
       // Check cooldown per symbol
       var coolKey = pf.id + '_' + sym;
       var cooldownMs = COOLDOWNS[pf.id] || 300000;
-      if (tradeCooldowns[coolKey] && (now - tradeCooldowns[coolKey]) < cooldownMs) return;
+      var inCooldown = !!(tradeCooldowns[coolKey] && (now - tradeCooldowns[coolKey]) < cooldownMs);
 
       // Multi-timeframe: 15min trend direction
       var trend15m = get15mTrend(sd);
@@ -840,11 +859,14 @@ function runStrategies() {
       var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[pf.id] || 0.80;
       var exposureLimited = exposurePct >= maxExposure;
       var buyMaxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
+      var liveMaxHoldBars = { conservative: 1440, moderate: 720, aggressive: 360, yolo: 240 }[pf.id] || 720;
       var decision = evaluateTradeDecision({
         sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
         trend15m: trend15m, blackSwan: blackSwan,
         exposurePct: exposurePct, exposureLimited: exposureLimited,
         scoreExposureLimit: maxExposure, buyExposureLimit: buyMaxExposure,
+        inCooldown: inCooldown,
+        holdingBars: getHoldingAgeBars(pos, now, 60000), maxHoldBars: liveMaxHoldBars,
         buyThreshold: buyThreshold, sellThreshold: sellThreshold,
         requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
       });
@@ -946,8 +968,9 @@ function runStrategies() {
         var old = pf.holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
         if (!old.lots) old.lots = old.qty > 0 ? [{ qty: old.qty, cost: old.avgCost, date: new Date().toISOString() }] : [];
         var nq = +(old.qty + tq).toFixed(6);
+        var openedAt = old.openedAt || ((old.lots[0] || {}).date) || new Date().toISOString();
         var newLots = old.lots.concat([{ qty: tq, cost: buyFillPrice, date: new Date().toISOString() }]);
-        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : buyFillPrice, lots: newLots };
+        pf.holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : buyFillPrice, lots: newLots, openedAt: openedAt };
         pf.peaks[sym] = price;
         // Bracket order targets
         var bracketTP = +riskPlan.takeProfitPrice.toFixed(2);
@@ -1266,14 +1289,18 @@ function seedPortfolioFromHistory(profile, startDate) {
       var pos = holdings[sym] || null;
       var peakPrice = peaks[sym] || price;
       if (price > peakPrice) { peaks[sym] = price; peakPrice = price; }
-      if ((di - (lastTradeDay[sym] || -999)) < COOLDOWN) return;
+      var inCooldown = (di - (lastTradeDay[sym] || -999)) < COOLDOWN;
 
       var totalValue = cash + holdingValue();
       if (totalValue <= 0) totalValue = DEFAULT_CASH;
       var exposurePct = holdingValue() / totalValue;
+      var seedMaxHoldBars = { conservative: 90, moderate: 60, aggressive: 45, yolo: 30 }[profile.id] || 60;
       var decision = evaluateTradeDecision({
         sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
         exposurePct: exposurePct, scoreExposureLimit: maxExposure, buyExposureLimit: maxExposure,
+        inCooldown: inCooldown,
+        holdingBars: pos && pos.openedBar !== undefined ? di - pos.openedBar : null,
+        maxHoldBars: seedMaxHoldBars,
         buyThreshold: profile.buyThreshold, sellThreshold: profile.sellThreshold,
         requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
       });
@@ -1311,7 +1338,12 @@ function seedPortfolioFromHistory(profile, startDate) {
         var old = holdings[sym] || { qty: 0, avgCost: 0, lots: [] };
         if (!old.lots) old.lots = [];
         var nq = +(old.qty + tq).toFixed(6);
-        holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + bTotal) / nq : bFill, lots: old.lots.concat([{ qty: tq, cost: bFill, date: date }]) };
+        holdings[sym] = {
+          qty: nq,
+          avgCost: nq > 0 ? (old.avgCost * old.qty + bTotal) / nq : bFill,
+          lots: old.lots.concat([{ qty: tq, cost: bFill, date: date }]),
+          openedBar: old.openedBar !== undefined ? old.openedBar : di,
+        };
         peaks[sym] = price;
         orders.push({
           sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4),
@@ -2307,6 +2339,12 @@ const server = http.createServer((req, res) => {
         } else {
           minHoldDays = { crypto: 2, stock: 3, commodity: 5 };
         }
+        var maxHoldBars;
+        if (isMinuteTimeframe) {
+          maxHoldBars = { conservative: Math.ceil(1440 / (tfMinutesGeneral || 1)), moderate: Math.ceil(720 / (tfMinutesGeneral || 1)), aggressive: Math.ceil(360 / (tfMinutesGeneral || 1)), yolo: Math.ceil(240 / (tfMinutesGeneral || 1)) };
+        } else {
+          maxHoldBars = { conservative: 90, moderate: 60, aggressive: 45, yolo: 30 };
+        }
         var dailyTradeLimit = { conservative: 2, moderate: 3, aggressive: 5, yolo: 8 };
         var dailyTradeCount = {}; // { "2022-01-15": 3 }
         var cbThresholds = { conservative: 0.16, moderate: 0.22, aggressive: 0.30, yolo: 0.45, dma: 0.25 };
@@ -2542,6 +2580,8 @@ const server = http.createServer((req, res) => {
               sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
               exposurePct: exposurePct, scoreExposureLimit: maxExposure, buyExposureLimit: maxExposure,
               inCooldown: inCooldown, minHoldBlocked: minHoldBlocked,
+              holdingBars: pos && pos.openedBar !== undefined ? dayIdx - pos.openedBar : null,
+              maxHoldBars: maxHoldBars[profileId] || 60,
               buyThreshold: buyThreshold, sellThreshold: sellThreshold,
               requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
             });
@@ -2605,7 +2645,11 @@ const server = http.createServer((req, res) => {
               totalCommission += commission;
               var old = holdings[sym] || { qty: 0, avgCost: 0 };
               var nq = +(old.qty + tq).toFixed(6);
-              holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : btBuyFill };
+              holdings[sym] = {
+                qty: nq,
+                avgCost: nq > 0 ? (old.avgCost * old.qty + total) / nq : btBuyFill,
+                openedBar: old.openedBar !== undefined ? old.openedBar : dayIdx,
+              };
               peaks[sym] = price;
               var buyAssetType = COINS[sym] ? COINS[sym].type : 'stock';
               holdUntil[sym] = dayIdx + (minHoldDays[buyAssetType] || 3);

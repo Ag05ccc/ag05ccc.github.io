@@ -352,6 +352,13 @@ const PROFILE_RISK = {
   yolo:         { riskPct: 0.018, atrMult: 1.8, rewardRisk: 2.5 },
 };
 
+const PROFILE_EXIT = {
+  conservative: { profitLockAt: 0.025, profitLockGiveback: 0.006, minProfit: 0.006, reversalMargin: 0.8, reversalMinSell: 0.70, timeExitMaxPnl: 0.012 },
+  moderate:     { profitLockAt: 0.035, profitLockGiveback: 0.010, minProfit: 0.008, reversalMargin: 1.0, reversalMinSell: 0.80, timeExitMaxPnl: 0.010 },
+  aggressive:   { profitLockAt: 0.050, profitLockGiveback: 0.014, minProfit: 0.010, reversalMargin: 1.2, reversalMinSell: 0.90, timeExitMaxPnl: 0.008 },
+  yolo:         { profitLockAt: 0.080, profitLockGiveback: 0.025, minProfit: 0.015, reversalMargin: 1.5, reversalMinSell: 1.00, timeExitMaxPnl: 0.005 },
+};
+
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
 function buildRiskPlan(opts) {
@@ -463,6 +470,9 @@ function evaluateTradeDecision(opts) {
   var requireAboveEma200ForBuy = opts.requireAboveEma200ForBuy !== false;
   var requireBelowEma200ForSell = !!opts.requireBelowEma200ForSell;
   var sellMustBeatBuy = !!opts.sellMustBeatBuy;
+  var exitCfg = Object.assign({}, PROFILE_EXIT[profile.id] || PROFILE_EXIT.moderate, opts.exit || {});
+  var holdingBars = opts.holdingBars != null ? opts.holdingBars : null;
+  var maxHoldBars = opts.maxHoldBars != null ? opts.maxHoldBars : 0;
   var buyBlockedReasons = [];
   var sellBlockedReasons = [];
 
@@ -491,6 +501,10 @@ function evaluateTradeDecision(opts) {
   var buyTrendOk = !requireAboveEma200ForBuy || (sd && sd.ema200 > 0 && sd.cur > sd.ema200);
   var sellTrendOk = !requireBelowEma200ForSell || (sd && sd.ema200 > 0 && sd.cur < sd.ema200);
   var buyExposureOk = exposurePct < buyExposureLimit;
+  var pnlPct = hasPos && pos.avgCost > 0 && price > 0 ? (price - pos.avgCost) / pos.avgCost : 0;
+  var peakPnlPct = hasPos && pos.avgCost > 0 && peakPrice > 0 ? (peakPrice - pos.avgCost) / pos.avgCost : pnlPct;
+  var givebackPct = hasPos && peakPrice > 0 && price > 0 ? (peakPrice - price) / peakPrice : 0;
+  var exitTriggered = null;
 
   if (inCooldown) {
     buyBlockedReasons.push('cooldown');
@@ -501,15 +515,25 @@ function evaluateTradeDecision(opts) {
   if (!sellTrendOk) sellBlockedReasons.push('above EMA200');
   if (minHoldBlocked) sellBlockedReasons.push('minimum hold');
 
+  if (hasPos && price > 0 && !minHoldBlocked) {
+    if (peakPnlPct >= exitCfg.profitLockAt && pnlPct >= exitCfg.minProfit && givebackPct >= exitCfg.profitLockGiveback) {
+      exitTriggered = 'Profit lock +' + (pnlPct * 100).toFixed(1) + '% after peak +' + (peakPnlPct * 100).toFixed(1) + '%';
+    } else if (sellScore >= Math.max(sellThreshold * exitCfg.reversalMinSell, buyScore + exitCfg.reversalMargin) && buyScore < buyThreshold) {
+      exitTriggered = 'Signal reversal sell ' + sellScore.toFixed(1) + ' > buy ' + buyScore.toFixed(1);
+    } else if (maxHoldBars > 0 && holdingBars !== null && holdingBars >= maxHoldBars && pnlPct <= exitCfg.timeExitMaxPnl && sellScore >= buyScore) {
+      exitTriggered = 'Time exit ' + holdingBars + ' bars pnl ' + (pnlPct * 100).toFixed(1) + '%';
+    }
+  }
+
   var action = 'hold';
   var side = null;
   var type = 'hold';
   var reason = '';
-  if (hasPos && scored.riskSellTriggered) {
+  if (hasPos && (scored.riskSellTriggered || exitTriggered)) {
     action = 'riskSell';
     side = 'sell';
     type = 'risk';
-    reason = scored.riskSellTriggered;
+    reason = scored.riskSellTriggered || exitTriggered;
   } else if (!inCooldown && price > 0 && buyScore >= buyThreshold && buyScore > sellScore && buyExposureOk && buyTrendOk) {
     action = 'buy';
     side = 'buy';
@@ -526,7 +550,10 @@ function evaluateTradeDecision(opts) {
     action: action, side: side, type: type, reason: reason,
     regime: scored.regime, buyScore: buyScore, sellScore: sellScore,
     buyReasons: buyReasons, sellReasons: sellReasons,
-    riskSellTriggered: scored.riskSellTriggered,
+    riskSellTriggered: scored.riskSellTriggered || exitTriggered,
+    exitTriggered: exitTriggered,
+    pnlPct: pnlPct, peakPnlPct: peakPnlPct, givebackPct: givebackPct,
+    holdingBars: holdingBars, maxHoldBars: maxHoldBars,
     rangingDowntrend: scored.rangingDowntrend,
     trend15m: trend15m, blackSwan: blackSwan,
     exposurePct: exposurePct, exposureLimited: exposureLimited,
@@ -538,5 +565,5 @@ function evaluateTradeDecision(opts) {
 module.exports = {
   COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX, calcATR,
   SIGNALS, STRATS, detectRegime, evalSignal, PROFILES,
-  CATEGORY_CAP, PROFILE_REGIME, PROFILE_RISK, scoreSignals, evaluateTradeDecision, buildRiskPlan,
+  CATEGORY_CAP, PROFILE_REGIME, PROFILE_RISK, PROFILE_EXIT, scoreSignals, evaluateTradeDecision, buildRiskPlan,
 };

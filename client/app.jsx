@@ -273,18 +273,29 @@ function App() {
     return null;
   }
 
-  // Comparison chart: merge actual history points by timestamp. Do not pad shorter
-  // series with their last value; that made the right edge look like fake flat P&L.
+  function historyDayKey(h) {
+    if (h && h.day) return String(h.day).slice(0, 10);
+    const ts = historyTimestamp(h);
+    return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : null;
+  }
+
+  // Comparison chart: merge portfolio histories by day and keep each portfolio's
+  // last value for that day. Mixing daily backtest-seeded histories with dense
+  // live/DMA intraday histories made the right side consume most of the chart.
   const compDateMap = {};
-  const compareStartTs = compareStart ? new Date(compareStart + "T00:00:00Z").getTime() : null;
+  const compareStartDay = compareStart || null;
   pfStats.forEach(pf => {
+    const latestByDay = {};
     (pf.history || []).forEach(h => {
       const ts = historyTimestamp(h);
+      const day = historyDayKey(h);
       if (!Number.isFinite(ts)) return;
-      if (Number.isFinite(compareStartTs) && ts < compareStartTs) return;
-      const key = String(ts);
-      if (!compDateMap[key]) compDateMap[key] = { t: ts, label: new Date(ts).toISOString().slice(0, 10) };
-      compDateMap[key][pf.id] = h.value;
+      if (!day || (compareStartDay && day < compareStartDay)) return;
+      if (!latestByDay[day] || ts >= latestByDay[day].ts) latestByDay[day] = { ts: ts, value: h.value };
+    });
+    Object.keys(latestByDay).forEach(day => {
+      if (!compDateMap[day]) compDateMap[day] = { t: new Date(day + "T00:00:00Z").getTime(), label: day };
+      compDateMap[day][pf.id] = latestByDay[day].value;
     });
   });
   const compData = Object.values(compDateMap).sort((a, b) => a.t - b.t);
@@ -423,7 +434,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.19"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.20"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1231,6 +1242,10 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.20.0", date: "2026-06-02", changes: [
+                  "Portfolio race chart now buckets histories by day and uses the latest value per portfolio per day",
+                  "Dense DMA/live history points no longer stretch the right side of the yearly comparison chart",
+                ]},
                 { v: "1.19.0", date: "2026-06-02", changes: [
                   "Portfolio race chart now aligns history by timestamp instead of array index",
                   "Shorter portfolio histories are no longer padded with the last value, removing fake flat lines on the right edge",

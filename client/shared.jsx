@@ -131,7 +131,7 @@ const COINS_META = {
   XRP: { name: "Ripple", type: "crypto" }, ADA: { name: "Cardano", type: "crypto" },
   AVAX: { name: "Avalanche", type: "crypto" }, DOGE: { name: "Dogecoin", type: "crypto" },
   DOT: { name: "Polkadot", type: "crypto" }, LINK: { name: "Chainlink", type: "crypto" },
-  MATIC: { name: "Polygon", type: "crypto" }, UNI: { name: "Uniswap", type: "crypto" },
+  MATIC: { name: "Polygon (POL)", type: "crypto", displaySymbol: "POL" }, UNI: { name: "Uniswap", type: "crypto" },
   ATOM: { name: "Cosmos", type: "crypto" }, LTC: { name: "Litecoin", type: "crypto" },
   NEAR: { name: "NEAR", type: "crypto" }, APT: { name: "Aptos", type: "crypto" },
   ARB: { name: "Arbitrum", type: "crypto" }, OP: { name: "Optimism", type: "crypto" },

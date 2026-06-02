@@ -414,7 +414,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.17"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.18"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -1222,6 +1222,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.18.0", date: "2026-06-02", changes: [
+                  "Polygon live pricing now follows the POL market/source ids while preserving the internal MATIC key for historical compatibility",
+                  "Data quality now separates real missing live feeds from missing Twelve Data configuration",
+                  "Live feed rows expose source symbols so Binance/CoinGecko/Twelve Data mappings are easier to audit",
+                ]},
                 { v: "1.17.0", date: "2026-06-02", changes: [
                   "Risk sizing now uses current portfolio equity instead of fixed starting cash",
                   "Position deployment scales up in aligned trends and scales down in ranging/downtrend regimes",

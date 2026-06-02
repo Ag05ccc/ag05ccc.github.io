@@ -81,6 +81,7 @@ async function main() {
         ' live=' + (summary.liveStatus || 'n/a') +
         ' liveStale=' + (summary.liveStale || 0) +
         ' liveMissing=' + (summary.liveMissing || 0) +
+        ' liveUnconfigured=' + (summary.liveUnconfigured || 0) +
         ' historical=' + (summary.historicalStatus || 'n/a') +
         ' lastLive=' + (summary.lastLiveUpdateAt || 'n/a'));
       if (response.statusCode >= 500 || !data.live || !data.historical) {

@@ -1,11 +1,17 @@
 window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRefresh, isMobile }) {
   function colorFor(status) {
     if (status === "ok") return "#22c55e";
-    if (status === "stale") return "#f59e0b";
+    if (status === "stale" || status === "unconfigured" || status === "missing-key" || status === "attention") return "#f59e0b";
     return "#ef4444";
   }
   function labelFor(status) {
+    if (status === "unconfigured" || status === "missing-key") return "CONFIG";
     return (status || "unknown").replace("-", " ").toUpperCase();
+  }
+  function displaySymbolFor(s) {
+    if (!s) return "";
+    if (s.displaySymbol && s.displaySymbol !== s.symbol) return s.displaySymbol + " (" + s.symbol + ")";
+    return s.symbol;
   }
   function fmtDate(value) {
     if (!value) return "n/a";
@@ -25,6 +31,8 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
   const liveSymbols = live.symbols || [];
   const historicalSymbols = historical.symbols || [];
   const liveAttention = liveSymbols.filter(function(s) { return s.status !== "ok"; });
+  const liveUnconfigured = liveAttention.filter(function(s) { return s.status === "unconfigured" || s.status === "missing-key"; });
+  const liveSourceAttention = liveAttention.filter(function(s) { return s.status !== "unconfigured" && s.status !== "missing-key"; });
   const historicalAttention = historicalSymbols.filter(function(s) { return s.status !== "ok"; });
   const stockGoldRows = liveSymbols.filter(function(s) { return s.type === "stock" || s.type === "commodity"; }).slice(0, isMobile ? 6 : 10);
 
@@ -56,7 +64,7 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
             {[
               { label: "Live Feed", value: labelFor(summary.liveStatus), color: colorFor(summary.liveStatus) },
-              { label: "Live Missing/Stale", value: (summary.liveMissing || 0) + " / " + (summary.liveStale || 0), color: (summary.liveMissing || summary.liveStale) ? "#f59e0b" : "#22c55e" },
+              { label: "Live M/S/Config", value: (summary.liveMissing || 0) + " / " + (summary.liveStale || 0) + " / " + (summary.liveUnconfigured || 0), color: summary.liveMissing ? "#ef4444" : ((summary.liveStale || summary.liveUnconfigured) ? "#f59e0b" : "#22c55e") },
               { label: "History Stale", value: "" + (summary.historicalStale || 0), color: summary.historicalStale ? "#f59e0b" : "#22c55e" },
               { label: "History Last", value: summary.lastHistoricalUpdateAt || "n/a", color: "#94a3b8" },
             ].map(function(m) {
@@ -73,15 +81,20 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
               <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)", borderRadius: 6, padding: "8px 10px" }}>
                 <div style={{ color: "#f59e0b", fontSize: 9, fontFamily: "var(--h)", fontWeight: 700, marginBottom: 5 }}>LIVE ATTENTION</div>
-                {liveAttention.length === 0 ? (
+                {liveUnconfigured.length > 0 && (
+                  <div style={{ color: "#f59e0b", fontSize: 10, fontFamily: "var(--m)", marginBottom: 6 }}>
+                    Twelve Data key missing: {liveUnconfigured.length} stock/GOLD assets are config-only warnings.
+                  </div>
+                )}
+                {liveSourceAttention.length === 0 ? (
                   <div style={{ color: "#22c55e", fontSize: 10, fontFamily: "var(--m)" }}>All live source timestamps are fresh.</div>
-                ) : liveAttention.slice(0, 8).map(function(s) {
+                ) : liveSourceAttention.slice(0, 8).map(function(s) {
                   return (
                     <div key={s.symbol} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 10, fontFamily: "var(--m)", marginBottom: 3 }}>
-                      <span style={{ color: symColor(s.symbol), fontWeight: 700, minWidth: 42 }}>{s.symbol}</span>
+                      <span style={{ color: symColor(s.symbol), fontWeight: 700, minWidth: 72 }}>{displaySymbolFor(s)}</span>
                       <span style={{ color: colorFor(s.status), fontWeight: 700 }}>{labelFor(s.status)}</span>
                       <span style={{ color: "#6b7280" }}>{fmtAgeSec(s.updateAgeSec)}</span>
-                      <span style={{ color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.activeSource}</span>
+                      <span style={{ color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sourceSymbol || s.activeSource}</span>
                     </div>
                   );
                 })}
@@ -117,9 +130,9 @@ window.DataQualityPanel = function DataQualityPanel({ data, loading, error, onRe
                 {stockGoldRows.map(function(s) {
                   return (
                     <tr key={s.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.025)" }}>
-                      <td style={{ padding: "5px 7px", color: symColor(s.symbol), fontWeight: 700 }}>{s.symbol}</td>
+                      <td style={{ padding: "5px 7px", color: symColor(s.symbol), fontWeight: 700 }}>{displaySymbolFor(s)}</td>
                       <td style={{ padding: "5px 7px", color: "#94a3b8" }}>{s.type}</td>
-                      <td style={{ padding: "5px 7px", color: "#6b7280" }}>{s.activeSource}</td>
+                      <td style={{ padding: "5px 7px", color: "#6b7280" }}>{s.configuredSource || s.activeSource}</td>
                       <td style={{ padding: "5px 7px", color: "#94a3b8" }}>{fmtDate(s.updatedAt)}</td>
                       <td style={{ padding: "5px 7px", color: colorFor(s.status), fontWeight: 700 }}>{labelFor(s.status)}</td>
                     </tr>

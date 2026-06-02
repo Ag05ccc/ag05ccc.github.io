@@ -21,7 +21,10 @@ const COINS = {
   DOGE: { name: "Dogecoin", cgId: "dogecoin", type: "crypto" },
   DOT: { name: "Polkadot", cgId: "polkadot", type: "crypto" },
   LINK: { name: "Chainlink", cgId: "chainlink", type: "crypto" },
-  MATIC: { name: "Polygon", cgId: "matic-network", type: "crypto" },
+  // Polygon migrated MATIC -> POL. Keep the internal legacy key so existing
+  // state/backtest CSV references remain compatible, but fetch live data from
+  // the current POL market/source ids.
+  MATIC: { name: "Polygon (POL)", cgId: "polygon-ecosystem-token", type: "crypto", displaySymbol: "POL", binanceSymbol: "polusdt" },
   UNI: { name: "Uniswap", cgId: "uniswap", type: "crypto" },
   ATOM: { name: "Cosmos", cgId: "cosmos", type: "crypto" },
   LTC: { name: "Litecoin", cgId: "litecoin", type: "crypto" },

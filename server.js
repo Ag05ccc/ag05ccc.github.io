@@ -662,7 +662,7 @@ function fetchJSON(url) {
 const BINANCE_SYMBOLS = {
   BTC: 'btcusdt', ETH: 'ethusdt', SOL: 'solusdt', BNB: 'bnbusdt',
   XRP: 'xrpusdt', ADA: 'adausdt', AVAX: 'avaxusdt', DOGE: 'dogeusdt',
-  DOT: 'dotusdt', LINK: 'linkusdt', MATIC: 'maticusdt', UNI: 'uniusdt',
+  DOT: 'dotusdt', LINK: 'linkusdt', MATIC: 'polusdt', UNI: 'uniusdt',
   ATOM: 'atomusdt', LTC: 'ltcusdt', NEAR: 'nearusdt', APT: 'aptusdt',
   ARB: 'arbusdt', OP: 'opusdt', SUI: 'suiusdt', FIL: 'filusdt',
 };
@@ -966,11 +966,13 @@ function buildLiveDataQuality(nowMs) {
     var updatedAt = lastExternalPriceUpdate[sym] || null;
     var ageSec = updatedAt ? Math.round((nowMs - updatedAt) / 1000) : null;
     var thresholdSec = liveFreshnessThresholdSec(c, marketOpen);
+    var displaySymbol = c.displaySymbol || sym;
+    var sourceSymbol = c.type === 'crypto' ? ((c.binanceSymbol || BINANCE_SYMBOLS[sym] || '').toUpperCase()) : (c.tdSymbol || sym);
     var source = priceSources[sym] || (c.type === 'crypto' ? 'binance/coingecko' : (c.tdSymbol ? 'twelvedata' : 'unknown'));
     var status = 'ok';
     var note = '';
     if (c.tdSymbol && !TWELVEDATA_KEY) {
-      status = 'missing-key';
+      status = 'unconfigured';
       note = 'TWELVEDATA_API_KEY is not configured';
     } else if (!updatedAt) {
       status = 'missing';
@@ -981,9 +983,11 @@ function buildLiveDataQuality(nowMs) {
     }
     return {
       symbol: sym,
+      displaySymbol: displaySymbol,
+      sourceSymbol: sourceSymbol,
       name: c.name,
       type: c.type || 'unknown',
-      configuredSource: c.type === 'crypto' ? 'Binance WebSocket + CoinGecko fallback' : (c.tdSymbol ? 'Twelve Data ' + c.tdSymbol : 'unknown'),
+      configuredSource: c.type === 'crypto' ? 'Binance WebSocket ' + sourceSymbol + ' + CoinGecko fallback' : (c.tdSymbol ? 'Twelve Data ' + c.tdSymbol : 'unknown'),
       activeSource: source,
       price: lastExternalPriceValue[sym] || lastPrices[sym] || null,
       updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null,
@@ -1011,7 +1015,8 @@ function buildLiveDataQuality(nowMs) {
       symbols: symbols.length,
       ok: symbols.length - bad.length,
       stale: symbols.filter(function(s) { return s.status === 'stale'; }).length,
-      missing: symbols.filter(function(s) { return s.status === 'missing' || s.status === 'missing-key'; }).length,
+      missing: symbols.filter(function(s) { return s.status === 'missing'; }).length,
+      unconfigured: symbols.filter(function(s) { return s.status === 'unconfigured'; }).length,
       lastUpdatedAt: lastUpdatedAt,
     },
     symbols: symbols,
@@ -1037,6 +1042,7 @@ function buildDataQualitySnapshot() {
       historicalStatus: historical.summary.status,
       liveStale: live.summary.stale,
       liveMissing: live.summary.missing,
+      liveUnconfigured: live.summary.unconfigured,
       historicalStale: historical.summary.stale,
       historicalAnomalies: historical.summary.anomalies,
       historicalMissing: historical.summary.missing,

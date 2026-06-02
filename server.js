@@ -91,7 +91,7 @@ const STATE_SAVE_INTERVAL = envNum('STATE_SAVE_INTERVAL', 10000); // Save state 
 // runs the same strategy logic as live trading.
 const {
   COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
-  SIGNALS, STRATS, detectRegime, evalSignal, PROFILES, scoreSignals,
+  SIGNALS, STRATS, detectRegime, PROFILES, evaluateTradeDecision,
 } = require("./engine-core");
 
 // ─── SERVER STATE ───
@@ -651,8 +651,6 @@ var dailyStats = {};
 var cbHighWater = {};
 var DAILY_MAX_TRADES = { conservative: 10, moderate: 20, aggressive: 50, yolo: 100 };
 var DAILY_MAX_LOSS_PCT = 0.05; // 5% max daily loss
-var CIRCUIT_BREAKER_PCT = 0.20; // Stop at 20% total drawdown
-var CATEGORY_CAP = 3.0; // Max score contribution per category
 
 // ─── MULTI-TIMEFRAME: build 15min candles from 1min ───
 function get15mTrend(sd) {
@@ -826,9 +824,6 @@ function runStrategies() {
       var cooldownMs = COOLDOWNS[pf.id] || 300000;
       if (tradeCooldowns[coolKey] && (now - tradeCooldowns[coolKey]) < cooldownMs) return;
 
-      // Detect market regime
-      var regime = detectRegime(sd);
-
       // Multi-timeframe: 15min trend direction
       var trend15m = get15mTrend(sd);
 
@@ -842,117 +837,20 @@ function runStrategies() {
       var exposurePct = totalValue > 0 ? holdingValue / totalValue : 0;
       var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[pf.id] || 0.80;
       var exposureLimited = exposurePct >= maxExposure;
-
-      // Regime-based weight multipliers with:
-      // 1. Profile-specific multiplier intensity (Conservative aggressive, YOLO mild)
-      // 2. Linear interpolation in transition zone (ADX 18-25)
-      // 3. Ranging downtrend protection
-      var profileRegime = {
-        conservative: { trendHigh: 2.0, trendLow: 0.3, mrHigh: 2.0, mrLow: 0.3 },
-        moderate:     { trendHigh: 1.5, trendLow: 0.5, mrHigh: 1.5, mrLow: 0.5 },
-        aggressive:   { trendHigh: 1.3, trendLow: 0.6, mrHigh: 1.3, mrLow: 0.6 },
-        yolo:         { trendHigh: 1.2, trendLow: 0.8, mrHigh: 1.2, mrLow: 0.8 },
-      };
-      var pr = profileRegime[pf.id] || profileRegime.moderate;
-      var adxVal = regime.adx || 20;
-
-      // Linear interpolation for smooth transition
-      // ADX <= 18: full ranging multipliers
-      // ADX >= 25: full trending multipliers
-      // 18 < ADX < 25: linear blend between ranging and trending
-      var trendMult, meanRevMult;
-      if (adxVal >= 25) {
-        trendMult = pr.trendHigh;   // trend signals boosted
-        meanRevMult = pr.mrLow;     // mean-rev suppressed
-      } else if (adxVal <= 18) {
-        trendMult = pr.trendLow;    // trend signals suppressed
-        meanRevMult = pr.mrHigh;    // mean-rev boosted
-      } else {
-        // Linear interpolation: ADX 18-25 => t goes 0.0 to 1.0
-        var t = (adxVal - 18) / 7;  // 0 at ADX=18, 1 at ADX=25
-        trendMult = pr.trendLow + t * (pr.trendHigh - pr.trendLow);
-        meanRevMult = pr.mrHigh + t * (pr.mrLow - pr.mrHigh);
-      }
-
-      // Ranging downtrend protection: if ranging but price below EMA21, suppress mean-rev buys
-      var rangingDowntrend = adxVal <= 18 && sd.ema21 > 0 && sd.cur < sd.ema21;
-      if (rangingDowntrend) meanRevMult = pr.mrLow; // Don't buy dips in a downtrend
-
-      var regimeMultipliers = {
-        'trend': trendMult, 'momentum': trendMult,
-        'mean-reversion': meanRevMult,
-        'neutral': 1.0, 'pattern': 1.0, 'combo': 1.2, 'risk': 0,
-      };
-
-      // Score all signals with CATEGORY CAP
-      var buyScore = 0, sellScore = 0;
-      var buyReasons = [], sellReasons = [];
-      var riskSellTriggered = null;
-      var buyCatScores = {}; // { "mean-reversion": 2.5, "trend": 1.5 }
-      var sellCatScores = {};
-
-      SIGNALS.forEach(function(sig) {
-        var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
-
-        // Asset-type adjustment for TP/SL/trailing
-        if (sig.category === 'risk') {
-          var assetType = (COINS[sym] && COINS[sym].type) || 'crypto';
-          if (assetType === 'stock') val = val * 0.7;
-          else if (assetType === 'commodity') val = val * 0.5;
-        }
-
-        var result = evalSignal(sig.id, val, sd, pos, peakPrice);
-        if (!result) return;
-
-        // Risk signals bypass scoring
-        if (sig.category === 'risk') {
-          if (pos && pos.qty > 0) riskSellTriggered = result;
-          return;
-        }
-
-        var regimeMult = regimeMultipliers[sig.category] || 1.0;
-        var weightedScore = sig.weight * regimeMult;
-
-        if (sig.side === 'buy') {
-          // Apply category cap
-          var catKey = sig.category;
-          buyCatScores[catKey] = (buyCatScores[catKey] || 0) + weightedScore;
-          if (buyCatScores[catKey] <= CATEGORY_CAP) {
-            buyScore += weightedScore;
-          }
-          buyReasons.push(result);
-        } else {
-          var catKey2 = sig.category;
-          sellCatScores[catKey2] = (sellCatScores[catKey2] || 0) + weightedScore;
-          if (sellCatScores[catKey2] <= CATEGORY_CAP) {
-            sellScore += weightedScore;
-          }
-          sellReasons.push(result);
-        }
+      var buyMaxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
+      var decision = evaluateTradeDecision({
+        sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
+        trend15m: trend15m, blackSwan: blackSwan,
+        exposurePct: exposurePct, exposureLimited: exposureLimited,
+        scoreExposureLimit: maxExposure, buyExposureLimit: buyMaxExposure,
+        buyThreshold: buyThreshold, sellThreshold: sellThreshold,
+        requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
       });
-
-      // ─── MULTI-TIMEFRAME GATE ───
-      // If 15min trend is down, penalize buys
-      // NEVER penalize sells — we always want to be able to exit positions
-      if (trend15m === -1) buyScore = buyScore * 0.3;
-      // If 15min trend is up, give a small buy boost instead of blocking sells
-      if (trend15m === 1) buyScore = buyScore * 1.2;
-
-      // ─── BLACK SWAN FILTER ───
-      // Block all buys during crash
-      if (blackSwan) {
-        buyScore = 0;
-        buyReasons.push('BLACK SWAN BLOCKED');
-      }
-
-      // ─── EXPOSURE LIMIT ───
-      // Block buys when portfolio is over-exposed to holdings
-      if (exposureLimited) {
-        buyScore = 0;
-        // Auto-rebalance: boost sell score when over-exposed
-        sellScore += 1.5;
-        sellReasons.push('Over-exposed');
-      }
+      var regime = decision.regime;
+      var rangingDowntrend = decision.rangingDowntrend;
+      var buyScore = decision.buyScore, sellScore = decision.sellScore;
+      var buyReasons = decision.buyReasons, sellReasons = decision.sellReasons;
+      var riskSellTriggered = decision.riskSellTriggered;
 
       // Store scores for UI
       if (!lastScores[pf.id]) lastScores[pf.id] = {};
@@ -1013,8 +911,7 @@ function runStrategies() {
 
       // --- SCORING-BASED BUY ---
       // Exposure limit: conservative/moderate cap at 80%, aggressive 90%, yolo 95%
-      var maxExposure = profile.id === 'yolo' ? 0.95 : profile.id === 'aggressive' ? 0.90 : 0.80;
-      if (buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure && sd.cur > sd.ema200) {
+      if (decision.action === 'buy') {
         if (availableCash < 100) return;
         // Max position count limit
         var openPositionCount = Object.keys(pf.holdings).filter(function(k) { return pf.holdings[k] && pf.holdings[k].qty > 0; }).length;
@@ -1079,7 +976,7 @@ function runStrategies() {
       }
 
       // --- SCORING-BASED SELL ---
-      else if (sellScore >= sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200) {
+      else if (decision.action === 'sell') {
         var sellFillPrice = price * (1 - slippagePct); // slippage: sell fills lower
         var sq = pos.qty;
         var sellTotal = sellFillPrice * sq;
@@ -1272,7 +1169,7 @@ function resetPortfolio(id) {
 
 // ─── WARM-START: SEED A PORTFOLIO FROM ~1 YEAR OF HISTORY ───
 // Replays daily candles (all of the profile's assets) through the SAME scoring
-// engine the live server uses (engine-core.scoreSignals), producing live-shaped
+// engine the live server uses (engine-core.evaluateTradeDecision), producing live-shaped
 // portfolio state (cash, holdings+lots, orders, equity history). This makes a
 // portfolio open as if it had been trading for the last year on $100k, after which
 // the live 1-minute tick continues from where the seed left off.
@@ -1373,26 +1270,31 @@ function seedPortfolioFromHistory(profile, startDate) {
 
       var totalValue = cash + holdingValue();
       if (totalValue <= 0) totalValue = DEFAULT_CASH;
-      var scored = scoreSignals(sd, pos, peakPrice, profile, (COINS[sym] || {}).type);
+      var exposurePct = holdingValue() / totalValue;
+      var decision = evaluateTradeDecision({
+        sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
+        exposurePct: exposurePct, scoreExposureLimit: maxExposure, buyExposureLimit: maxExposure,
+        buyThreshold: profile.buyThreshold, sellThreshold: profile.sellThreshold,
+        requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
+      });
 
       // RISK exits (TP/SL/trailing) — immediate full sell
-      if (pos && pos.qty > 0 && scored.riskSellTriggered) {
+      if (decision.action === 'riskSell') {
         var rFill = price * (1 - slippage);
         var rTotal = rFill * pos.qty, rComm = rTotal * COMMISSION_RATE;
         var rPnl = (rFill - pos.avgCost) * pos.qty;
         var rNet = rPnl - rComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
         cash += rTotal - rComm; totalCommission += rComm;
         if (rNet > 0) wins++; else losses++;
-        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +rFill.toFixed(4), total: +rTotal.toFixed(2), pnl: +rPnl.toFixed(2), commission: +rComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: 'Risk Mgmt', why: scored.riskSellTriggered, score: 0, regime: scored.regime.type, seeded: true });
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +rFill.toFixed(4), total: +rTotal.toFixed(2), pnl: +rPnl.toFixed(2), commission: +rComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: 'Risk Mgmt', why: decision.riskSellTriggered, score: 0, regime: decision.regime.type, seeded: true });
         delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
         return;
       }
 
-      var exposurePct = holdingValue() / totalValue;
       var openCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
 
       // SCORING buy
-      if (scored.buyScore >= profile.buyThreshold && scored.buyScore > scored.sellScore && exposurePct < maxExposure && openCount < maxPositions && sd.cur > sd.ema200) {
+      if (decision.action === 'buy' && openCount < maxPositions) {
         if (cash < 100) return;
         var bFill = price * (1 + slippage);
         var tradeValue = Math.min(cash * cashPct, cash * 0.95, DEFAULT_CASH * maxPerPosition);
@@ -1409,18 +1311,18 @@ function seedPortfolioFromHistory(profile, startDate) {
         var nq = +(old.qty + tq).toFixed(6);
         holdings[sym] = { qty: nq, avgCost: nq > 0 ? (old.avgCost * old.qty + bTotal) / nq : bFill, lots: old.lots.concat([{ qty: tq, cost: bFill, date: date }]) };
         peaks[sym] = price;
-        orders.push({ sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4), total: +bTotal.toFixed(2), pnl: 0, commission: +bComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: scored.buyReasons.length + ' signals', why: scored.buyReasons.join(', '), score: +scored.buyScore.toFixed(1), regime: scored.regime.type, seeded: true });
+        orders.push({ sym: sym, side: 'buy', qty: tq, price: +bFill.toFixed(4), total: +bTotal.toFixed(2), pnl: 0, commission: +bComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: decision.buyReasons.length + ' signals', why: decision.buyReasons.join(', '), score: +decision.buyScore.toFixed(1), regime: decision.regime.type, seeded: true });
         lastTradeDay[sym] = di; tradeCount++;
       }
       // SCORING sell
-      else if (scored.sellScore >= profile.sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200) {
+      else if (decision.action === 'sell') {
         var sFill = price * (1 - slippage);
         var sTotal = sFill * pos.qty, sComm = sTotal * COMMISSION_RATE;
         var sPnl = (sFill - pos.avgCost) * pos.qty;
         var sNet = sPnl - sComm - (pos.avgCost * pos.qty * COMMISSION_RATE);
         cash += sTotal - sComm; totalCommission += sComm;
         if (sNet > 0) wins++; else losses++;
-        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +sFill.toFixed(4), total: +sTotal.toFixed(2), pnl: +sPnl.toFixed(2), commission: +sComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: scored.sellReasons.length + ' signals', why: scored.sellReasons.join(', '), score: +(-scored.sellScore).toFixed(1), regime: scored.regime.type, seeded: true });
+        orders.push({ sym: sym, side: 'sell', qty: +pos.qty.toFixed(6), price: +sFill.toFixed(4), total: +sTotal.toFixed(2), pnl: +sPnl.toFixed(2), commission: +sComm.toFixed(2), time: date + 'T16:00:00.000Z', strat: decision.sellReasons.length + ' signals', why: decision.sellReasons.join(', '), score: +(-decision.sellScore).toFixed(1), regime: decision.regime.type, seeded: true });
         delete holdings[sym]; delete peaks[sym]; lastTradeDay[sym] = di; tradeCount++;
       }
     });
@@ -2612,72 +2514,6 @@ const server = http.createServer((req, res) => {
             var effectiveCooldown = typeCooldown[assetType] || symCooldown;
             var inCooldown = lastTradeDay[sym] !== undefined && (dayIdx - lastTradeDay[sym]) < effectiveCooldown;
 
-            // Regime-based weight multipliers (same as live: profile-specific + linear interpolation)
-            var profileRegime = {
-              conservative: { trendHigh: 2.0, trendLow: 0.3, mrHigh: 2.0, mrLow: 0.3 },
-              moderate:     { trendHigh: 1.5, trendLow: 0.5, mrHigh: 1.5, mrLow: 0.5 },
-              aggressive:   { trendHigh: 1.3, trendLow: 0.6, mrHigh: 1.3, mrLow: 0.6 },
-              yolo:         { trendHigh: 1.2, trendLow: 0.8, mrHigh: 1.2, mrLow: 0.8 },
-            };
-            var pr = profileRegime[profileId] || profileRegime.moderate;
-            var adxVal = regime.adx || 20;
-            var trendMult, meanRevMult;
-            if (adxVal >= 25) { trendMult = pr.trendHigh; meanRevMult = pr.mrLow; }
-            else if (adxVal <= 18) { trendMult = pr.trendLow; meanRevMult = pr.mrHigh; }
-            else { var t = (adxVal - 18) / 7; trendMult = pr.trendLow + t * (pr.trendHigh - pr.trendLow); meanRevMult = pr.mrHigh + t * (pr.mrLow - pr.mrHigh); }
-            var rangingDowntrend = adxVal <= 18 && sd.ema21 > 0 && sd.cur < sd.ema21;
-            if (rangingDowntrend) meanRevMult = pr.mrLow;
-            var regimeMultipliers = {
-              'trend': trendMult, 'momentum': trendMult,
-              'mean-reversion': meanRevMult,
-              'neutral': 1.0, 'pattern': 1.0, 'combo': 1.2, 'risk': 0,
-            };
-
-            // Score signals with category cap (same as live)
-            var buyScore = 0, sellScore = 0;
-            var buyReasons = [], sellReasons = [];
-            var riskSellTriggered = null;
-            var buyCatScores = {};
-            var sellCatScores = {};
-
-            SIGNALS.forEach(function(sig) {
-              var val = (profile.overrides && profile.overrides[sig.id] !== undefined) ? profile.overrides[sig.id] : 30;
-
-              // Asset-type adjustment for TP/SL/trailing
-              if (sig.category === 'risk') {
-                var riskAssetType = (COINS[sym] && COINS[sym].type) || 'crypto';
-                if (riskAssetType === 'stock') val = val * 0.7;
-                else if (riskAssetType === 'commodity') val = val * 0.5;
-              }
-
-              var result = evalSignal(sig.id, val, sd, pos, peakPrice);
-              if (!result) return;
-
-              if (sig.category === 'risk') {
-                if (pos && pos.qty > 0) riskSellTriggered = result;
-                return;
-              }
-
-              var regimeMult = regimeMultipliers[sig.category] || 1.0;
-              var weightedScore = sig.weight * regimeMult;
-
-              if (sig.side === 'buy') {
-                var catKey = sig.category;
-                buyCatScores[catKey] = (buyCatScores[catKey] || 0) + weightedScore;
-                if (buyCatScores[catKey] <= CATEGORY_CAP) {
-                  buyScore += weightedScore;
-                }
-                buyReasons.push(result);
-              } else {
-                var catKey2 = sig.category;
-                sellCatScores[catKey2] = (sellCatScores[catKey2] || 0) + weightedScore;
-                if (sellCatScores[catKey2] <= CATEGORY_CAP) {
-                  sellScore += weightedScore;
-                }
-                sellReasons.push(result);
-              }
-            });
-
             // Exposure calculation
             var holdingValue = Object.keys(holdings).reduce(function(s, hs) {
               var h = holdings[hs];
@@ -2687,12 +2523,18 @@ const server = http.createServer((req, res) => {
             var totalValue = cash + holdingValue;
             var exposurePct = totalValue > 0 ? holdingValue / totalValue : 0;
             var maxExposure = { conservative: 0.75, moderate: 0.85, aggressive: 0.92, yolo: 0.98 }[profile.id] || 0.80;
-
-            if (exposurePct >= maxExposure) {
-              buyScore = 0;
-              sellScore += 1.5;
-              sellReasons.push('Over-exposed');
-            }
+            var minHoldBlocked = !!(holdUntil[sym] && dayIdx < holdUntil[sym]);
+            var decision = evaluateTradeDecision({
+              sd: sd, profile: profile, symbol: sym, pos: pos, peakPrice: peakPrice,
+              exposurePct: exposurePct, scoreExposureLimit: maxExposure, buyExposureLimit: maxExposure,
+              inCooldown: inCooldown, minHoldBlocked: minHoldBlocked,
+              buyThreshold: buyThreshold, sellThreshold: sellThreshold,
+              requireAboveEma200ForBuy: true, requireBelowEma200ForSell: true,
+            });
+            regime = decision.regime;
+            var buyScore = decision.buyScore, sellScore = decision.sellScore;
+            var buyReasons = decision.buyReasons, sellReasons = decision.sellReasons;
+            var riskSellTriggered = decision.riskSellTriggered;
 
             // Volatility adjustment
             var volAdjust = regime.volatility > 3 ? 0.5 : (regime.volatility > 2 ? 0.75 : 1.0);
@@ -2701,7 +2543,7 @@ const server = http.createServer((req, res) => {
             var availableCash = Math.max(0, cash - minCashReserve);
 
             // Risk sell (TP/SL/Trailing)
-            if (riskSellTriggered && pos && pos.qty > 0) {
+            if (decision.action === 'riskSell') {
               var riskFillP = price * (1 - btSlippage);
               var riskQty = pos.qty;
               var riskTotal = riskFillP * riskQty;
@@ -2726,7 +2568,7 @@ const server = http.createServer((req, res) => {
             }
 
             // Scoring-based buy (skip if in cooldown)
-            if (!inCooldown && buyScore >= buyThreshold && buyScore > sellScore && exposurePct < maxExposure && sd.cur > sd.ema200) {
+            if (decision.action === 'buy') {
               if (availableCash < 100) return;
               // Max position count limit
               var openPositionCount = Object.keys(holdings).filter(function(k) { return holdings[k] && holdings[k].qty > 0; }).length;
@@ -2771,7 +2613,7 @@ const server = http.createServer((req, res) => {
               dailyTradeCount[calendarDay] = (dailyTradeCount[calendarDay] || 0) + 1;
             }
             // Scoring-based sell (skip if in cooldown or minimum hold not met)
-            else if (!inCooldown && sellScore >= sellThreshold && pos && pos.qty > 0 && sd.cur < sd.ema200 && (!holdUntil[sym] || dayIdx >= holdUntil[sym])) {
+            else if (decision.action === 'sell') {
               var btSellFill = price * (1 - btSlippage);
               var sq = pos.qty;
               var sellTotal = btSellFill * sq;

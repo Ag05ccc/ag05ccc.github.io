@@ -10,8 +10,8 @@ const path = require('path');
 // Shared strategy logic — the SAME module the live server (server.js) uses — so this
 // backtest provably reflects live trading instead of a drifted hand-copy.
 const {
-  COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
-  SIGNALS, detectRegime, evalSignal, PROFILES, scoreSignals,
+  COINS, ema, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
+  PROFILES, evaluateTradeDecision,
 } = require('../engine-core');
 
 const COMMISSION_RATE = 0.001;
@@ -130,24 +130,28 @@ function runBacktest(candles, profile, symbolName) {
     // Black swan filter
     const blackSwan = isBlackSwan(window);
 
-    // Score signals via the SHARED scorer (regime weighting + category cap),
-    // identical to live trading.
-    const symType = (COINS[sym] && COINS[sym].type) || 'crypto';
-    const scored = scoreSignals(sd, pos, peakPrice, profile, symType);
-    const regime = scored.regime;
-    const buyScore = scored.buyScore, sellScore = scored.sellScore;
-    const buyReasons = scored.buyReasons, sellReasons = scored.sellReasons;
+    const exposure = totalValue > 0 ? hVal / totalValue : 0;
+    const decision = evaluateTradeDecision({
+      sd, pos, peakPrice, profile, symbol: sym,
+      blackSwan, exposurePct: exposure,
+      scoreExposureLimit: 0.85, buyExposureLimit: 0.85,
+      requireAboveEma200ForBuy: false, requireBelowEma200ForSell: false,
+      sellMustBeatBuy: true,
+    });
+    const regime = decision.regime;
+    const buyScore = decision.buyScore, sellScore = decision.sellScore;
+    const buyReasons = decision.buyReasons, sellReasons = decision.sellReasons;
     const slippage = (profile.overrides && profile.overrides.slippage) || 0.0005;
 
     // Risk signals (TP/SL/Trailing) bypass scoring -> immediate sell (with slippage)
-    if (pos && pos.qty > 0 && scored.riskSellTriggered) {
+    if (decision.action === 'riskSell') {
       const sellFillPrice = price * (1 - slippage);
       const sellQty = pos.qty;
       const total = sellQty * sellFillPrice;
       const commission = total * COMMISSION_RATE;
       const pnl = (sellFillPrice - pos.avgCost) * sellQty - commission;
       cash += total - commission;
-      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: scored.riskSellTriggered, regime: regime.type, score: 0, type: 'risk' });
+      trades.push({ bar: i, date: candles[i].date, side: 'sell', price: sellFillPrice, qty: sellQty, total, pnl, reason: decision.riskSellTriggered, regime: regime.type, score: 0, type: 'risk' });
       delete holdings[sym];
       delete peaks[sym];
       lastTradeBar = i;
@@ -155,9 +159,7 @@ function runBacktest(candles, profile, symbolName) {
     }
 
     // Scoring decision
-    if (buyScore >= profile.buyThreshold && buyScore > sellScore && !blackSwan) {
-      const exposure = hVal / totalValue;
-      if (exposure > 0.85) continue; // Max exposure limit
+    if (decision.action === 'buy') {
       const buyFillPrice = price * (1 + slippage); // slippage: buy fills higher
       const tradeValue = Math.min(cash * profile.cashPct, cash * 0.98); // Keep 2% reserve
       if (tradeValue < 10) continue;
@@ -174,7 +176,7 @@ function runBacktest(candles, profile, symbolName) {
       trades.push({ bar: i, date: candles[i].date, side: 'buy', price: buyFillPrice, qty, total: tradeValue, pnl: 0, reason: buyReasons.join(', '), regime: regime.type, score: buyScore, type: 'score' });
       lastTradeBar = i;
 
-    } else if (sellScore >= profile.sellThreshold && sellScore > buyScore && pos && pos.qty > 0) {
+    } else if (decision.action === 'sell') {
       const sellFillPrice = price * (1 - slippage);
       const sellQty = pos.qty;
       const total = sellQty * sellFillPrice;

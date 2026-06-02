@@ -367,11 +367,109 @@ function scoreSignals(sd, pos, peakPrice, profile, symType) {
       sellReasons.push(result);
     }
   });
-  return { regime: regime, buyScore: buyScore, sellScore: sellScore, buyReasons: buyReasons, sellReasons: sellReasons, riskSellTriggered: riskSellTriggered };
+  return { regime: regime, buyScore: buyScore, sellScore: sellScore, buyReasons: buyReasons, sellReasons: sellReasons, riskSellTriggered: riskSellTriggered, rangingDowntrend: rangingDowntrend };
+}
+
+function evaluateTradeDecision(opts) {
+  opts = opts || {};
+  var sd = opts.sd;
+  var profile = opts.profile || {};
+  var symbol = opts.symbol;
+  var pos = opts.pos || null;
+  var peakPrice = opts.peakPrice;
+  var symType = opts.symType || ((COINS[symbol] && COINS[symbol].type) || 'crypto');
+  var scored = scoreSignals(sd, pos, peakPrice, profile, symType);
+  var buyScore = scored.buyScore;
+  var sellScore = scored.sellScore;
+  var buyReasons = scored.buyReasons.slice();
+  var sellReasons = scored.sellReasons.slice();
+  var trend15m = opts.trend15m || 0;
+  var blackSwan = !!opts.blackSwan;
+  var exposurePct = opts.exposurePct || 0;
+  var scoreExposureLimit = opts.scoreExposureLimit != null ? opts.scoreExposureLimit : 0.80;
+  var buyExposureLimit = opts.buyExposureLimit != null ? opts.buyExposureLimit : scoreExposureLimit;
+  var exposureLimited = opts.exposureLimited != null ? !!opts.exposureLimited : exposurePct >= scoreExposureLimit;
+  var buyThreshold = opts.buyThreshold != null ? opts.buyThreshold : (profile.buyThreshold || 3);
+  var sellThreshold = opts.sellThreshold != null ? opts.sellThreshold : (profile.sellThreshold || 2);
+  var inCooldown = !!opts.inCooldown;
+  var minHoldBlocked = !!opts.minHoldBlocked;
+  var requireAboveEma200ForBuy = opts.requireAboveEma200ForBuy !== false;
+  var requireBelowEma200ForSell = !!opts.requireBelowEma200ForSell;
+  var sellMustBeatBuy = !!opts.sellMustBeatBuy;
+  var buyBlockedReasons = [];
+  var sellBlockedReasons = [];
+
+  if (trend15m === -1) {
+    buyScore = buyScore * 0.3;
+    buyBlockedReasons.push('15m trend down');
+  } else if (trend15m === 1) {
+    buyScore = buyScore * 1.2;
+  }
+
+  if (blackSwan) {
+    buyScore = 0;
+    buyReasons.push('BLACK SWAN BLOCKED');
+    buyBlockedReasons.push('black swan');
+  }
+
+  if (exposureLimited) {
+    buyScore = 0;
+    sellScore += 1.5;
+    sellReasons.push('Over-exposed');
+    buyBlockedReasons.push('portfolio exposure');
+  }
+
+  var hasPos = !!(pos && pos.qty > 0);
+  var price = sd && sd.cur ? sd.cur : 0;
+  var buyTrendOk = !requireAboveEma200ForBuy || (sd && sd.ema200 > 0 && sd.cur > sd.ema200);
+  var sellTrendOk = !requireBelowEma200ForSell || (sd && sd.ema200 > 0 && sd.cur < sd.ema200);
+  var buyExposureOk = exposurePct < buyExposureLimit;
+
+  if (inCooldown) {
+    buyBlockedReasons.push('cooldown');
+    sellBlockedReasons.push('cooldown');
+  }
+  if (!buyTrendOk) buyBlockedReasons.push('below EMA200');
+  if (!buyExposureOk) buyBlockedReasons.push('buy exposure');
+  if (!sellTrendOk) sellBlockedReasons.push('above EMA200');
+  if (minHoldBlocked) sellBlockedReasons.push('minimum hold');
+
+  var action = 'hold';
+  var side = null;
+  var type = 'hold';
+  var reason = '';
+  if (hasPos && scored.riskSellTriggered) {
+    action = 'riskSell';
+    side = 'sell';
+    type = 'risk';
+    reason = scored.riskSellTriggered;
+  } else if (!inCooldown && price > 0 && buyScore >= buyThreshold && buyScore > sellScore && buyExposureOk && buyTrendOk) {
+    action = 'buy';
+    side = 'buy';
+    type = 'score';
+    reason = buyReasons.join(', ');
+  } else if (!inCooldown && price > 0 && hasPos && sellScore >= sellThreshold && (!sellMustBeatBuy || sellScore > buyScore) && sellTrendOk && !minHoldBlocked) {
+    action = 'sell';
+    side = 'sell';
+    type = 'score';
+    reason = sellReasons.join(', ');
+  }
+
+  return {
+    action: action, side: side, type: type, reason: reason,
+    regime: scored.regime, buyScore: buyScore, sellScore: sellScore,
+    buyReasons: buyReasons, sellReasons: sellReasons,
+    riskSellTriggered: scored.riskSellTriggered,
+    rangingDowntrend: scored.rangingDowntrend,
+    trend15m: trend15m, blackSwan: blackSwan,
+    exposurePct: exposurePct, exposureLimited: exposureLimited,
+    buyThreshold: buyThreshold, sellThreshold: sellThreshold,
+    buyBlockedReasons: buyBlockedReasons, sellBlockedReasons: sellBlockedReasons,
+  };
 }
 
 module.exports = {
   COINS, ema, emaArray, calcRSI, calcMACD, calcBB, calcStoch, calcADX,
   SIGNALS, STRATS, detectRegime, evalSignal, PROFILES,
-  CATEGORY_CAP, PROFILE_REGIME, scoreSignals,
+  CATEGORY_CAP, PROFILE_REGIME, scoreSignals, evaluateTradeDecision,
 };

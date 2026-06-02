@@ -259,26 +259,35 @@ function App() {
     setChartZoom([nStart, nEnd]);
   }
 
-  // Comparison chart - filter by compareStart date
-  const filteredPfHistories = pfStats.map(pf => {
-    let hist = pf.history || [];
-    if (compareStart) {
-      const startTs = new Date(compareStart).getTime();
-      hist = hist.filter(h => h.time ? new Date(h.time).getTime() >= startTs : true);
+  function historyTimestamp(h) {
+    if (!h) return null;
+    if (Number.isFinite(h.t)) return h.t;
+    if (h.time) {
+      const ts = new Date(h.time).getTime();
+      return Number.isFinite(ts) ? ts : null;
     }
-    return hist;
-  });
-  const maxLen = Math.max(...filteredPfHistories.map(h => h.length), 1);
-  const compData = [];
-  for (let i = 0; i < maxLen; i++) {
-    const point = { t: i };
-    pfStats.forEach((pf, pi) => {
-      const hist = filteredPfHistories[pi];
-      const h = hist[i];
-      point[pf.id] = h ? h.value : (hist[hist.length - 1]?.value || pf.startCash);
-    });
-    compData.push(point);
+    if (h.day) {
+      const ts = new Date(h.day + "T00:00:00Z").getTime();
+      return Number.isFinite(ts) ? ts : null;
+    }
+    return null;
   }
+
+  // Comparison chart: merge actual history points by timestamp. Do not pad shorter
+  // series with their last value; that made the right edge look like fake flat P&L.
+  const compDateMap = {};
+  const compareStartTs = compareStart ? new Date(compareStart + "T00:00:00Z").getTime() : null;
+  pfStats.forEach(pf => {
+    (pf.history || []).forEach(h => {
+      const ts = historyTimestamp(h);
+      if (!Number.isFinite(ts)) return;
+      if (Number.isFinite(compareStartTs) && ts < compareStartTs) return;
+      const key = String(ts);
+      if (!compDateMap[key]) compDateMap[key] = { t: ts, label: new Date(ts).toISOString().slice(0, 10) };
+      compDateMap[key][pf.id] = h.value;
+    });
+  });
+  const compData = Object.values(compDateMap).sort((a, b) => a.t - b.t);
 
   // Simulation: run backtest for all 4 profiles
   const simProfiles = [
@@ -414,7 +423,7 @@ function App() {
 
       {/* TABS */}
       <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0d1117", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.18"]].map(([k, l]) => (
+        {[["compare", "Compare"], ["chart", "Chart"], ["portfolios", "Portfolios"], ["log", "Log"], ["backtest", "Backtest"], ["docs", "Docs"], ["settings", "Settings"], ["releases", "v1.19"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: isMobile ? "8px 12px" : "9px 20px", fontSize: isMobile ? 11 : 12, fontWeight: 500, background: "none", border: "none", cursor: "pointer", color: tab === k ? "#f8fafc" : "#6b7280", borderBottom: tab === k ? "2px solid #f59e0b" : "2px solid transparent", fontFamily: "var(--h)", whiteSpace: "nowrap", flexShrink: 0 }}>{l}</button>
         ))}
       </div>
@@ -535,9 +544,9 @@ function App() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="t" hide />
                       <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={v => `$${fK(v)}`} />
-                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} formatter={(v) => [`$${fK(v)}`, ""]} />
+                      <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, fontSize: 11, fontFamily: "var(--m)" }} labelFormatter={(v, payload) => payload && payload[0] && payload[0].payload ? payload[0].payload.label : ""} formatter={(v) => [`$${fK(v)}`, ""]} />
                       {pfStats.map(pf => (
-                        <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} />
+                        <Area key={pf.id} type="monotone" dataKey={pf.id} name={pf.name} stroke={pf.color} fill={pf.color} fillOpacity={0.08} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={true} />
                       ))}
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1222,6 +1231,11 @@ function App() {
             <div style={{ padding: isMobile ? "16px 12px" : "20px 24px", maxWidth: 700 }}>
               <div style={{ fontFamily: "var(--h)", fontWeight: 700, fontSize: 20, color: "#f8fafc", marginBottom: 16 }}>Release Notes</div>
               {[
+                { v: "1.19.0", date: "2026-06-02", changes: [
+                  "Portfolio race chart now aligns history by timestamp instead of array index",
+                  "Shorter portfolio histories are no longer padded with the last value, removing fake flat lines on the right edge",
+                  "The From date filter now reads server history timestamps correctly",
+                ]},
                 { v: "1.18.0", date: "2026-06-02", changes: [
                   "Polygon live pricing now follows the POL market/source ids while preserving the internal MATIC key for historical compatibility",
                   "Data quality now separates real missing live feeds from missing Twelve Data configuration",
